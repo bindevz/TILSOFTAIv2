@@ -1,0 +1,38 @@
+schema_version: "1.0"
+document: "Proactive Diagnostics (generic, module-configured)"
+language: "en"
+
+objective:
+  - "Provide module-agnostic diagnostics: SQL-defined rules + ai_ SPs invoked as tools."
+
+sql_tables_required:
+  - name: "DiagnosticsRule"
+    columns:
+      - "RuleKey nvarchar(200) PK"
+      - "TenantId nvarchar(50) NULL"
+      - "Module nvarchar(100) NOT NULL"
+      - "Description nvarchar(2000) NOT NULL"
+      - "AiSpName nvarchar(200) NOT NULL"  # must start with ai_
+      - "IsEnabled bit NOT NULL DEFAULT 1"
+      - "UpdatedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+
+stored_procedures_required:
+  internal_app:
+    - "app_diagnosticsrule_list(@TenantId,@Module)"
+  model_callable_ai:
+    - "ai_diagnostics_run(@TenantId,@Module,@RuleKey,@InputJson=NULL)"
+      rules:
+        - "Must resolve the rule to an ai_ SP from DiagnosticsRule and execute it after allowlist checks."
+        - "Must not allow arbitrary SP execution; only from DiagnosticsRule + ToolCatalog."
+
+csharp_required_classes:
+  - name: "DiagnosticsToolHandler"
+    file: "src/TILSOFTAI.Modules.Core/Tools/DiagnosticsToolHandler.cs"
+    responsibilities:
+      - "Validate args schema."
+      - "Call ai_diagnostics_run."
+      - "Return compact JSON result."
+
+acceptance_criteria:
+  - "Diagnostics can be invoked for any module that defines rules."
+  - "No rule can execute non-ai_ SPs."

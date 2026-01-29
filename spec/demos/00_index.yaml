@@ -1,0 +1,31 @@
+schema_version: "1.0"
+document: "Module Scaffolding Pack Index (for Codex)"
+language: "en"
+
+purpose:
+  - "Provide a deterministic, repeatable scaffold for adding new domain modules to TILSOFTAI."
+  - "Prevent architecture drift: modules must follow the same contracts, naming, and governance rules."
+  - "Ensure SQL and C# are synchronized and verified by contract tests."
+
+global_constraints:
+  - "DB name is TILSOFTAI; tables have NO prefix."
+  - "Model-callable stored procedures must start with 'ai_'."
+  - "Internal stored procedures must start with 'app_'."
+  - "No tool may execute ad-hoc SQL; only stored procedures."
+  - "All ai_* SPs must be registered in ToolCatalog with JsonSchema and Instruction."
+  - "All ai_* SPs must accept @TenantId and enforce tenant filtering."
+
+inputs_required_from_user_or_config:
+  - "DomainName (e.g., 'Logistics', 'Finance', 'Procurement')"
+  - "DomainKey (lowercase folder key, e.g., 'logistics', 'finance')"
+  - "ModuleAssemblyName (e.g., 'TILSOFTAI.Modules.Logistics')"
+  - "Tools list with: ToolName, Description, Instruction, JsonSchema, ai_ SpName, RequiredRoles"
+  - "MetadataDictionary keys needed for this domain"
+
+output_spec_files:
+  - "spec/scaffold/01_module_structure.yaml"
+  - "spec/scaffold/02_sql_artifacts_template.yaml"
+  - "spec/scaffold/03_tool_contract_template.yaml"
+  - "spec/scaffold/04_csharp_module_template.yaml"
+  - "spec/scaffold/05_seed_and_migrations.yaml"
+  - "spec/scaffold/06_contract_tests_template.yaml"

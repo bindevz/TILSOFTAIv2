@@ -1,0 +1,133 @@
+schema_version: "1.0"
+document: "Module Generator Checklist (safe sequence + gates)"
+language: "en"
+
+purpose:
+  - "Provide a deterministic step-by-step checklist for Codex to generate a new module safely."
+  - "Enforce correct ordering: SQL contracts first, then C# wiring, then enablement, then tests."
+  - "Avoid partial/broken states and architecture drift."
+
+placeholders:
+  DomainName: "<DomainName>"
+  DomainKey: "<domainkey>"
+  ModuleAssemblyName: "TILSOFTAI.Modules.<DomainName>"
+
+preconditions (must_verify_before_start):
+  - "Platform Core compiles and runs without modules enabled."
+  - "Core tables exist: ToolCatalog, MetadataDictionary, Conversation, ConversationMessage, ToolExecution, ErrorLog, ErrorCatalog (if implemented)."
+  - "Core internal SPs exist: app_toolcatalog_list, app_metadatadictionary_list, app_conversation_upsert, app_conversationmessage_insert, app_toolexecution_insert, app_errorlog_insert."
+  - "Tool governance enforces: ai_ prefix for model-callable SPs."
+
+module_generation_sequence (MUST follow exact order):
+  - step: "S1_CREATE_SQL_SCRIPTS"
+    actions:
+      - "Create folder sql/02_modules/<domainkey>/"
+      - "Create sql/02_modules/<domainkey>/01_tables_and_views.sql"
+      - "Create sql/02_modules/<domainkey>/02_sps_app.sql"
+      - "Create sql/02_modules/<domainkey>/03_sps_ai.sql"
+    required_content:
+      - "At least one semantic view v_<DomainName>_<Purpose> (or a placeholder view if real objects not available)."
+      - "app_<domainkey>_catalog_list SP (even if minimal)."
+      - "One ai_* SP per tool (exact names must be final now; do not rename later)."
+    gates:
+      - "All CREATE statements are idempotent (CREATE OR ALTER for SPs; CREATE VIEW with DROP/CREATE or CREATE OR ALTER where supported)."
+      - "All ai_* SPs accept @TenantId and enforce tenant filter."
+      - "All ai_* outputs are JSON-friendly (meta+columns+rows recommended)."
+
+  - step: "S2_CREATE_SEED_SCRIPTS"
+    actions:
+      - "Create folder sql/99_seed/<domainkey>/"
+      - "Create sql/99_seed/<domainkey>/01_seed_toolcatalog.sql"
+      - "Create sql/99_seed/<domainkey>/02_seed_metadata_dictionary.sql"
+      - "Create sql/99_seed/<domainkey>/03_seed_domain_catalogs.sql (optional)"
+    required_content:
+      - "ToolCatalog: one row per tool with SpName=ai_* and non-empty JsonSchema and Instruction."
+      - "MetadataDictionary: seed keys used by tool outputs (descriptionKey)."
+    gates:
+      - "Seed scripts use MERGE or IF NOT EXISTS to avoid duplicates."
+      - "Seed scripts only affect rows belonging to this module (do not modify other module tools)."
+
+  - step: "S3_UPDATE_SQL_DEPLOYMENT_ORDER"
+    actions:
+      - "Ensure there is a deterministic SQL deployment order document or script list."
+      - "Add module SQL scripts to the documented order: tables/views -> app_ SPs -> ai_ SPs -> seeds."
+    gates:
+      - "Module SQL can be deployed without manual edits."
+      - "Re-running deployment does not break idempotency."
+
+  - step: "S4_CREATE_CSHARP_MODULE_PROJECT"
+    actions:
+      - "Create project src/TILSOFTAI.Modules.<DomainName>/TILSOFTAI.Modules.<DomainName>.csproj"
+      - "Add references to Domain, Orchestration, Infrastructure."
+      - "Add required folders: Tools, Catalogs, Policies."
+      - "Add module README.md."
+    gates:
+      - "Project compiles with TreatWarningsAsErrors."
+      - "Nullable enabled and consistent style rules applied."
+
+  - step: "S5_IMPLEMENT_MODULE_ENTRY_AND_TOOL_HANDLERS"
+    actions:
+      - "Implement <DomainName>Module : ITilsoftModule"
+      - "Register tools in IToolRegistry with Name/Description/Instruction/JsonSchema/SpName/RequiredRoles/Module."
+      - "Create <DomainName>ToolHandlerBase to call ISqlExecutor (SP-only) with @TenantId."
+      - "Create one tool handler class per tool."
+    gates:
+      - "No DTO classes for SQL results; return JsonDocument/JsonElement."
+      - "No ad-hoc SQL; SP-only calls."
+      - "No domain inference logic; handlers only validate args and call SP."
+      - "ToolDefinition registration enforces: Instruction non-empty; JsonSchema valid; SpName starts with ai_."
+
+  - step: "S6_ENABLE_MODULE_VIA_CONFIG"
+    actions:
+      - "Add module assembly name to appsettings.Modules.Enabled."
+      - "Do not remove other enabled modules."
+    gates:
+      - "Platform starts with module enabled."
+      - "Module can be disabled by removing it from Modules.Enabled without breaking platform."
+
+  - step: "S7_ADD_CONTRACT_TESTS"
+    actions:
+      - "Add contract tests in tests/TILSOFTAI.Tests.Contract for this module."
+      - "Tests must verify: ToolCatalog rows exist, ai_* SPs exist, and registry matches catalog."
+    gates:
+      - "CI fails if ai_* SP missing."
+      - "CI fails if ToolCatalog schema/instruction invalid or missing."
+
+  - step: "S8_ADD_INTEGRATION_SMOKE_TEST (OPTIONAL BUT RECOMMENDED)"
+    actions:
+      - "Add one integration test that triggers one tool call end-to-end via /api/chat."
+      - "Verify ToolExecution row exists and JSON result is compacted."
+    gates:
+      - "Test passes reliably and does not rely on nondeterministic data."
+
+postconditions (must_verify_after_finish):
+  - "Module DLL loads and registers tools."
+  - "Tool calls are governed by allowlist + RBAC + ai_ prefix enforcement."
+  - "Tool executions are persisted to ToolExecution table."
+  - "All module SQL objects exist and deploy cleanly."
+  - "Contract tests pass."
+
+common_failure_modes_and_mitigations:
+  - issue: "Tool defined in C# but missing ToolCatalog row"
+    mitigation:
+      - "Fail startup in non-dev (contract validator) and fail CI contract test."
+  - issue: "SpName does not start with ai_"
+    mitigation:
+      - "ToolRegistry rejects registration; ToolCatalog constraint/check prevents insert."
+  - issue: "ai_* SP returns huge payload"
+    mitigation:
+      - "Enforce SQL pagination + cap rows; compaction trims arrays and fields."
+  - issue: "Module introduces cross-tenant leakage"
+    mitigation:
+      - "Enforce @TenantId filtering in all ai_* SPs; add contract test to verify param existence (optional)."
+
+commit_strategy (recommended):
+  - "Commit 1: SQL module scripts + seeds + deployment order update"
+  - "Commit 2: C# module project + module entry + tool handlers"
+  - "Commit 3: Enable module in config + contract tests"
+  - "Commit 4 (optional): integration smoke test"
+
+agent_instructions_to_avoid_drift:
+  - "Do not modify platform core to support this module unless the change is generic and benefits all modules."
+  - "Do not hardcode domain logic in core; keep domain logic within module SQL and module tool instructions."
+  - "Do not rename ai_* SPs after ToolCatalog seeding; treat them as stable contracts."

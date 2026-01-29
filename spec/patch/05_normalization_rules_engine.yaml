@@ -1,0 +1,98 @@
+schema_version: "1.0"
+document: "PATCH 05 - Normalization Rules Engine (tenant-aware, cached, multi-language-safe)"
+language: "en"
+
+goal:
+  - "Implement a rule-driven normalization engine for user input."
+  - "Support special cases explicitly required: season/year normalization (e.g., 24/25 -> 2024/2025)."
+  - "Rules are stored in SQL and cached in Redis for >= 30 minutes."
+
+non_goals:
+  - "Do NOT perform semantic inference in normalization; only deterministic transformations."
+
+sql_changes:
+  create_sql_files:
+    - path: "sql/01_core/006_tables_normalization.sql"
+      must_create_table:
+        name: "NormalizationRule"
+        columns:
+          - "RuleKey nvarchar(200) NOT NULL"
+          - "TenantId nvarchar(50) NULL"
+          - "Priority int NOT NULL"
+          - "Pattern nvarchar(1000) NOT NULL"
+          - "Replacement nvarchar(1000) NOT NULL"
+          - "Description nvarchar(2000) NULL"
+          - "IsEnabled bit NOT NULL DEFAULT(1)"
+          - "UpdatedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+        pk: "(RuleKey, TenantId)"
+        indexes:
+          - "IX_NormalizationRule_Tenant_Priority (TenantId, Priority)"
+    - path: "sql/01_core/007_sps_app_normalization.sql"
+      must_create_sps:
+        - name: "dbo.app_normalizationrule_list"
+          params:
+            - "@TenantId nvarchar(50)"
+          behavior:
+            - "Return enabled rules ordered by Tenant specificity then Priority asc."
+            - "Rules returned must include both tenant-specific and global (TenantId IS NULL)."
+            - "If a tenant-specific RuleKey exists, it should override the global one."
+          output_format:
+            - "Return as rows (RuleKey, TenantId, Priority, Pattern, Replacement)."
+
+seed_rules (MUST seed at least these globally):
+  create_seed_file:
+    path: "sql/99_seed/005_seed_normalization_rules.sql"
+    rules:
+      - "Use MERGE or IF NOT EXISTS; do not duplicate."
+    required_default_rules:
+      - ruleKey: "season_two_digit_year"
+        priority: 10
+        pattern: "(?<!\d)(\d{2})\s*/\s*(\d{2})(?!\d)"
+        replacement: "__SEASON_2DIGIT__"
+        description: "Marks patterns like 24/25 to be expanded by C# post-processor (not simple regex replace)."
+      - ruleKey: "collapse_whitespace"
+        priority: 100
+        pattern: "\s+"
+        replacement: " "
+        description: "Normalize whitespace."
+
+csharp_changes:
+  create:
+    - path: "src/TILSOFTAI.Orchestration/Normalization/NormalizationRuleRecord.cs"
+      content_requirements:
+        - "public sealed record NormalizationRuleRecord(string RuleKey, int Priority, string Pattern, string Replacement);"
+    - path: "src/TILSOFTAI.Orchestration/Normalization/INormalizationRuleProvider.cs"
+      content_requirements:
+        - "Task<IReadOnlyList<NormalizationRuleRecord>> GetRulesAsync(string tenantId, CancellationToken ct);"
+    - path: "src/TILSOFTAI.Infrastructure/Normalization/SqlNormalizationRuleProvider.cs"
+      responsibilities:
+        - "Call dbo.app_normalizationrule_list via SqlExecutor.ExecuteAsync returning rows -> map to records."
+        - "Provider must be tenant-aware."
+    - path: "src/TILSOFTAI.Orchestration/Normalization/SeasonNormalizer.cs"
+      responsibilities:
+        - "Deterministically expand 'YY/YY' into '20YY/20YY' with century rules."
+        - "Century rule: map 00-79 => 2000-2079; 80-99 => 1980-1999 (configurable constant)."
+        - "If second year < first year then assume next year in same century or +100 as needed."
+        - "Example: 24/25 -> 2024/2025; 99/00 -> 1999/2000; 25/26 -> 2025/2026."
+  modify:
+    - file: "src/TILSOFTAI.Orchestration/Normalization/NormalizationService.cs"
+      required_behavior:
+        - "Load rules via INormalizationRuleProvider per tenant."
+        - "Cache rule list per tenant using IRedisCacheProvider (if Redis enabled) or in-memory fallback."
+        - "Apply rules in Priority asc (lower number first)."
+        - "After regex pass, run SeasonNormalizer expansion for any marked tokens."
+        - "Always return trimmed output."
+    - file: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      changes:
+        - "Register INormalizationRuleProvider => SqlNormalizationRuleProvider."
+        - "Replace INormalizationService registration to use new NormalizationService (constructor updated)."
+
+caching_rules:
+  - "Cache key: normrules:<tenantId>"
+  - "TTL: use RedisOptions.DefaultTtlMinutes (must be >= 30)."
+  - "If Redis disabled, use in-memory cache with same TTL semantics."
+
+acceptance_criteria:
+  - "Given input 'season 24/25', Normalize returns 'season 2024/2025'."
+  - "Given input '  a   b ', Normalize returns 'a b'."
+  - "Rules are loaded from SQL and cached; repeated calls do not hit SQL within TTL."

@@ -1,0 +1,36 @@
+schema_version: "1.0"
+document: "Contract Sync: enforce ai_/app_ existence and tool-to-SP mapping"
+language: "en"
+
+objective:
+  - "Implement the strategy requirement: SQL contract validation in CI/CD and runtime."
+
+runtime_contract_validator:
+  class:
+    name: "SqlContractValidator"
+    file: "src/TILSOFTAI.Infrastructure/Sql/SqlContractValidator.cs"
+  responsibilities:
+    - "On startup (non-dev), verify required SPs exist."
+    - "Verify every enabled tool with SpName maps to an existing stored procedure."
+    - "Verify ai_ prefix for tool-callable SPs and app_ prefix for internal SPs where expected."
+  required_checks:
+    - "sys.procedures contains app_errorlog_insert, app_conversation_upsert, app_conversationmessage_insert, app_toolexecution_insert"
+    - "sys.procedures contains app_toolcatalog_list, app_metadatadictionary_list"
+    - "All ToolCatalog.SpName exist in sys.procedures and start with ai_"
+
+tests_required:
+  contract_tests_project: "tests/TILSOFTAI.Tests.Contract"
+  test_cases:
+    - "ToolCatalog SP prefix enforcement (ai_)"
+    - "Tool registry vs ToolCatalog alignment"
+    - "All enabled tools have existing ai_ SP"
+    - "All required app_ SP exist"
+  integration_tests_project: "tests/TILSOFTAI.Tests.Integration"
+  scenarios:
+    - "Chat persists conversation and tool execution logs"
+    - "Compaction removes audit fields"
+    - "Semantic cache returns results for repeated tenant questions"
+
+acceptance_criteria:
+  - "CI fails if a tool references missing ai_ SP."
+  - "Runtime fails fast in non-dev if critical SPs are missing."

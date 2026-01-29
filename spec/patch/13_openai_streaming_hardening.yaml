@@ -1,0 +1,50 @@
+schema_version: "1.0"
+document: "PATCH 13 - Harden OpenAI SSE Streaming (no sync-over-async, reuse Channel/backpressure)"
+language: "en"
+
+goal:
+  - "Remove sync-over-async in OpenAI streaming endpoint."
+  - "Ensure /v1/chat/completions stream mode is as robust as /api/chat/stream and SignalR."
+  - "Reuse the channel/backpressure mechanism introduced in PATCH 11."
+
+problem:
+  - "OpenAiChatCompletionsController currently writes SSE chunks from within progress callback using GetAwaiter().GetResult()."
+  - "This can block thread pool and risk deadlocks under high event frequency."
+
+design:
+  - "Translate ChatStreamEvent -> OpenAI SSE chunks using an async writer loop reading from a bounded Channel."
+  - "Progress callback only enqueues events; it must never perform network writes."
+  - "Drop delta events when channel is full (configurable), never drop final/error."
+
+required_csharp_changes:
+  modify:
+    - path: "src/TILSOFTAI.Api/Controllers/OpenAiChatCompletionsController.cs"
+      changes:
+        - "In stream=true path: create ChatStreamChannel and OpenAI writer loop."
+        - "Progress callback enqueues translated OpenAI delta events into channel (or enqueues raw ChatStreamEvent and translate in writer loop)."
+        - "Writer loop writes OpenAI chunks using OpenAiSseWriter asynchronously and flushes."
+        - "On final: write final chunk + [DONE], then complete."
+        - "On error: write [DONE] and complete; if headers not sent yet, throw to middleware."
+        - "Respect HttpContext.RequestAborted."
+    - path: "src/TILSOFTAI.Api/Streaming/OpenAiSseWriter.cs"
+      ensure:
+        - "Writer methods are fully async; no sync calls."
+        - "WriteChunkAsync and WriteDoneAsync must flush."
+  create (if needed):
+    - path: "src/TILSOFTAI.Api/Streaming/OpenAiStreamTranslator.cs"
+      responsibilities:
+        - "Translate ChatStreamEvent.Delta -> OpenAiChatCompletionsStreamChunk with delta.content."
+        - "Translate Final -> final chunk with finish_reason='stop'."
+        - "Ignore tool_call/tool_result events."
+        - "Ensure id/object/created/model fields are populated consistently."
+  configuration:
+    - "Reuse StreamingOptions.ChannelCapacity and StreamingOptions.DropDeltaWhenFull."
+
+tests_to_add:
+  - "Integration test: /v1/chat/completions stream=true emits multiple 'data:' lines and ends with [DONE]."
+  - "Load test style unit test (lightweight): simulate 1000 delta events enqueued; ensure no blocking and completion."
+
+acceptance_criteria:
+  - "No GetAwaiter().GetResult() exists in OpenAI streaming path."
+  - "OpenAI streaming endpoint remains responsive under frequent delta events."
+  - "Final [DONE] is always sent if client stays connected."

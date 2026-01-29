@@ -1,0 +1,54 @@
+schema_version: "1.0"
+document: "Module Structure Template (folders + projects + naming)"
+language: "en"
+
+module_structure:
+  placeholders:
+    DomainName: "<DomainName>"
+    DomainKey: "<domainkey>"
+    ModuleAssemblyName: "TILSOFTAI.Modules.<DomainName>"
+
+  csharp_project:
+    path: "src/TILSOFTAI.Modules.<DomainName>/TILSOFTAI.Modules.<DomainName>.csproj"
+    type: "Class Library"
+    target_framework: "net10.0"
+    references_required:
+      - "src/TILSOFTAI.Domain/TILSOFTAI.Domain.csproj"
+      - "src/TILSOFTAI.Orchestration/TILSOFTAI.Orchestration.csproj"
+      - "src/TILSOFTAI.Infrastructure/TILSOFTAI.Infrastructure.csproj"
+    rules:
+      - "Nullable enabled"
+      - "ImplicitUsings enabled"
+      - "TreatWarningsAsErrors enabled"
+
+  folders_required:
+    - "src/TILSOFTAI.Modules.<DomainName>/"
+    - "src/TILSOFTAI.Modules.<DomainName>/Tools/"
+    - "src/TILSOFTAI.Modules.<DomainName>/Catalogs/"
+    - "src/TILSOFTAI.Modules.<DomainName>/Policies/"
+    - "src/TILSOFTAI.Modules.<DomainName>/README.md"
+
+  sql_folders_required:
+    - "sql/02_modules/<domainkey>/"
+    - "sql/02_modules/<domainkey>/01_tables_and_views.sql"
+    - "sql/02_modules/<domainkey>/02_sps_app.sql"
+    - "sql/02_modules/<domainkey>/03_sps_ai.sql"
+
+  seed_folders_required:
+    - "sql/99_seed/<domainkey>/"
+    - "sql/99_seed/<domainkey>/01_seed_toolcatalog.sql"
+    - "sql/99_seed/<domainkey>/02_seed_metadata_dictionary.sql"
+    - "sql/99_seed/<domainkey>/03_seed_domain_catalogs.sql (optional)"
+
+  documentation_required:
+    - "docs/modules/<domainkey>.md (module description + tool list + sql objects)"
+    - "docs/modules/<domainkey>_contracts.md (tool contracts + SP contracts)"
+
+module_enablement:
+  appsettings_key:
+    section: "Modules"
+    key: "Enabled"
+  rule:
+    - "Codex must add the module assembly name to Modules.Enabled (without changing other modules)."
+  example:
+    - "Enabled: [ 'TILSOFTAI.Modules.Core', 'TILSOFTAI.Modules.Analytics', 'TILSOFTAI.Modules.<DomainName>' ]"

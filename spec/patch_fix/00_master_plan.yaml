@@ -1,0 +1,19 @@
+schema_version: "1.0"
+document: "TILSOFTAI Patch fix -> Technical Build Index"
+language: "en"
+
+spec_files (apply_in_order):
+  - "spec/patch_fix/PATCH_01_Core_Engine_EntryPoint.yaml"
+  - "spec/patch_fix/PATCH_02_Security_TenantIsolation.yaml"
+  - "spec/patch_fix/PATCH_03_Strict_JsonSchemaValidation.yaml"
+  - "spec/patch_fix/PATCH_04_Observability_SQL_Conversation_Error.yaml"
+  - "spec/patch_fix/PATCH_05_I18N_EndToEnd.yaml"
+  - "spec/patch_fix/PATCH_06_SQL2025_JSON_VECTOR.yaml"
+  - "spec/patch_fix/PATCH_07_AtomicTool_Wiring.yaml"
+  - "spec/patch_fix/PATCH_08_Model_Module_RealSchema.yaml"
+  - "spec/patch_fix/PATCH_09_Model_Seeds_and_Glossary.yaml"
+  - "spec/patch_fix/PATCH_10_Module_Template_Extensibility.yaml"
+
+Notes:
+- “Model” is an example module; every patch must preserve a **module-agnostic core**.
+- Do not introduce domain-specific DTOs in C#.

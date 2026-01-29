@@ -1,0 +1,39 @@
+version: 1
+patch_id: PATCH_04_Observability_SQL_Conversation_Error
+title: "Harden SQL observability: indexes, payload strategy, retention docs"
+risk_level: "P0-High"
+context:
+  - "Conversation logging already exists via SqlConversationStore + app_* SPs."
+  - "Error logging exists via SqlErrorLogWriter + app_errorlog_insert."
+scope:
+  includes:
+    - "sql/01_core/004_tables_observability.sql"
+    - "sql/01_core/006_sps_app_observability.sql"
+    - "src/TILSOFTAI.Infrastructure/Conversations/SqlConversationStore.cs"
+    - "src/TILSOFTAI.Infrastructure/Errors/SqlErrorLogWriter.cs"
+    - "docs/observability_retention.md"
+goals:
+  - "Ensure queryable indexes and enterprise-ready retention guidance."
+  - "Ensure tool execution logs persist both raw and compacted results (already in pipeline)."
+steps:
+  - id: S01_sql_indexes
+    do:
+      - "Edit sql/01_core/004_tables_observability.sql"
+      - "Add/verify indexes:"
+      - "  - ConversationMessage(TenantId, ConversationId, CreatedAtUtc)"
+      - "  - ToolExecution(TenantId, ConversationId, CreatedAtUtc)"
+      - "  - ErrorLog(TenantId, CreatedAtUtc, ErrorCode)"
+
+  - id: S02_payload_column_types
+    do:
+      - "Keep nvarchar(max) for now; SQL 2025 json type upgrade is handled in PATCH_06."
+      - "Document which columns are candidates: PayloadJson, ArgumentsJson, ResultJson, DetailJson."
+
+  - id: S03_docs_retention
+    do:
+      - "Create docs/observability_retention.md"
+      - "Include: retention default (e.g., 90 days), purge job pattern, PII policy."
+
+verification:
+  - "Run sql/01_core scripts on dev DB; ensure no duplicate index errors."
+  - "Run a chat request; verify ConversationMessage + ToolExecution rows are inserted."

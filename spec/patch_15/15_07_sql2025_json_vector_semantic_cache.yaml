@@ -1,0 +1,48 @@
+schema_version: "1.0"
+document: "PATCH 15.07 - SQL Server 2025: JSON Type + Vector-backed Semantic Cache (Optional Mode)"
+language: "en"
+
+important_note:
+  - "This patch is designed to be SAFE on older SQL versions: it must feature-detect JSON/VECTOR support and skip when unavailable."
+  - "If SQL Server 2025 features are not present, system continues using existing NVARCHAR(max) and Redis hash cache."
+
+goal:
+  - "If SQL 2025 JSON type exists: convert heavy JSON NVARCHAR(max) columns to JSON where safe (tool args/results, diagnostics, etc.)."
+  - "If SQL 2025 VECTOR type exists: add a SQL semantic cache table for embedding-based retrieval."
+  - "Expose configuration to select cache mode: RedisHash (current), SqlVector (new)."
+
+sql_changes:
+  - "Create dbo.SemanticCacheVector (TenantId, Module, QuestionHash, QuestionText, AnswerText, Embedding VECTOR, CreatedAtUtc)."
+  - "Create app_semanticcache_upsert and app_semanticcache_search (topK, distance threshold)."
+  - "Create a migration script that checks TYPE_ID('json') and TYPE_ID('vector') before applying."
+
+csharp_changes:
+  - "Add IEmbeddingClient and an OpenAI-compatible embedding implementation (uses existing LlmOptions endpoint/key)."
+  - "Add ISemanticCache implementation SqlVectorSemanticCache."
+  - "Add SemanticCacheOptions.Mode enum: 'RedisHash'|'SqlVector'."
+
+files_to_create_or_modify:
+  create:
+    - path: "sql/01_core/040_sql2025_json_vector_migrations.sql"
+      content_requirements:
+        - "Use IF TYPE_ID('json') IS NOT NULL ... dynamic SQL to alter column types."
+        - "Use IF TYPE_ID('vector') IS NOT NULL ... create vector table and SPs."
+    - path: "src/TILSOFTAI.Orchestration/Caching/IEmbeddingClient.cs"
+    - path: "src/TILSOFTAI.Infrastructure/Llm/OpenAiEmbeddingClient.cs"
+    - path: "src/TILSOFTAI.Infrastructure/Caching/SqlVectorSemanticCache.cs"
+  modify:
+    - path: "src/TILSOFTAI.Domain/Configuration/SemanticCacheOptions.cs"
+      changes:
+        - "Add Mode and EmbeddingModel fields."
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      changes:
+        - "Register embedding client and SqlVectorSemanticCache."
+        - "Bind ISemanticCache based on SemanticCacheOptions.Mode."
+    - path: "src/TILSOFTAI.Infrastructure/Caching/SemanticCache.cs"
+      changes:
+        - "Rename or comment as RedisHashSemanticCache to avoid 'semantic' mislabeling, or keep but clarify."
+        - "No behavior change required."
+
+acceptance_criteria:
+  - "When Mode=SqlVector and SQL supports VECTOR, repeated similar questions hit SQL semantic cache."
+  - "When SQL lacks VECTOR, app starts and logs a warning, falling back to RedisHash."

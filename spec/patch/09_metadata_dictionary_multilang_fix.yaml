@@ -1,0 +1,85 @@
+schema_version: "1.0"
+document: "PATCH 09 - MetadataDictionary Multi-language + Tenant Override (Schema + SP + Seeds)"
+language: "en"
+
+goal:
+  - "Fix MetadataDictionary schema so it truly supports multi-language and tenant overrides."
+  - "Implement deterministic fallback resolution order for dictionary entries."
+  - "Keep SQL and C# synchronized (PromptBuilder context packs use MetadataDictionary)."
+
+current_problem:
+  - "MetadataDictionary has columns TenantId and Language but PK only on [Key], preventing multi-language entries."
+
+hard_constraints:
+  - "No table prefix. DB name is TILSOFTAI."
+  - "Must preserve existing keys where possible."
+  - "Migration must be safe and idempotent in repeated deployments."
+  - "If existing data exists, migrate it to new key structure without loss."
+
+target_schema:
+  table: "MetadataDictionary"
+  columns_required (final):
+    - "Key nvarchar(200) NOT NULL"
+    - "TenantId nvarchar(50) NULL"
+    - "Language nvarchar(10) NOT NULL"
+    - "DisplayName nvarchar(200) NOT NULL"
+    - "Description nvarchar(2000) NULL"
+    - "Unit nvarchar(50) NULL"
+    - "Examples nvarchar(2000) NULL"
+    - "UpdatedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+  primary_key (final):
+    - "(Key, TenantId, Language)"
+  indexes_required:
+    - "IX_MetadataDictionary_Tenant_Lang_Key (TenantId, Language, Key)"
+    - "IX_MetadataDictionary_Key_Lang (Key, Language)"
+
+fallback_resolution_order (MUST implement in SQL SP):
+  - "1) TenantId = @TenantId AND Language = @Language"
+  - "2) TenantId = @TenantId AND Language = @DefaultLanguage"
+  - "3) TenantId IS NULL AND Language = @Language"
+  - "4) TenantId IS NULL AND Language = @DefaultLanguage"
+
+sql_files_to_create_or_modify:
+  create:
+    - path: "sql/01_core/008_migration_metadata_dictionary_multilang.sql"
+      responsibilities:
+        - "Detect current PK/constraint shape."
+        - "If PK is only on Key, perform migration:"
+        - "  - Create new table MetadataDictionary_v2 with desired schema+PK."
+        - "  - Copy old rows into v2 (TenantId NULL if missing; Language default 'en' if missing)."
+        - "  - Swap tables using rename (sp_rename) guarded by existence checks."
+        - "  - Recreate indexes."
+        - "Must be safe if table already migrated (no-op)."
+  modify:
+    - path: "sql/01_core/002_sps_app_core.sql"
+      changes:
+        - "Replace dbo.app_metadatadictionary_list with a version that supports @Language and @DefaultLanguage and applies fallback rules."
+      final_signature:
+        - "dbo.app_metadatadictionary_list(@TenantId nvarchar(50), @Language nvarchar(10), @DefaultLanguage nvarchar(10))"
+
+seed_rules_update:
+  modify_seed_files:
+    - "sql/99_seed/001_seed_metadata_dictionary.sql"
+    - "sql/99_seed/<domainkey>/02_seed_metadata_dictionary.sql (for each module)"
+  rules:
+    - "Seeds must include Language in MERGE key."
+    - "Seeds may include both 'en' and 'vi'."
+    - "Do not overwrite tenant-specific rows when seeding global rows."
+
+csharp_changes:
+  modify:
+    - file: "src/TILSOFTAI.Infrastructure/Metadata/MetadataDictionaryProvider.cs (or equivalent existing provider)"
+      required_behavior:
+        - "Call app_metadatadictionary_list with ctx.TenantId, ctx.Language, Localization.DefaultLanguage."
+        - "Return resolved set (already applied fallback in SQL)."
+    - file: "src/TILSOFTAI.Domain/Configuration/LocalizationOptions.cs"
+      ensure:
+        - "DefaultLanguage exists and is not empty."
+  tests:
+    - "Add integration test: seed en+vi for same key; request ctx.Language=vi returns vi entry."
+    - "Add integration test: if tenant-specific exists, it overrides global."
+
+acceptance_criteria:
+  - "MetadataDictionary stores both en and vi entries for the same key without conflict."
+  - "Tenant-specific dictionary entries override global entries."
+  - "Fallback behavior matches the specified resolution order."

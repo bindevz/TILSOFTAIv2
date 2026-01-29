@@ -1,0 +1,182 @@
+schema_version: "1.0"
+document: "PATCH 01 - Chat Endpoints Wiring (WebAPI + SSE + SignalR)"
+language: "en"
+
+target_repository_root: "/mnt/data/tilsoft_ai_review"
+project_name: "TILSOFTAI"
+database_name: "TILSOFTAI"
+
+goal:
+  - "Implement runnable end-to-end chat APIs that call ChatPipeline."
+  - "Support: WebAPI (non-stream), WebAPI SSE stream, and SignalR streaming."
+  - "Preserve multi-tenant + multi-language execution context from headers."
+
+non_goals:
+  - "Do NOT implement domain logic in controllers."
+  - "Do NOT hardcode tool behavior; orchestration must remain in ChatPipeline + tools."
+
+inputs_from_http_context (MUST use ExecutionContextMiddleware):
+  required_headers:
+    - "X-Tenant-Id"
+    - "X-User-Id"
+  optional_headers:
+    - "X-Roles (CSV or ';' separated)"
+    - "X-Correlation-Id (else server generates)"
+    - "X-Conversation-Id (else server generates)"
+    - "X-Lang (preferred language, overrides Accept-Language)"
+  execution_context_fields (already provided by middleware):
+    - "TenantId"
+    - "UserId"
+    - "Roles[]"
+    - "CorrelationId"
+    - "ConversationId"
+    - "RequestId"
+    - "TraceId"
+    - "Language"
+
+api_contracts_to_implement:
+  - name: "POST /api/chat"
+    auth: "JWT Bearer required ([Authorize])"
+    request_json:
+      type: "object"
+      required: ["input"]
+      properties:
+        input: { type: "string", minLength: 1 }
+        allowCache: { type: "boolean", default: true }
+        containsSensitive: { type: "boolean", default: false }
+        metadata: { type: "object", description: "optional, stored as-is; must not affect orchestration decisions" }
+      additionalProperties: false
+    response_json:
+      type: "object"
+      required: ["success", "content", "conversationId", "correlationId", "traceId", "language"]
+      properties:
+        success: { type: "boolean" }
+        content: { type: "string" }
+        conversationId: { type: "string" }
+        correlationId: { type: "string" }
+        traceId: { type: "string" }
+        language: { type: "string" }
+        error: { type: "object", nullable: true }
+    status_codes:
+      - "200 on success"
+      - "400 on validation failure (empty input, invalid json)"
+      - "401/403 for auth"
+      - "500 for unexpected errors (handled by ExceptionHandlingMiddleware in PATCH 04)"
+
+  - name: "POST /api/chat/stream"
+    auth: "JWT Bearer required ([Authorize])"
+    transport: "SSE (text/event-stream)"
+    request_json: "Same as POST /api/chat"
+    sse_event_format (MUST match exactly):
+      - event: "delta"
+        data: "{\"type\":\"delta\",\"payload\":\"<string>\"}"
+      - event: "tool_call"
+        data: "{\"type\":\"tool_call\",\"payload\":{<LlmToolCall>}}"
+      - event: "tool_result"
+        data: "{\"type\":\"tool_result\",\"payload\":{<ToolExecutionRecord>}}"
+      - event: "final"
+        data: "{\"type\":\"final\",\"payload\":\"<final content>\"}"
+      - event: "error"
+        data: "{\"type\":\"error\",\"payload\":\"<error message>\"}"
+    server_rules:
+      - "Flush after every event."
+      - "Stop streaming on final or error."
+      - "Do NOT send stack traces in error payload."
+
+  - name: "SignalR hub /hubs/chat"
+    auth: "JWT Bearer required ([Authorize])"
+    hub_class: "src/TILSOFTAI.Api/Hubs/ChatHub.cs"
+    client_to_server_methods:
+      - name: "StartChat"
+        args_json:
+          type: "object"
+          required: ["input"]
+          properties:
+            input: { type: "string", minLength: 1 }
+            allowCache: { type: "boolean", default: true }
+            containsSensitive: { type: "boolean", default: false }
+          additionalProperties: false
+        behavior:
+          - "Runs ChatPipeline with Stream=true."
+          - "Server pushes events to caller using SendAsync('chat_event', <ChatStreamEventEnvelope>)."
+    server_to_client_events:
+      - name: "chat_event"
+        payload_json:
+          type: "object"
+          required: ["type", "payload", "conversationId", "correlationId", "traceId", "language"]
+          properties:
+            type: { type: "string", enum: ["delta","tool_call","tool_result","final","error"] }
+            payload: { type: ["string","object","null"] }
+            conversationId: { type: "string" }
+            correlationId: { type: "string" }
+            traceId: { type: "string" }
+            language: { type: "string" }
+
+files_to_create_or_modify:
+  create:
+    - path: "src/TILSOFTAI.Api/Contracts/Chat/ChatApiRequest.cs"
+      content_requirements:
+        - "public sealed class ChatApiRequest { string Input; bool AllowCache=true; bool ContainsSensitive=false; JsonElement? Metadata; }"
+        - "Use System.Text.Json attributes for camelCase."
+    - path: "src/TILSOFTAI.Api/Contracts/Chat/ChatApiResponse.cs"
+      content_requirements:
+        - "public sealed class ChatApiResponse { bool Success; string Content; string ConversationId; string CorrelationId; string TraceId; string Language; ErrorEnvelope? Error; }"
+        - "ErrorEnvelope defined in PATCH 04; reference that type."
+    - path: "src/TILSOFTAI.Api/Streaming/SseWriter.cs"
+      content_requirements:
+        - "Helper to write SSE events with correct formatting and flush."
+        - "Must accept CancellationToken."
+  modify:
+    - path: "src/TILSOFTAI.Api/Controllers/ChatController.cs"
+      changes:
+        - "Replace 501 stub with real implementation."
+        - "Inject: ChatPipeline, IExecutionContextAccessor, ILogger<ChatController>."
+        - "POST /api/chat: validate payload -> call pipeline -> return ChatApiResponse."
+        - "POST /api/chat/stream: stream SSE; use ChatPipeline with StreamObserver to emit events."
+    - path: "src/TILSOFTAI.Api/Hubs/ChatHub.cs"
+      changes:
+        - "Implement StartChat method."
+        - "Inject: ChatPipeline, IExecutionContextAccessor, ILogger<ChatHub> via constructor."
+        - "Use IProgress<ChatStreamEvent> to forward events to Clients.Caller.SendAsync('chat_event', envelope)."
+    - path: "src/TILSOFTAI.Api/Program.cs"
+      changes:
+        - "No direct registrations here; ensure MapTilsoftAi already maps hub and controllers."
+        - "Ensure the middleware pipeline includes ExceptionHandlingMiddleware (PATCH 04) before ExecutionContextMiddleware."
+
+implementation_steps (Codex MUST follow in order):
+  - step: "S1_Add DTOs and SSE writer"
+    detail:
+      - "Create Contracts classes in src/TILSOFTAI.Api/Contracts/Chat."
+      - "Create Streaming/SseWriter.cs with method WriteEventAsync(HttpResponse resp, string eventName, object payload, CancellationToken ct)."
+      - "SseWriter must JSON serialize payload using System.Text.Json with camelCase."
+  - step: "S2_Implement POST /api/chat"
+    detail:
+      - "Deserialize request body to ChatApiRequest (ModelBinding)."
+      - "Validate request.Input not null/empty; else throw ArgumentException (handled by PATCH 04)."
+      - "Create Orchestration ChatRequest: Input=request.Input, AllowCache=request.AllowCache, ContainsSensitive=request.ContainsSensitive, Stream=false."
+      - "Call ChatPipeline.RunAsync(..., ctxAccessor.Current, ct)."
+      - "Return 200 with ChatApiResponse: include ctxAccessor.Current ids and language; success based on ChatResult.Success."
+  - step: "S3_Implement SSE endpoint"
+    detail:
+      - "Set Response.ContentType to 'text/event-stream'."
+      - "Create Progress<ChatStreamEvent> that calls SseWriter.WriteEventAsync(...)."
+      - "Call ChatPipeline with Stream=true and StreamObserver=progress."
+      - "Ensure final/error event emitted once, then return."
+      - "When the request is aborted, stop streaming gracefully."
+  - step: "S4_Implement SignalR StartChat"
+    detail:
+      - "Validate input; if invalid throw ArgumentException."
+      - "Create IProgress<ChatStreamEvent> that wraps into envelope adding context ids and language."
+      - "Forward each event via Clients.Caller.SendAsync('chat_event', envelope, ct)."
+      - "Return after pipeline completes."
+
+acceptance_criteria:
+  - "Non-stream endpoint returns assistant content when LLM is configured (PATCH 02)."
+  - "SSE endpoint emits delta events and final event; content equals non-stream output."
+  - "SignalR endpoint emits the same sequence of events as SSE, with identical payload semantics."
+  - "ConversationId is stable for the request (comes from header or generated by middleware)."
+  - "All responses include language and tracing identifiers."
+
+tests_to_add_or_update:
+  - "Add one integration test in tests/TILSOFTAI.Tests.Integration that calls /api/chat with a mocked ILlmClient (in-memory DI override) and asserts 200 + content."
+  - "Add one integration test that calls /api/chat/stream and verifies SSE framing (at least delta and final)."

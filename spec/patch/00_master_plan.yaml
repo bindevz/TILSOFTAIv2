@@ -1,0 +1,137 @@
+schema_version: "1.0"
+document: "TILSOFTAI patch -> Technical Build Index"
+language: "en"
+
+source_patch_document:
+  key_points_to_implement:
+    1. **End-to-end runnable path (Phase 0)**
+      - Implement a **real LLM client** (OpenAI/Azure) supporting:
+        - tool calling
+        - streaming token output
+        - mapping to internal `LlmResponse` (content + tool calls)
+      - Implement **ChatController** → call `ChatPipeline.RunAsync(...)` (non-stream + stream).
+      - Implement **OpenAI-compatible controller** for Chat Completions (stream + non-stream).
+      - Implement **ChatHub (SignalR)** streaming:
+        - token chunks
+        - optionally tool-call events / tool execution status events
+
+    2. **SQL/C# contract synchronization (Phase 1)**
+      - Add SQL **tables**: `Conversation`, `ConversationMessage`, `ToolExecution`, `ErrorLog` (tenant + correlation + timestamps).
+      - Add SQL **stored procedures** required by the C# contract validator/tests:
+        - `app_conversation_upsert`
+        - `app_conversationmessage_insert`
+        - `app_toolexecution_insert`
+        - `app_errorlog_insert`
+      - Implement C# SQL-backed components:
+        - `SqlConversationStore : IConversationStore`
+        - `SqlErrorLogger` (or `ISqlErrorLogWriter`)
+        - `ExceptionHandlingMiddleware` mapping exceptions → error codes + localized messages + SQL insert
+
+    3. **Normalization engine (Phase 2)**
+      - Create SQL table `NormalizationRule` with tenant override support and priority ordering.
+      - Implement C# normalization:
+        - load rules per tenant
+        - cache in Redis for **>= 30 minutes**
+        - apply regex rules deterministically
+        - include robust season normalization (e.g., `25/26 → 2025/2026`) with clear validation
+
+    4. **Atomic engine implementation (Phase 3)**
+      - Implement SQL `ai_atomic_execute_plan` fully:
+        - parse plan JSON (select/where/group/order/limit/timeRange/drilldown)
+        - safe dynamic SQL with strict whitelisting:
+          - fields from `FieldCatalog`
+          - base objects from `DatasetCatalog`
+          - joins only via `EntityGraphCatalog`
+          - operators whitelist + parameterization
+        - output standardized JSON envelope (meta/columns/rows)
+      - Enhance C# `AtomicDataEngine`:
+        - optional “explain plan” output for debugging
+        - cache compiled plan templates in Redis (hash of PlanJson) for **>= 30 minutes**
+
+    5. **Tool + diagnostics alignment (Phase 4)**
+      - Seed and register core tools:
+        - `tool.list`
+        - `atomic.execute_plan`
+        - `diagnostics.run`
+      - Standardize diagnostics SP signature across the system:
+        - choose **one**: `@ArgsJson` recommended
+        - refactor any mismatched tooling/SPs accordingly
+
+    6. **Prompt/token strategy refactor (Phase 5)**
+      - Stop duplicating tool schemas in the system prompt if tools are passed via structured `LlmRequest.Tools`.
+      - Replace unsafe “truncate by chars” with **budgeting + drop-policy**:
+        - drop least critical context packs first
+        - never cut JSON/tool specs mid-structure
+      - Keep system prompt minimal and stable:
+        - language constraint
+        - “don’t guess domain rules”
+        - “call tools when needed and follow tool instructions”
+
+global_rules:
+  1. **Phase ordering is non-negotiable**
+    - Do **Phase 0** first (runnable E2E), then **Phase 1** (contract sync).
+    - Everything else is secondary until the system runs.
+
+  2. **SQL is the source of truth for domain computation**
+    - C# orchestrates; **SQL executes business/data logic** (especially atomic engine), with strict safety constraints.
+
+  3. **C# ↔ SQL contract must be enforced**
+    - Any C# validator/test-required object (SP/table/view) **must exist** in SQL scripts and be versioned together.
+    - No “stub” SPs in production paths.
+
+  4. **Multi-tenancy must be first-class**
+    - Catalogs and persistence must support tenant overrides (PKs and indexes must include `TenantId` where appropriate).
+    - Avoid global singleton catalogs unless explicitly intended.
+
+  5. **Diagnostics and tool invocation contracts must be consistent**
+    - Standardize parameter names and JSON envelope conventions system-wide (`@ArgsJson` vs `@InputJson`, tool args/result envelopes).
+
+  6. **Prompt construction must be deterministic and structurally safe**
+    - Never truncate raw strings in a way that can break JSON/schema.
+    - Prefer structured tool definitions and context packing with budget policies.
+
+  7. **Streaming behavior should be uniform**
+    - Whether via WebAPI streaming or SignalR, clients should receive:
+      - token chunks
+      - tool-call start/finish events (if applicable)
+      - final completion envelope
+
+  8. **Keep and extend what is already solid**
+    - Preserve ExecutionContext middleware, options/DI/module loader scaffold, and ChatPipeline governance hooks.
+    - Standardize outputs to the existing `ai_model_*` JSON envelope format across new components.
+
+naming_conventions:
+  database_name: "TILSOFTAI"
+  table_prefix: ""              # none
+  stored_procedure_prefixes:
+    model_callable: "ai_"
+    internal: "app_"
+
+execution_context_headers:
+  required: ["X-Tenant-Id", "X-User-Id", "X-Roles"]
+  optional: ["X-Correlation-Id", "X-Conversation-Id", "X-Lang"]
+  language_resolution_priority: ["X-Lang", "Accept-Language", "Localization.DefaultLanguage"]
+
+spec_files (apply_in_order):
+  - "spec/patch/01_chat_endpoints_wiring.yaml"
+  - "spec/patch/02_llm_client_openai.yaml"
+  - "spec/patch/03_sql_observability_conversations.yaml"
+  - "spec/patch/04_error_codes_and_exception_middleware.yaml"
+  - "spec/patch/05_normalization_rules_engine.yaml"
+  - "spec/patch/06_atomic_execute_plan_impl.yaml"
+  - "spec/patch/07_prompt_budgeting_refactor.yaml"
+  - "spec/patch/08_openai_compatible_endpoint.yaml"
+  - "spec/patch/09_metadata_dictionary_multilang_fix.yaml"
+  - "spec/patch/10_sql_model_module_dedup.yaml"
+  - "spec/patch/11_streaming_hardening.yaml"
+  - "spec/patch/12_schema_global_override_keys_fix.yaml"
+  - "spec/patch/13_openai_streaming_hardening.yaml"
+
+definition_of_done:
+  - "Platform Core works without any domain modules."
+  - "At least one domain module (Model) works as an example; platform remains domain-agnostic."
+  - "SQL scripts build DB from scratch and include all required tables/views/SPs."
+  - "Tool invocation is restricted to ai_* SPs registered in ToolCatalog."
+  - "Tool results are compacted and persisted; conversations are persisted."
+  - "Redis caches semantic results and catalog snapshots with TTL >= 30 minutes."
+  - "Contract tests verify ai_/app_ presence and tool-to-SP mapping."

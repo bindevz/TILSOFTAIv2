@@ -1,0 +1,72 @@
+schema_version: "1.0"
+document: "PATCH 10 - Deduplicate Model SQL Objects (single source of truth + deterministic deploy order)"
+language: "en"
+
+goal:
+  - "Eliminate duplicated definitions of ai_model_* procedures and related views."
+  - "Ensure deployment order cannot accidentally overwrite correct implementations."
+  - "Make tool handler signatures and SQL SP signatures strictly aligned."
+
+problem_statement:
+  - "ai_model_* SPs are defined in multiple SQL script locations."
+  - "Because scripts use CREATE OR ALTER, whichever is deployed last wins (drift)."
+  - "Handlers expect certain parameter names/signatures; drift causes runtime failures."
+
+hard_constraints:
+  - "Model module SQL must live under sql/02_modules/model/ as the single source of truth."
+  - "Any legacy folders (e.g., sql/05_model/) must not define ai_model_* after this patch."
+  - "ToolCatalog.SpName must match the final procedure names and signatures."
+
+required_sql_actions:
+  - action: "S1 Choose canonical files"
+    canonical_folder: "sql/02_modules/model/"
+    canonical_files:
+      - "01_tables_and_views.sql (or equivalent existing view script)"
+      - "02_sps_app.sql (module-internal)"
+      - "03_sps_ai.sql (ALL ai_model_* definitions)"
+  - action: "S2 Remove/neutralize duplicates"
+    duplicates_to_remove_or_neutralize:
+      - folder: "sql/05_model/"
+        rule:
+          - "Delete files that create/alter dbo.ai_model_*"
+          - "OR replace their content with a comment header stating 'Deprecated - do not deploy'"
+          - "In either case, ensure no CREATE OR ALTER dbo.ai_model_* remains"
+  - action: "S3 Standardize signatures"
+    final_ai_signatures (MUST implement exactly):
+      - name: "dbo.ai_model_get_overview"
+        params: ["@TenantId nvarchar(50)", "@Language nvarchar(10) = NULL", "@ModelId int"]
+      - name: "dbo.ai_model_get_pieces"
+        params: ["@TenantId nvarchar(50)", "@Language nvarchar(10) = NULL", "@ModelId int"]
+      - name: "dbo.ai_model_get_materials"
+        params: ["@TenantId nvarchar(50)", "@Language nvarchar(10) = NULL", "@ModelId int"]
+      - name: "dbo.ai_model_compare_models"
+        params: ["@TenantId nvarchar(50)", "@Language nvarchar(10) = NULL", "@ModelIdsJson nvarchar(max)"]
+    output_contract:
+      - "All return JSON envelope meta/columns/rows; include tenantId and generatedAtUtc in meta."
+
+required_csharp_actions:
+  - file: "src/TILSOFTAI.Modules.Model/Tools/ModelCompareModelsToolHandler.cs"
+    required_behavior:
+      - "Serialize modelIds array to JSON string and pass as @ModelIdsJson."
+      - "Pass ctx.Language as @Language."
+  - file: "src/TILSOFTAI.Modules.Model/Tools/ModelGetOverviewToolHandler.cs"
+    required_behavior:
+      - "Pass ctx.Language as @Language if handler supports it; else update handler to include @Language."
+  - file: "src/TILSOFTAI.Modules.Model/Tools/ModelGetPiecesToolHandler.cs"
+    required_behavior:
+      - "Pass ctx.Language as @Language."
+  - file: "src/TILSOFTAI.Modules.Model/Tools/ModelGetMaterialsToolHandler.cs"
+    required_behavior:
+      - "Pass ctx.Language as @Language."
+
+deployment_order_update:
+  - "Update SQL deployment script/list (if exists) so module scripts deploy after core tables/SPs."
+  - "Ensure sql/02_modules/model/03_sps_ai.sql is deployed exactly once."
+
+tests_to_add_or_update:
+  - "Contract test: assert sys.procedures contains each ai_model_* exactly once by name (existence)."
+  - "Integration test: calling model_compare_models tool passes correct @ModelIdsJson and returns parseable JSON."
+
+acceptance_criteria:
+  - "No SQL file outside sql/02_modules/model/ contains CREATE/ALTER for ai_model_*."
+  - "Tool handlers and SP signatures align and tool calls succeed deterministically."

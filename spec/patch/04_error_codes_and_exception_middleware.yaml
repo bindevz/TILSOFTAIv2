@@ -1,0 +1,118 @@
+schema_version: "1.0"
+document: "PATCH 04 - Error Codes + Multi-language Error Catalog + Exception Middleware + SQL Error Logging"
+language: "en"
+
+goal:
+  - "Define a single, platform-wide error system: codes, messages, and response envelope."
+  - "Return consistent API errors in the user's language (ExecutionContext.Language)."
+  - "Persist error logs to SQL via dbo.app_errorlog_insert when enabled."
+
+non_goals:
+  - "Do NOT swallow errors silently."
+  - "Do NOT return stack traces to clients."
+
+error_response_envelope (MUST implement exactly):
+  json:
+    type: "object"
+    required: ["success","error","correlationId","conversationId","traceId","language"]
+    properties:
+      success: { type: "boolean", const: false }
+      error:
+        type: "object"
+        required: ["code","message"]
+        properties:
+          code: { type: "string" }
+          message: { type: "string" }
+          detail: { type: ["object","string","null"] }
+      correlationId: { type: "string" }
+      conversationId: { type: "string" }
+      traceId: { type: "string" }
+      language: { type: "string" }
+
+required_error_codes (minimum set):
+  - "INVALID_ARGUMENT"
+  - "UNAUTHORIZED"
+  - "FORBIDDEN"
+  - "NOT_FOUND"
+  - "TOOL_VALIDATION_FAILED"
+  - "TOOL_EXECUTION_FAILED"
+  - "LLM_TRANSPORT_ERROR"
+  - "SQL_ERROR"
+  - "CHAT_FAILED"
+  - "UNHANDLED_ERROR"
+
+multi_language_support:
+  supported_languages:
+    - "en"
+    - "vi"
+  rule:
+    - "If ExecutionContext.Language not supported, fallback to Localization.DefaultLanguage, then 'en'."
+
+csharp_files_to_create:
+  - path: "src/TILSOFTAI.Domain/Errors/ErrorCode.cs"
+    content_requirements:
+      - "public static class ErrorCode { public const string InvalidArgument = "INVALID_ARGUMENT"; ... }"
+  - path: "src/TILSOFTAI.Domain/Errors/ErrorDefinition.cs"
+    content_requirements:
+      - "public sealed record ErrorDefinition(string Code, string Language, string MessageTemplate);"
+  - path: "src/TILSOFTAI.Domain/Errors/IErrorCatalog.cs"
+    content_requirements:
+      - "ErrorDefinition Get(string code, string language);"
+  - path: "src/TILSOFTAI.Infrastructure/Errors/InMemoryErrorCatalog.cs"
+    content_requirements:
+      - "Provide EN + VI messages for required codes."
+      - "Do NOT use ResourceManager yet; keep deterministic dictionary."
+  - path: "src/TILSOFTAI.Domain/Errors/ErrorEnvelope.cs"
+    content_requirements:
+      - "public sealed class ErrorEnvelope { string Code; string Message; object? Detail; }"
+  - path: "src/TILSOFTAI.Api/Middlewares/ExceptionHandlingMiddleware.cs"
+    responsibilities:
+      - "Wrap next() in try/catch."
+      - "Resolve ExecutionContext if available; if missing, create minimal ids from HttpContext.TraceIdentifier."
+      - "Map exception -> error code + message (localized)."
+      - "Write JSON response envelope (camelCase)."
+      - "If Observability.EnableSqlErrorLog=true: call ISqlErrorLogWriter to write dbo.app_errorlog_insert."
+  - path: "src/TILSOFTAI.Infrastructure/Errors/SqlErrorLogWriter.cs"
+    implements: "ISqlErrorLogWriter"
+    responsibilities:
+      - "Call dbo.app_errorlog_insert with context identifiers and error info."
+  - path: "src/TILSOFTAI.Domain/Errors/ISqlErrorLogWriter.cs"
+    content_requirements:
+      - "Task WriteAsync(TilsoftExecutionContext ctx, string code, string message, object? detail, CancellationToken ct);"
+
+exception_to_code_mapping (MUST implement exactly):
+  - match: "ArgumentException, JsonException"
+    code: "INVALID_ARGUMENT"
+    http_status: 400
+  - match: "UnauthorizedAccessException"
+    code: "UNAUTHORIZED"
+    http_status: 401
+  - match: "Microsoft.Data.SqlClient.SqlException"
+    code: "SQL_ERROR"
+    http_status: 500
+  - match: "InvalidOperationException"
+    code: "CHAT_FAILED"
+    http_status: 400
+  - match: "otherwise"
+    code: "UNHANDLED_ERROR"
+    http_status: 500
+
+controller_integration_rules:
+  - "Controllers MUST throw exceptions for invalid payload instead of returning ad-hoc {error:'...'} objects."
+  - "ChatController must return success responses, but rely on middleware for errors."
+
+di_registration_changes:
+  modify:
+    - file: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      changes:
+        - "Register IErrorCatalog => InMemoryErrorCatalog (singleton)."
+        - "Register ISqlErrorLogWriter => SqlErrorLogWriter (singleton)."
+    - file: "src/TILSOFTAI.Api/Extensions/MapTilsoftAiExtensions.cs"
+      changes:
+        - "Insert app.UseMiddleware<ExceptionHandlingMiddleware>() BEFORE ExecutionContextMiddleware."
+        - "Order must be: UseRouting -> ExceptionHandling -> Auth -> Authorization -> ExecutionContext -> endpoints."
+
+acceptance_criteria:
+  - "All API errors use the envelope and include correlationId/conversationId/traceId/language."
+  - "Error message language follows context.Language with fallback."
+  - "When EnableSqlErrorLog=true, ErrorLog rows are written using app_errorlog_insert."

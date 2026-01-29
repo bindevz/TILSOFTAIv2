@@ -1,0 +1,57 @@
+schema_version: "1.0"
+document: "C# Module Template (ITilsoftModule + ToolHandlers + Catalog Providers)"
+language: "en"
+
+placeholders:
+  DomainName: "<DomainName>"
+  DomainKey: "<domainkey>"
+
+module_contract:
+  interface: "ITilsoftModule"
+  rules:
+    - "Modules must not call each other directly."
+    - "Modules must register tools and handlers; platform core owns orchestration."
+    - "Handlers must return dynamic JSON (JsonDocument/JsonElement), not domain DTO classes."
+
+files_required:
+  - file: "src/TILSOFTAI.Modules.<DomainName>/<DomainName>Module.cs"
+    class: "<DomainName>Module"
+    implements: "ITilsoftModule"
+    responsibilities:
+      - "Register module services (catalog providers, validators)."
+      - "Register tools into IToolRegistry: Name, Description, Instruction, JsonSchema, SpName, RequiredRoles, Module."
+      - "Never contain domain inference logic; only registrations."
+
+  - file: "src/TILSOFTAI.Modules.<DomainName>/Tools/<DomainName>ToolHandlerBase.cs"
+    class: "<DomainName>ToolHandlerBase"
+    responsibilities:
+      - "Shared helper: parse args JSON, validate required args, call ISqlExecutor."
+      - "Serialize parameters and execute stored procedures only."
+      - "Ensure @TenantId is passed from execution context."
+      - "Return JsonDocument result."
+
+  - file: "src/TILSOFTAI.Modules.<DomainName>/Tools/<ToolName>ToolHandler.cs"
+    one_per_tool: true
+    responsibilities:
+      - "Implement IToolHandler."
+      - "Validate input args types (in addition to JSON schema at governance level)."
+      - "Call the mapped ai_* stored procedure using ISqlExecutor."
+      - "Return JsonDocument; do not map to DTO classes."
+
+required_platform_dependencies_used_by_module:
+  - "ISqlExecutor (SP-only execution)"
+  - "IExecutionContextAccessor"
+  - "ToolResultCompactor (handled centrally; module handler returns raw JSON, invoker compacts)"
+  - "IJsonSchemaValidator (central; tool args already validated before handler execution)"
+  - "ICacheProvider (optional for module catalogs)"
+
+sql_executor_contract:
+  interface: "ISqlExecutor"
+  rule:
+    - "Must support ExecuteToJsonAsync(storedProcedure, parameters) returning JsonDocument."
+    - "Must be parameterized; no string concatenation."
+
+acceptance_criteria:
+  - "A tool call triggers the correct handler and calls the correct ai_* SP."
+  - "Module can be disabled without affecting other modules."
+  - "No DTO output classes created for SQL results."

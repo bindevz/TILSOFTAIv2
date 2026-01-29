@@ -1,0 +1,35 @@
+schema_version: "1.0"
+document: "Compaction + Token Budget Policies"
+language: "en"
+
+objective:
+  - "Ensure SQL results are 'clean' and token-efficient, as required in the strategy."
+
+required_classes:
+  - name: "ToolResultCompactor"
+    file: "src/TILSOFTAI.Orchestration/Compaction/ToolResultCompactor.cs"
+    public_methods:
+      - "string CompactJson(string rawJson, int maxBytes, CompactionRules rules)"
+    responsibilities:
+      - "Remove noisy/audit fields configured in CompactionRules."
+      - "Truncate large arrays safely (keep head/tail with counts)."
+      - "Ensure valid JSON output even after trimming."
+      - "Attach compaction metadata: { truncated:true, removedFields:[...], originalSizeBytes:n }"
+    compaction_rules_source:
+      - "AppSettings.Chat.CompactionLimits and CompactionRules in config."
+
+  - name: "TokenBudgetPolicy"
+    file: "src/TILSOFTAI.Orchestration/Prompting/TokenBudgetPolicy.cs"
+    responsibilities:
+      - "Enforce max tokens for prompt input."
+      - "Drop oldest tool observations first (already persisted in SQL), keeping conversation coherence."
+      - "Always retain: system prompt, last user message, last N assistant messages, and compact tool observations."
+
+sql_output_guidelines:
+  - "ai_ SPs should not return audit columns by default."
+  - "If audit columns exist, compactor must remove them."
+  - "Prefer returning: meta + essential metrics only."
+
+acceptance_criteria:
+  - "Tool results re-injected into LLM are compact and stable."
+  - "Compaction does not break JSON parsing."

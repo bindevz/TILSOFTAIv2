@@ -1,0 +1,41 @@
+schema_version: "1.0"
+document: "Tool Contract Template (ToolCatalog + schemas + instructions)"
+language: "en"
+
+placeholders:
+  DomainName: "<DomainName>"
+  DomainKey: "<domainkey>"
+
+tool_definition_template:
+  fields_required:
+    - "ToolName"
+    - "SpName (must start with ai_)"
+    - "Description"
+    - "Instruction"
+    - "JsonSchema"
+    - "RequiredRoles (CSV in SQL; string[] in C#)"
+    - "IsEnabled"
+
+instruction_requirements (do_not_skip):
+  must_include:
+    - "When to call this tool (preconditions)."
+    - "What the result represents and how to interpret key metrics."
+    - "Which follow-up tools to call based on conditions (drill-down rules)."
+    - "Limits (max rows/pagination), PII and security constraints."
+  forbidden:
+    - "Vague instructions like 'use this to get data'."
+
+toolcatalog_sql_seed_template:
+  file: "sql/99_seed/<domainkey>/01_seed_toolcatalog.sql"
+  rules:
+    - "Insert one row per tool into ToolCatalog."
+    - "SpName must start with ai_."
+    - "JsonSchema must be valid JSON."
+    - "Instruction must be non-empty."
+    - "Do not overwrite other module tool rows."
+
+metadata_dictionary_seed_template:
+  file: "sql/99_seed/<domainkey>/02_seed_metadata_dictionary.sql"
+  rules:
+    - "Seed keys referenced in tool output (columns[].descriptionKey)."
+    - "Seed at least English + default language from Localization.DefaultLanguage."

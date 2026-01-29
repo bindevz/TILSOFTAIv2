@@ -1,0 +1,89 @@
+schema_version: "1.0"
+document: "SQL Knowledge Layer: semantic views, ai_ SPs, metadata dictionary"
+language: "en"
+
+objective:
+  - "Make SQL Server the knowledge base: semantic views + stored procedures (ai_) + metadata dictionary."
+
+tables_required:
+  - name: "MetadataDictionary"
+    purpose: "Business meaning of technical fields used by LLM and UI."
+    columns:
+      - "Key nvarchar(200) PK"
+      - "TenantId nvarchar(50) NULL (NULL = global)"
+      - "Language nvarchar(10) NOT NULL"
+      - "DisplayName nvarchar(200) NOT NULL"
+      - "Description nvarchar(2000) NULL"
+      - "Unit nvarchar(50) NULL"
+      - "Examples nvarchar(2000) NULL"
+      - "UpdatedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+    indexes:
+      - "IX_MetadataDictionary_Tenant_Lang (TenantId, Language)"
+
+  - name: "ToolCatalog"
+    purpose: "Catalog mapping tools -> ai_* SP with schemas and instructions."
+    columns:
+      - "ToolName nvarchar(200) PK"
+      - "SpName nvarchar(200) NOT NULL"
+      - "IsEnabled bit NOT NULL DEFAULT 1"
+      - "RequiredRoles nvarchar(1000) NULL"
+      - "JsonSchema nvarchar(max) NULL"
+      - "Instruction nvarchar(max) NULL"
+      - "Description nvarchar(2000) NULL"
+      - "UpdatedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+    constraints:
+      - "CHECK: SpName LIKE 'ai[_]%' (enforced in deployment script or trigger)"
+
+semantic_views_required (platform-wide guidance):
+  rules:
+    - "Views should flatten frequently-joined structures into business-ready shape."
+    - "Views must not leak cross-tenant data; prefer using them inside tenant-filtered SPs."
+    - "Naming: v_<Domain>_<Purpose>"
+  initial_examples_from_strategy (for Model module example only):
+    - "v_Model_Overview"
+    - "v_Model_Pieces"
+    - "v_Model_MaterialConfig"
+    - "v_Model_PackagingOptions"
+
+stored_procedure_rules:
+  - "ai_* SPs are model-callable via tools."
+  - "app_* SPs are backend/internal only."
+  - "Every ai_* must accept @TenantId and enforce tenant scope."
+  - "Return shapes must be stable and JSON-friendly."
+  - "Recommended output: a single JSON column using FOR JSON PATH, WITHOUT_ARRAY_WRAPPER."
+
+core_internal_sps (app_):
+  - name: "app_toolcatalog_list"
+    purpose: "List enabled tools for a tenant; used to build prompt/tool registry."
+    params: ["@TenantId nvarchar(50)"]
+    returns: "ToolCatalog rows"
+
+  - name: "app_metadatadictionary_list"
+    purpose: "Return metadata dictionary entries for prompt context packs."
+    params: ["@TenantId nvarchar(50)", "@Language nvarchar(10)"]
+    returns: "MetadataDictionary rows"
+
+core_model_callable_sps (ai_):
+  - name: "ai_tool_list"
+    purpose: "Optional: tool list for the LLM (if enabled)."
+    params: ["@TenantId nvarchar(50)"]
+    returns: "tool descriptors"
+
+output_format_standard (for ai_ SPs):
+  json_contract:
+    - "Return a JSON object with: meta, columns, rows."
+    - "meta contains: tenantId, generatedAtUtc, rowCount, warnings (optional)."
+    - "columns is an array of { name, type, descriptionKey(optional) }"
+    - "rows is an array of row objects (property names match columns[].name)."
+
+sql_scripts_required:
+  - "sql/01_core/001_tables_core.sql (MetadataDictionary, ToolCatalog, plus other platform tables from earlier specs)"
+  - "sql/01_core/002_sps_app_core.sql (app_toolcatalog_list, app_metadatadictionary_list)"
+  - "sql/01_core/003_sps_ai_core.sql (ai_tool_list optional)"
+  - "sql/99_seed/001_seed_metadata_dictionary.sql (seed a few global entries)"
+  - "sql/99_seed/002_seed_toolcatalog_core.sql (seed minimal core tools)"
+
+acceptance_criteria:
+  - "ToolCatalog exists and enforces ai_ prefix for SpName."
+  - "MetadataDictionary can be loaded per tenant and language."
+  - "At least one semantic view exists for an example module (Model) but core remains domain-agnostic."

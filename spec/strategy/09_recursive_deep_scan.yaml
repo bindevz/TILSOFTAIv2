@@ -1,0 +1,29 @@
+schema_version: "1.0"
+document: "Recursive Deep-Scan (platform policy + tool instruction driven)"
+language: "en"
+
+objective:
+  - "Enable recursive deep-scan for hierarchical entities without hardcoding domain logic in C#."
+
+platform_policy:
+  keys:
+    - "Chat.MaxRecursiveDepth"
+    - "Chat.MaxToolCallsPerRequest"
+  enforcement:
+    - "C# enforces limits only."
+    - "LLM decides recursion based on tool Instruction and tool outputs."
+
+required_behavior:
+  - "Tools that expose hierarchical relations MUST include explicit Instruction describing when to drill down."
+  - "The orchestrator must not automatically recurse; it only follows LLM tool calls."
+
+required_classes:
+  - name: "RecursionPolicy"
+    file: "src/TILSOFTAI.Orchestration/Policies/RecursionPolicy.cs"
+    responsibilities:
+      - "Track recursion depth per conversation request."
+      - "Reject tool calls exceeding max depth with stable error code."
+
+acceptance_criteria:
+  - "Recursive scanning works when LLM requests it."
+  - "System prevents runaway recursion deterministically."

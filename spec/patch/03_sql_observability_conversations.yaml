@@ -1,0 +1,196 @@
+schema_version: "1.0"
+document: "PATCH 03 - SQL Observability + Conversation Persistence + Missing ai_* SPs"
+language: "en"
+
+goal:
+  - "Make SQL and C# synchronized for core observability requirements."
+  - "Implement required tables and app_* stored procedures referenced by SqlContractValidator."
+  - "Enable optional SQL persistence for conversations, tool executions, and error logs."
+  - "Add missing ai_model_* stored procedures so ToolCatalog contract tests pass."
+
+hard_constraints:
+  - "Database name is TILSOFTAI; DO NOT prefix tables with 'TILSOFTAI'."
+  - "Model-callable stored procedures must use prefix 'ai_'."
+  - "Internal stored procedures must use prefix 'app_'."
+  - "All ai_* and app_* procedures MUST be created in dbo schema."
+
+sql_changes:
+  create_or_modify_sql_files:
+    - path: "sql/01_core/004_tables_observability.sql"
+      must_create_tables:
+        - name: "Conversation"
+          columns:
+            - "TenantId nvarchar(50) NOT NULL"
+            - "ConversationId nvarchar(64) NOT NULL"
+            - "UserId nvarchar(50) NOT NULL"
+            - "Language nvarchar(10) NOT NULL"
+            - "CreatedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+            - "UpdatedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+          pk: "(TenantId, ConversationId)"
+          indexes:
+            - "IX_Conversation_Tenant_User (TenantId, UserId)"
+        - name: "ConversationMessage"
+          columns:
+            - "TenantId nvarchar(50) NOT NULL"
+            - "ConversationId nvarchar(64) NOT NULL"
+            - "MessageId nvarchar(64) NOT NULL"
+            - "Role nvarchar(20) NOT NULL"
+            - "Content nvarchar(max) NOT NULL"
+            - "ToolName nvarchar(200) NULL"
+            - "CreatedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+          pk: "(TenantId, ConversationId, MessageId)"
+          indexes:
+            - "IX_ConversationMessage_Tenant_Conversation (TenantId, ConversationId, CreatedAtUtc)"
+        - name: "ToolExecution"
+          columns:
+            - "TenantId nvarchar(50) NOT NULL"
+            - "ConversationId nvarchar(64) NOT NULL"
+            - "ExecutionId nvarchar(64) NOT NULL"
+            - "ToolName nvarchar(200) NOT NULL"
+            - "SpName nvarchar(200) NOT NULL"
+            - "ArgumentsJson nvarchar(max) NOT NULL"
+            - "ResultJson nvarchar(max) NULL"
+            - "CompactedResultJson nvarchar(max) NULL"
+            - "Success bit NOT NULL"
+            - "DurationMs bigint NOT NULL"
+            - "CreatedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+          pk: "(TenantId, ConversationId, ExecutionId)"
+          indexes:
+            - "IX_ToolExecution_Tenant_Tool (TenantId, ToolName, CreatedAtUtc)"
+        - name: "ErrorLog"
+          columns:
+            - "TenantId nvarchar(50) NOT NULL"
+            - "ErrorId nvarchar(64) NOT NULL"
+            - "CorrelationId nvarchar(64) NULL"
+            - "ConversationId nvarchar(64) NULL"
+            - "TraceId nvarchar(64) NULL"
+            - "RequestId nvarchar(64) NULL"
+            - "UserId nvarchar(50) NULL"
+            - "ErrorCode nvarchar(100) NOT NULL"
+            - "Message nvarchar(2000) NOT NULL"
+            - "DetailJson nvarchar(max) NULL"
+            - "CreatedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+          pk: "(TenantId, ErrorId)"
+          indexes:
+            - "IX_ErrorLog_Tenant_CreatedAt (TenantId, CreatedAtUtc)"
+    - path: "sql/01_core/005_sps_app_observability.sql"
+      must_create_sps:
+        - name: "dbo.app_conversation_upsert"
+          params:
+            - "@TenantId nvarchar(50)"
+            - "@ConversationId nvarchar(64)"
+            - "@UserId nvarchar(50)"
+            - "@Language nvarchar(10)"
+          behavior:
+            - "Insert if not exists; else update UpdatedAtUtc and Language."
+        - name: "dbo.app_conversationmessage_insert"
+          params:
+            - "@TenantId nvarchar(50)"
+            - "@ConversationId nvarchar(64)"
+            - "@MessageId nvarchar(64)"
+            - "@Role nvarchar(20)"
+            - "@Content nvarchar(max)"
+            - "@ToolName nvarchar(200) = NULL"
+          behavior:
+            - "Insert one row into ConversationMessage."
+        - name: "dbo.app_toolexecution_insert"
+          params:
+            - "@TenantId nvarchar(50)"
+            - "@ConversationId nvarchar(64)"
+            - "@ExecutionId nvarchar(64)"
+            - "@ToolName nvarchar(200)"
+            - "@SpName nvarchar(200)"
+            - "@ArgumentsJson nvarchar(max)"
+            - "@ResultJson nvarchar(max) = NULL"
+            - "@CompactedResultJson nvarchar(max) = NULL"
+            - "@Success bit"
+            - "@DurationMs bigint"
+          behavior:
+            - "Insert one row into ToolExecution."
+        - name: "dbo.app_errorlog_insert"
+          params:
+            - "@TenantId nvarchar(50)"
+            - "@ErrorId nvarchar(64)"
+            - "@CorrelationId nvarchar(64) = NULL"
+            - "@ConversationId nvarchar(64) = NULL"
+            - "@TraceId nvarchar(64) = NULL"
+            - "@RequestId nvarchar(64) = NULL"
+            - "@UserId nvarchar(50) = NULL"
+            - "@ErrorCode nvarchar(100)"
+            - "@Message nvarchar(2000)"
+            - "@DetailJson nvarchar(max) = NULL"
+          behavior:
+            - "Insert one row into ErrorLog."
+  idempotency_rules:
+    - "Use IF OBJECT_ID(...,'U') IS NULL for tables."
+    - "Use CREATE OR ALTER PROCEDURE for SPs."
+    - "No destructive drop without explicit migration safeguards."
+
+missing_model_ai_sps (MUST implement to satisfy ToolCatalog + contract tests):
+  create_sql_files:
+    - path: "sql/05_model/001_views_model.sql"
+      must_include:
+        - "Ensure dbo.v_Model_Overview exists (already present in 001_tables_core.sql)."
+        - "Optionally create additional placeholder views: dbo.v_Model_Pieces, dbo.v_Model_Materials."
+    - path: "sql/05_model/002_sps_ai_model.sql"
+      must_create_ai_sps:
+        - name: "dbo.ai_model_get_overview"
+          params:
+            - "@TenantId nvarchar(50)"
+            - "@Language nvarchar(10) = NULL"
+            - "@ModelId int"
+          output:
+            - "Return scalar nvarchar(max) JSON in the same envelope format (meta/columns/rows)."
+            - "If no data, rows must be empty array []."
+        - name: "dbo.ai_model_get_pieces"
+          params:
+            - "@TenantId nvarchar(50)"
+            - "@Language nvarchar(10) = NULL"
+            - "@ModelId int"
+          output: "Same JSON envelope."
+        - name: "dbo.ai_model_get_materials"
+          params:
+            - "@TenantId nvarchar(50)"
+            - "@Language nvarchar(10) = NULL"
+            - "@ModelId int"
+          output: "Same JSON envelope."
+        - name: "dbo.ai_model_compare_models"
+          params:
+            - "@TenantId nvarchar(50)"
+            - "@Language nvarchar(10) = NULL"
+            - "@ModelIdsJson nvarchar(max)"
+          notes:
+            - "This SP is called by ModelCompareModelsToolHandler; update handler to pass @ModelIdsJson."
+            - "Output JSON envelope."
+  required_csharp_fix:
+    - file: "src/TILSOFTAI.Modules.Model/Tools/ModelCompareModelsToolHandler.cs"
+      change:
+        - "Currently parses modelIds; must pass them as @ModelIdsJson = raw JSON array string."
+        - "Do NOT pass as table-valued parameter; keep simple JSON string."
+
+csharp_changes_for_persistence:
+  create:
+    - path: "src/TILSOFTAI.Infrastructure/Conversations/SqlConversationStore.cs"
+      implements: "TILSOFTAI.Orchestration.Conversations.IConversationStore"
+      responsibilities:
+        - "If Observability.EnableConversationPersistence=false => behave like NullConversationStore."
+        - "If enabled: call app_conversation_upsert and app_conversationmessage_insert and app_toolexecution_insert."
+        - "Generate MessageId/ExecutionId as GUID 'N' (32 chars) in C#."
+        - "Never store raw LLM system prompt in DB (store user/assistant/tool results only)."
+  modify:
+    - file: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      change:
+        - "Replace IConversationStore registration: register SqlConversationStore as singleton."
+        - "SqlConversationStore must read ObservabilityOptions to decide enabled/disabled."
+    - file: "src/TILSOFTAI.Domain/Configuration/ObservabilityOptions.cs"
+      confirm_fields:
+        - "EnableConversationPersistence"
+        - "EnableSqlToolLog"
+        - "EnableSqlErrorLog"
+
+acceptance_criteria:
+  - "SqlContractValidator passes (non-development) because required app_* SPs exist."
+  - "Contract tests EnabledToolsHaveExistingAiSp passes because ai_model_* SPs exist."
+  - "When Observability.EnableConversationPersistence=true: chat requests create Conversation + Message rows."
+  - "When Observability.EnableSqlToolLog=true: tool executions are written to ToolExecution."
+  - "When Observability.EnableSqlErrorLog=true: errors are written to ErrorLog (used by PATCH 04)."

@@ -1,0 +1,141 @@
+schema_version: "1.0"
+document: "PATCH 14.2 - Update Base Table Scripts + Deterministic Diagnostics SP"
+language: "en"
+
+goal:
+  - "Clean install must create FINAL schemas only."
+  - "No PRIMARY KEY may include nullable columns (especially TenantId)."
+  - "Make app_diagnosticsrule_list deterministic and tenant-override safe."
+
+hard_constraints:
+  - "Do NOT change business semantics; only harden schema + deterministic selection."
+  - "Do NOT introduce any composite PRIMARY KEY that includes TenantId nullable."
+  - "Do NOT keep redundant constraints that confuse deploys; remove them in base scripts."
+
+sql_files_to_modify:
+
+  - path: "sql/01_core/001_tables_core.sql"
+    change_type: "modify"
+    tasks:
+      - "Find the CREATE TABLE dbo.MetadataDictionary block."
+      - "Ensure it matches FINAL schema below. If table is already created elsewhere, remove duplicate blocks (see Patch 14.3)."
+      - "Remove any composite PK or PK on [Key]."
+      - "Do NOT define a UNIQUE constraint on ([Key],TenantId,Language) in base script; filtered unique indexes are created by Patch 14.2 migration."
+    final_table_definition:
+      table: "dbo.MetadataDictionary"
+      required_columns:
+        - "Id bigint IDENTITY(1,1) NOT NULL"
+        - "[Key] nvarchar(200) NOT NULL"
+        - "TenantId nvarchar(50) NULL"
+        - "Language nvarchar(10) NOT NULL"
+        - "DisplayName nvarchar(200) NOT NULL"
+        - "Description nvarchar(2000) NULL"
+        - "Unit nvarchar(50) NULL"
+        - "Examples nvarchar(2000) NULL"
+        - "UpdatedAtUtc datetime2(3) NOT NULL CONSTRAINT DF_MetadataDictionary_UpdatedAtUtc DEFAULT sysutcdatetime()"
+      required_constraints:
+        - "CONSTRAINT PK_MetadataDictionary_Id PRIMARY KEY (Id)"
+      forbidden_patterns:
+        - "PRIMARY KEY ([Key])"
+        - "PRIMARY KEY ([Key], TenantId, Language)"
+        - "UNIQUE ([Key], TenantId, Language)"
+      base_indexes_policy:
+        - "Minimize non-unique indexes to reduce noise; filtered uniques will provide the real integrity."
+        - "Remove legacy non-unique indexes if they are redundant with filtered uniques."
+        - "Optional ONLY: IX_MetadataDictionary_Key_Lang on ([Key], Language) if query plan requires it."
+
+  - path: "sql/01_core/006_tables_normalization.sql"
+    change_type: "modify"
+    tasks:
+      - "Find CREATE TABLE dbo.NormalizationRule."
+      - "Replace composite PK with Id identity PK."
+      - "Do NOT keep UQ constraints on (RuleKey,TenantId); filtered uniques will enforce integrity."
+    final_table_definition:
+      table: "dbo.NormalizationRule"
+      required_columns:
+        - "Id bigint IDENTITY(1,1) NOT NULL"
+        - "RuleKey nvarchar(200) NOT NULL"
+        - "TenantId nvarchar(50) NULL"
+        - "Priority int NOT NULL"
+        - "Pattern nvarchar(1000) NOT NULL"
+        - "Replacement nvarchar(1000) NOT NULL"
+        - "Description nvarchar(2000) NULL"
+        - "IsEnabled bit NOT NULL CONSTRAINT DF_NormalizationRule_IsEnabled DEFAULT(1)"
+        - "UpdatedAtUtc datetime2(3) NOT NULL CONSTRAINT DF_NormalizationRule_UpdatedAtUtc DEFAULT sysutcdatetime()"
+      required_constraints:
+        - "CONSTRAINT PK_NormalizationRule_Id PRIMARY KEY (Id)"
+      forbidden_patterns:
+        - "PRIMARY KEY (RuleKey, TenantId)"
+        - "UNIQUE (RuleKey, TenantId)"
+      required_indexes:
+        - "IX_NormalizationRule_Tenant_Priority (TenantId, Priority)"
+
+  - path: "sql/02_atomic/001_tables_catalog.sql"
+    change_type: "modify"
+    tasks:
+      - "Find CREATE TABLE dbo.DatasetCatalog."
+      - "Replace any composite PK (DatasetKey,TenantId) with Id identity PK."
+      - "Keep existing FieldCatalog and EntityGraphCatalog definitions unchanged (except if they also use nullable in PK; see Patch 14.2/14.4 lint)."
+    final_table_definition:
+      table: "dbo.DatasetCatalog"
+      required_columns_minimum:
+        - "Id bigint IDENTITY(1,1) NOT NULL"
+        - "DatasetKey nvarchar(200) NOT NULL"
+        - "TenantId nvarchar(50) NULL"
+        - "BaseObject nvarchar(200) NOT NULL"
+        - "TimeColumn nvarchar(200) NULL"
+        - "IsEnabled bit NOT NULL CONSTRAINT DF_DatasetCatalog_IsEnabled DEFAULT(1)"
+        - "UpdatedAtUtc datetime2(3) NOT NULL CONSTRAINT DF_DatasetCatalog_UpdatedAtUtc DEFAULT sysutcdatetime()"
+      required_constraints:
+        - "CONSTRAINT PK_DatasetCatalog_Id PRIMARY KEY (Id)"
+      forbidden_patterns:
+        - "PRIMARY KEY (DatasetKey, TenantId)"
+
+  - path: "sql/04_diagnostics/001_tables_diagnostics.sql"
+    change_type: "modify"
+    tasks:
+      - "Find CREATE TABLE dbo.DiagnosticsRule."
+      - "Replace any composite PK with Id identity PK."
+      - "Ensure Module is included as a first-class column (must exist)."
+      - "Keep CHECK constraint enforcing AiSpName starts with ai_."
+    final_table_definition:
+      table: "dbo.DiagnosticsRule"
+      required_columns:
+        - "Id bigint IDENTITY(1,1) NOT NULL"
+        - "RuleKey nvarchar(200) NOT NULL"
+        - "TenantId nvarchar(50) NULL"
+        - "Module nvarchar(100) NOT NULL"
+        - "Description nvarchar(2000) NOT NULL"
+        - "AiSpName nvarchar(200) NOT NULL"
+        - "IsEnabled bit NOT NULL CONSTRAINT DF_DiagnosticsRule_IsEnabled DEFAULT(1)"
+        - "UpdatedAtUtc datetime2(3) NOT NULL CONSTRAINT DF_DiagnosticsRule_UpdatedAtUtc DEFAULT sysutcdatetime()"
+      required_constraints:
+        - "CONSTRAINT PK_DiagnosticsRule_Id PRIMARY KEY (Id)"
+        - "CONSTRAINT CK_DiagnosticsRule_AiSpNamePrefix CHECK (AiSpName LIKE 'ai[_]%')"
+      forbidden_patterns:
+        - "PRIMARY KEY (RuleKey, TenantId)"
+        - "PRIMARY KEY (Module, RuleKey, TenantId)"
+
+  - path: "sql/04_diagnostics/002_sps_diagnostics.sql"
+    change_type: "modify"
+    tasks:
+      - "Find or create procedure dbo.app_diagnosticsrule_list."
+      - "Make it deterministic: return effective ruleset (at most 1 per RuleKey) with tenant override priority."
+      - "If multiple duplicates exist (legacy data), prefer newest UpdatedAtUtc."
+    final_sp_signature:
+      name: "dbo.app_diagnosticsrule_list"
+      params:
+        - "@TenantId nvarchar(50)"
+        - "@Module nvarchar(100)"
+    required_behavior:
+      - "Return rows: RuleKey, TenantId, Module, Description, AiSpName."
+      - "Filter: Module=@Module and IsEnabled=1."
+      - "Effective selection: tenant-specific wins over global; newest UpdatedAtUtc wins inside same scope."
+    required_sql_approach:
+      - "Use ROW_NUMBER() OVER (PARTITION BY RuleKey ORDER BY CASE WHEN TenantId=@TenantId THEN 0 ELSE 1 END, UpdatedAtUtc DESC)."
+      - "SELECT WHERE rn=1."
+
+acceptance_criteria:
+  - "Clean DB install creates no PK containing nullable columns."
+  - "Diagnostics effective list returns no duplicate RuleKey for a module."
+  - "No base script creates misleading UQ constraints that do not enforce global uniqueness."

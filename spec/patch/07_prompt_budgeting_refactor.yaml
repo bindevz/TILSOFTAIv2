@@ -1,0 +1,58 @@
+schema_version: "1.0"
+document: "PATCH 07 - Prompt Budgeting Refactor (stable tool calling, no brittle truncation)"
+language: "en"
+
+goal:
+  - "Prevent token overflow and schema truncation bugs."
+  - "Keep system prompt small and stable; avoid injecting full tool schemas into system prompt."
+  - "Ensure tool instructions still reach the model via tool descriptions (PATCH 02)."
+
+non_goals:
+  - "Do NOT attempt perfect tokenization; use deterministic budgeting."
+  - "Do NOT remove ToolResultCompactor behavior."
+
+required_changes:
+  modify:
+    - file: "src/TILSOFTAI.Orchestration/Prompting/PromptBuilder.cs"
+      required_behavior:
+        - "System prompt MUST NOT append full tool definitions or JsonSchema."
+        - "System prompt MUST include ONLY:"
+        - "  1) assistant identity / safety rules"
+        - "  2) 'Respond in language: <context.Language>'"
+        - "  3) high-level tool policy: 'Use tools when needed; follow tool instructions; do not guess.'"
+        - "Context packs MAY be included but must be budgeted (see below)."
+        - "REMOVE ApplyTokenBudget(prompt[..maxChars]) truncation entirely."
+    - file: "src/TILSOFTAI.Orchestration/Prompting/TokenBudgetPolicy.cs"
+      required_behavior:
+        - "Budgeting must consider: system prompt + messages + (optional) context packs."
+        - "If over budget: drop oldest tool messages first, then older assistant messages, then older user messages."
+        - "Never drop the most recent user message."
+        - "Never drop the system prompt."
+  create:
+    - file: "src/TILSOFTAI.Orchestration/Prompting/PromptBudget.cs"
+      responsibilities:
+        - "Central constants for budgeting."
+        - "CharsPerToken=4 (existing heuristic)."
+        - "MaxSystemPromptChars: 4000"
+        - "MaxContextPacksChars: 6000"
+        - "MaxMessagesChars: derived from ChatOptions.MaxTokens*CharsPerToken - system - context"
+    - file: "src/TILSOFTAI.Orchestration/Prompting/ContextPackBudgeter.cs"
+      responsibilities:
+        - "Accept context packs (dictionary name->text)."
+        - "Include packs in deterministic order: alphabetical by key."
+        - "If total exceeds MaxContextPacksChars: drop lowest priority packs (at end of sorted list) until under budget."
+        - "Never truncate inside a pack; drop whole packs only."
+
+tool_instruction_delivery_rule (MUST be enforced end-to-end):
+  - "PromptBuilder does not embed tool schemas/instructions."
+  - "OpenAiCompatibleLlmClient must embed tool instruction in tool description (PATCH 02)."
+
+acceptance_criteria:
+  - "No code path truncates JSON schema strings."
+  - "System prompt remains stable length even with many tools."
+  - "Tool calling still works because tools are sent via LlmRequest.Tools and descriptions include instruction."
+  - "When context packs are large, some packs are dropped deterministically rather than truncated."
+
+tests_to_update_or_add:
+  - "Add unit test: PromptBuilder.BuildAsync with many tools does not include 'JsonSchema:' lines in SystemPrompt."
+  - "Add unit test: ContextPackBudgeter drops whole packs and never truncates pack text."

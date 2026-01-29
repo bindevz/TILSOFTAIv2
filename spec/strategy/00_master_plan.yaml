@@ -1,0 +1,66 @@
+schema_version: "1.0"
+document: "TILSOFTAI Strategy -> Technical Build Index"
+language: "en"
+
+source_strategy_document:
+  path: "/mnt/data/TÀI LIỆU CHIẾN LƯỢC.txt"
+  key_points_to_implement:
+    - "C# is orchestrator only; SQL is knowledge base; ai_ SPs; compaction; ReAct loop"
+    - "Semantic views + multi-parameter analysis SPs"
+    - "Metadata dictionary for business meanings"
+    - "Tool registry with Instruction"
+    - "Plan optimizer for plan JSON validation"
+    - "Redis semantic cache"
+    - "Human-in-the-loop for write actions"
+    - "Recursive deep-scan"
+    - "Proactive diagnostics"
+    - "Contract sync: validate ai_ & app_ in CI/CD and enforce prefix policy"
+
+global_rules:
+  - "Multi-tenant and multi-language are mandatory for all modules and all endpoints."
+  - "C# must not infer business logic or select domain actions heuristically."
+  - "All domain logic MUST be executed via SQL stored procedures (ai_/app_) or via module-defined deterministic code only for validation/compaction."
+  - "All tool outputs must be compacted before re-injection to LLM and before persistence."
+  - "All module integration is via module DLL + tool bus (no direct module-to-module calls)."
+
+naming_conventions:
+  database_name: "TILSOFTAI"
+  table_prefix: ""              # none
+  stored_procedure_prefixes:
+    model_callable: "ai_"
+    internal: "app_"
+
+execution_context_headers:
+  required: ["X-Tenant-Id", "X-User-Id", "X-Roles"]
+  optional: ["X-Correlation-Id", "X-Conversation-Id", "X-Lang"]
+  language_resolution_priority: ["X-Lang", "Accept-Language", "Localization.DefaultLanguage"]
+
+spec_files (apply_in_order):
+  - "spec/strategy/01_platform_core_foundation.yaml"
+  - "spec/strategy/02_sql_knowledge_layer.yaml"
+  - "spec/strategy/03_tool_contracts_and_registry.yaml"
+  - "spec/strategy/04_orchestration_react_loop.yaml"
+  - "spec/strategy/05_compaction_and_token_budget.yaml"
+  - "spec/strategy/06_plan_optimizer_and_atomic_engine.yaml"
+  - "spec/strategy/07_redis_semantic_cache.yaml"
+  - "spec/strategy/08_human_in_loop_actions.yaml"
+  - "spec/strategy/09_recursive_deep_scan.yaml"
+  - "spec/strategy/10_proactive_diagnostics.yaml"
+  - "spec/strategy/11_contract_sync_and_tests.yaml"
+  - "spec/strategy/12_example_module_model.yaml"
+  - "spec/patch/01_chat_endpoints_wiring.yaml"
+  - "spec/patch/02_llm_client_openai.yaml"
+  - "spec/patch/03_sql_observability_conversations.yaml"
+  - "spec/patch/04_error_codes_and_exception_middleware.yaml"
+  - "spec/patch/05_normalization_rules_engine.yaml"
+  - "spec/patch/06_atomic_execute_plan_impl.yaml"
+  - "spec/patch/07_prompt_budgeting_refactor.yaml"
+
+definition_of_done:
+  - "Platform Core works without any domain modules."
+  - "At least one domain module (Model) works as an example; platform remains domain-agnostic."
+  - "SQL scripts build DB from scratch and include all required tables/views/SPs."
+  - "Tool invocation is restricted to ai_* SPs registered in ToolCatalog."
+  - "Tool results are compacted and persisted; conversations are persisted."
+  - "Redis caches semantic results and catalog snapshots with TTL >= 30 minutes."
+  - "Contract tests verify ai_/app_ presence and tool-to-SP mapping."

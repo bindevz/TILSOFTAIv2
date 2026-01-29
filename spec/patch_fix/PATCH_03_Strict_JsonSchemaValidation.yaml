@@ -1,0 +1,42 @@
+version: 1
+patch_id: PATCH_03_Strict_JsonSchemaValidation
+title: "Implement real JSON Schema validation (strict) for tool arguments"
+risk_level: "P0-High"
+scope:
+  includes:
+    - "src/TILSOFTAI.Orchestration/Tools/BasicJsonSchemaValidator.cs"
+    - "src/TILSOFTAI.Orchestration/Tools/IJsonSchemaValidator.cs"
+    - "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+    - "tests/**"
+goals:
+  - "Reject invalid tool args BEFORE SQL execution."
+  - "Enforce: required/type/additionalProperties/min/max where present."
+implementation_notes:
+  - "Recommended NuGet: JsonSchema.Net OR NJsonSchema (choose ONE)."
+  - "Use a cached compiled schema per tool to avoid re-parsing every call."
+steps:
+  - id: S01_replace_basic_validator
+    do:
+      - "Edit src/TILSOFTAI.Orchestration/Tools/BasicJsonSchemaValidator.cs"
+      - "Either: replace implementation OR create a new RealJsonSchemaValidator and deprecate Basic."
+      - "Contract: Validate(string schemaJson, string instanceJson) => returns {IsValid, Error}."
+    strict_rules:
+      - "additionalProperties: false must be respected (many schemas already have it)."
+      - "If schema missing: fail closed (return invalid)."
+
+  - id: S02_update_di
+    do:
+      - "Edit src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      - "Replace: services.AddSingleton<IJsonSchemaValidator, BasicJsonSchemaValidator>();"
+      - "With: services.AddSingleton<IJsonSchemaValidator, RealJsonSchemaValidator>();"
+
+  - id: S03_tests
+    do:
+      - "Create tests/Validation/JsonSchemaValidatorTests.cs"
+      - "Test cases using existing ToolCatalog schemas (e.g., model_get_overview):"
+      - "  - missing required modelId -> invalid"
+      - "  - modelId wrong type -> invalid"
+      - "  - extra property -> invalid"
+
+verification:
+  - "dotnet test -c Release --filter JsonSchemaValidator"

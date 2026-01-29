@@ -1,0 +1,34 @@
+schema_version: "1.0"
+document: "Seeding + Migration Discipline for Modules"
+language: "en"
+
+objective:
+  - "Ensure module SQL and C# stay synchronized and deployable safely."
+
+migration_policy:
+  - "All SQL scripts must be idempotent or use CREATE OR ALTER patterns where possible."
+  - "Each module has 3 primary scripts: tables/views, app_ SPs, ai_ SPs."
+  - "Seed scripts must be tenant-safe and not destroy existing rows."
+
+seed_scripts:
+  required:
+    - "01_seed_toolcatalog.sql"
+    - "02_seed_metadata_dictionary.sql"
+  optional:
+    - "03_seed_domain_catalogs.sql"
+  rules:
+    - "Use MERGE or IF NOT EXISTS for seeds to avoid duplicates."
+    - "Do not disable other tools; only add/update module’s tool rows."
+
+toolcatalog_seed_rules:
+  - "SpName must start with ai_."
+  - "Instruction must be non-empty and explicit."
+  - "JsonSchema must be valid JSON."
+
+metadata_dictionary_seed_rules:
+  - "Include at least English and default language."
+  - "Include units and examples for key metrics."
+
+acceptance_criteria:
+  - "Running module scripts multiple times does not break deployment."
+  - "ToolCatalog and MetadataDictionary get populated for the module."

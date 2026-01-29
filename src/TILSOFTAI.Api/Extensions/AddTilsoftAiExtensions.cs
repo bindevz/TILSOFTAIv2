@@ -1,0 +1,263 @@
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Options;
+using TILSOFTAI.Api.Auth;
+using TILSOFTAI.Api.Middlewares;
+using TILSOFTAI.Api.Streaming;
+using TILSOFTAI.Api.Tools;
+using TILSOFTAI.Domain.Caching;
+using TILSOFTAI.Domain.Configuration;
+using TILSOFTAI.Domain.Errors;
+using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Infrastructure.Actions;
+using TILSOFTAI.Infrastructure.Caching;
+using TILSOFTAI.Infrastructure.ExecutionContext;
+using TILSOFTAI.Infrastructure.Errors;
+using TILSOFTAI.Infrastructure.Normalization;
+using TILSOFTAI.Infrastructure.Modules;
+using TILSOFTAI.Infrastructure.Conversations;
+using TILSOFTAI.Infrastructure.Atomic;
+using TILSOFTAI.Infrastructure.Llm;
+using TILSOFTAI.Infrastructure.Metadata;
+using TILSOFTAI.Infrastructure.Prompting;
+using TILSOFTAI.Infrastructure.Sql;
+using TILSOFTAI.Infrastructure.Tools;
+using TILSOFTAI.Orchestration;
+using TILSOFTAI.Orchestration.Actions;
+using TILSOFTAI.Orchestration.Caching;
+using TILSOFTAI.Orchestration.Compaction;
+using TILSOFTAI.Orchestration.Conversations;
+using TILSOFTAI.Orchestration.Llm;
+using TILSOFTAI.Orchestration.Normalization;
+using TILSOFTAI.Orchestration.Policies;
+using TILSOFTAI.Orchestration.Prompting;
+using TILSOFTAI.Orchestration.Atomic;
+using TILSOFTAI.Orchestration.Planning;
+using TILSOFTAI.Orchestration.Sql;
+using TILSOFTAI.Orchestration.Tools;
+using TILSOFTAI.Modules.Core.Tools;
+using TILSOFTAI.Infrastructure.Observability;
+using TILSOFTAI.Orchestration.Observability;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
+
+namespace TILSOFTAI.Api.Extensions;
+
+public static class AddTilsoftAiExtensions
+{
+    public static IServiceCollection AddTilsoftAi(this IServiceCollection services, IConfiguration configuration)
+    {
+        RegisterOptions(services, configuration);
+
+        services.AddSingleton<ExecutionContextAccessor>();
+        services.AddSingleton<IExecutionContextAccessor>(sp => sp.GetRequiredService<ExecutionContextAccessor>());
+        services.AddTransient<ExecutionContextMiddleware>();
+        services.AddSingleton<IErrorCatalog, InMemoryErrorCatalog>();
+        services.AddSingleton<ILogRedactor, BasicLogRedactor>();
+        services.AddSingleton<ISqlErrorLogWriter, SqlErrorLogWriter>();
+        services.AddSingleton<ChatStreamEnvelopeFactory>();
+
+        services.AddOrchestrationEngine();
+        services.AddSingleton<IToolRegistry, ToolRegistry>();
+        services.AddSingleton<INamedToolHandlerRegistry>(sp =>
+        {
+            var registry = new NamedToolHandlerRegistry();
+            registry.Register("atomic_execute_plan", typeof(AtomicExecutePlanToolHandler));
+            return registry;
+        });
+        services.AddSingleton<ToolCatalogSyncService>();
+        services.AddSingleton<IToolCatalogResolver>(sp => sp.GetRequiredService<ToolCatalogSyncService>());
+        services.AddSingleton<IJsonSchemaValidator, RealJsonSchemaValidator>();
+        services.AddSingleton<ToolGovernance>();
+        services.AddSingleton<ToolResultCompactor>();
+        services.AddSingleton<SqlToolHandler>();
+        services.AddSingleton<DiagnosticsToolHandler>();
+        services.AddSingleton<IToolHandler, ToolHandlerRouter>();
+        services.AddSingleton<ISqlExecutor, SqlExecutor>();
+        services.AddSingleton<SqlContractValidator>();
+        services.AddHostedService<SqlContractValidatorHostedService>();
+        services.AddSingleton<IConversationStore, SqlConversationStore>();
+        services.AddSingleton<IActionRequestStore, SqlActionRequestStore>();
+        services.AddSingleton<ActionApprovalService>();
+        services.AddSingleton<CacheStampedeGuard>();
+        services.AddSingleton<SemanticCache>();
+        services.AddHttpClient<OpenAiEmbeddingClient>();
+        services.AddSingleton<IEmbeddingClient>(sp => sp.GetRequiredService<OpenAiEmbeddingClient>());
+        services.AddSingleton<SqlVectorSemanticCache>();
+        services.AddSingleton<ISemanticCache>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<SemanticCacheOptions>>().Value;
+            if (string.Equals(options.Mode, "SqlVector", StringComparison.OrdinalIgnoreCase))
+            {
+                return sp.GetRequiredService<SqlVectorSemanticCache>();
+            }
+            return sp.GetRequiredService<SemanticCache>();
+        });
+        services.AddSingleton<INormalizationRuleProvider, SqlNormalizationRuleProvider>();
+        services.AddSingleton<INormalizationService, NormalizationService>();
+        // Context Pack Providers (Composite pattern)
+        services.AddSingleton<MetadataDictionaryContextPackProvider>();
+        services.AddSingleton<ToolCatalogContextPackProvider>();
+        services.AddSingleton<AtomicCatalogContextPackProvider>();
+        services.AddSingleton<IContextPackProvider>(sp => new CompositeContextPackProvider(new IContextPackProvider[]
+        {
+            sp.GetRequiredService<MetadataDictionaryContextPackProvider>(),
+            sp.GetRequiredService<ToolCatalogContextPackProvider>(),
+            sp.GetRequiredService<AtomicCatalogContextPackProvider>()
+        }));
+        services.AddSingleton<TokenBudgetPolicy>();
+        services.AddSingleton<ContextPackBudgeter>();
+        services.AddSingleton<RecursionPolicy>();
+        services.AddSingleton<PromptBuilder>();
+        services.AddHttpClient<OpenAiCompatibleLlmClient>();
+        services.AddSingleton<ILlmClient>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<LlmOptions>>().Value;
+            return string.Equals(options.Provider, "OpenAiCompatible", StringComparison.OrdinalIgnoreCase)
+                ? sp.GetRequiredService<OpenAiCompatibleLlmClient>()
+                : sp.GetRequiredService<NullLlmClient>();
+        });
+        services.AddSingleton<NullLlmClient>();
+        services.AddSingleton<IAtomicCatalogProvider, SqlAtomicCatalogProvider>();
+        services.AddSingleton<PlanOptimizer>();
+        services.AddSingleton<AtomicDataEngine>();
+
+        services.AddSingleton<IModuleLoader, ModuleLoader>();
+        services.AddHostedService<ModuleLoaderHostedService>();
+
+        ConfigureRedis(services, configuration);
+        ConfigureAuthentication(services, configuration);
+
+        services.AddAuthorization();
+        
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+            {
+                var factory = new FixedWindowRateLimiterOptions
+                {
+                    AutoReplenishment = true,
+                    PermitLimit = 100,
+                    QueueLimit = 2,
+                    Window = TimeSpan.FromMinutes(1)
+                };
+                
+                var partitionKey = httpContext.User.Identity?.Name 
+                                   ?? httpContext.Connection.RemoteIpAddress?.ToString() 
+                                   ?? "anonymous";
+                                   
+                return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => factory);
+            });
+        });
+
+        services.AddControllers();
+        services.AddSignalR();
+        services.AddHealthChecks();
+
+        return services;
+    }
+
+    private static void RegisterOptions(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<SqlOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Sql))
+            .Validate(options => !string.IsNullOrWhiteSpace(options.ConnectionString), "Sql:ConnectionString is required.")
+            .Validate(options => options.CommandTimeoutSeconds > 0, "Sql:CommandTimeoutSeconds must be > 0.")
+            .ValidateOnStart();
+
+        services.AddOptions<RedisOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Redis))
+            .Validate(options => options.DefaultTtlMinutes >= 30, "Redis:DefaultTtlMinutes must be >= 30.")
+            .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.ConnectionString),
+                "Redis:ConnectionString is required when Redis is enabled.")
+            .ValidateOnStart();
+
+        services.AddOptions<AuthOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Auth))
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Issuer), "Auth:Issuer is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Audience), "Auth:Audience is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.JwksUrl), "Auth:JwksUrl is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.TenantClaimName), "Auth:TenantClaimName is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.UserIdClaimName), "Auth:UserIdClaimName is required.")
+            .ValidateOnStart();
+
+        services.AddOptions<ChatOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Chat))
+            .Validate(options => options.MaxSteps > 0, "Chat:MaxSteps must be > 0.")
+            .Validate(options => options.MaxTokens > 0, "Chat:MaxTokens must be > 0.")
+            .Validate(options => options.MaxToolCallsPerRequest > 0, "Chat:MaxToolCallsPerRequest must be > 0.")
+            .Validate(options => options.MaxRecursiveDepth > 0, "Chat:MaxRecursiveDepth must be > 0.")
+            .ValidateOnStart();
+
+        services.AddOptions<LocalizationOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Localization))
+            .Validate(options => !string.IsNullOrWhiteSpace(options.DefaultLanguage), "Localization:DefaultLanguage is required.")
+            .ValidateOnStart();
+
+        services.AddOptions<GovernanceOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Governance))
+            .Validate(options => options.ModelCallableSpPrefix == "ai_",
+                "Governance:ModelCallableSpPrefix must be 'ai_'.")
+            .Validate(options => options.InternalSpPrefix == "app_",
+                "Governance:InternalSpPrefix must be 'app_'.")
+            .ValidateOnStart();
+
+        services.AddOptions<ModulesOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Modules))
+            .ValidateOnStart();
+
+        services.AddOptions<ObservabilityOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Observability))
+            .ValidateOnStart();
+
+        services.AddOptions<SemanticCacheOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.SemanticCache))
+            .ValidateOnStart();
+
+        services.AddOptions<AtomicOptions>()
+            .Bind(configuration.GetSection("Atomic"))
+            .Validate(options => options.MaxLimit > 0, "Atomic:MaxLimit must be > 0.")
+            .Validate(options => options.MaxJoins > 0, "Atomic:MaxJoins must be > 0.")
+            .Validate(options => options.MaxTimeRangeDays > 0, "Atomic:MaxTimeRangeDays must be > 0.")
+            .ValidateOnStart();
+
+        services.AddOptions<StreamingOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Streaming))
+            .Validate(options => options.ChannelCapacity > 0, "Streaming:ChannelCapacity must be > 0.")
+            .ValidateOnStart();
+
+        services.AddOptions<LlmOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Llm))
+            .ValidateOnStart();
+    }
+
+    private static void ConfigureRedis(IServiceCollection services, IConfiguration configuration)
+    {
+        var redisOptions = configuration.GetSection(ConfigurationSectionNames.Redis).Get<RedisOptions>() ?? new RedisOptions();
+
+        if (redisOptions.Enabled)
+        {
+            services.AddStackExchangeRedisCache(options =>
+            {
+                options.Configuration = redisOptions.ConnectionString;
+            });
+
+            services.AddSingleton<IRedisCacheProvider>(sp =>
+            {
+                var options = sp.GetRequiredService<IOptions<RedisOptions>>().Value;
+                var cache = sp.GetRequiredService<IDistributedCache>();
+                return new RedisCacheProvider(cache, TimeSpan.FromMinutes(options.DefaultTtlMinutes));
+            });
+        }
+        else
+        {
+            services.AddSingleton<IRedisCacheProvider, NullRedisCacheProvider>();
+        }
+    }
+
+    private static void ConfigureAuthentication(IServiceCollection services, IConfiguration configuration)
+    {
+        var authOptions = configuration.GetSection(ConfigurationSectionNames.Auth).Get<AuthOptions>() ?? new AuthOptions();
+        services.AddTilsoftJwtAuthentication(Options.Create(authOptions));
+    }
+}

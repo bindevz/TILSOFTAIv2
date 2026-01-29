@@ -1,0 +1,69 @@
+schema_version: "1.0"
+document: "Tool Contracts + Tool Registry with Instruction (platform-wide)"
+language: "en"
+
+objective:
+  - "Implement a strict tool contract system so modules can be added safely and consistently."
+
+tool_contract:
+  ToolDefinition_fields:
+    - "Name: string (unique across platform)"
+    - "Description: string (short)"
+    - "Instruction: string (explicit reasoning guidance; MUST NOT be empty)"
+    - "JsonSchema: string (draft-07 or equivalent)"
+    - "SpName: string (optional; if present MUST start with ai_)"
+    - "RequiredRoles: string[]"
+    - "Module: string"
+    - "IsEnabled: bool"
+
+instruction_mandatory_content:
+  - "When to call this tool (preconditions)."
+  - "How to interpret key fields (link to MetadataDictionary keys)."
+  - "What follow-up tools to call (conditional drill-down rules)."
+  - "Safety limits (pagination, max rows, avoid PII)."
+
+required_csharp_classes:
+  - name: "ToolDefinition"
+    file: "src/TILSOFTAI.Orchestration/Tools/ToolDefinition.cs"
+    properties:
+      - "string Name"
+      - "string Description"
+      - "string Instruction"
+      - "string JsonSchema"
+      - "string? SpName"
+      - "string[] RequiredRoles"
+      - "string Module"
+      - "bool IsEnabled"
+
+  - name: "IToolRegistry"
+    file: "src/TILSOFTAI.Orchestration/Tools/IToolRegistry.cs"
+    methods:
+      - "void Register(ToolDefinition def)"
+      - "IReadOnlyList<ToolDefinition> ListEnabled()"
+      - "ToolDefinition Get(string name)"
+
+  - name: "ToolRegistry"
+    file: "src/TILSOFTAI.Orchestration/Tools/ToolRegistry.cs"
+    rules:
+      - "Reject duplicate tool names."
+      - "Reject missing Instruction or missing JsonSchema."
+      - "If SpName present, enforce prefix 'ai_'."
+
+  - name: "ToolCatalogSyncService"
+    file: "src/TILSOFTAI.Infrastructure/Tools/ToolCatalogSyncService.cs"
+    responsibilities:
+      - "Load ToolCatalog from SQL via app_toolcatalog_list."
+      - "Merge with module-registered tools using governance rules."
+      - "Final allowlist = config allowlist intersect SQL IsEnabled tools intersect module registrations."
+      - "Expose final tool set to PromptBuilder."
+    output:
+      - "A resolved tool list used by orchestration."
+
+required_sql_alignment:
+  - "Every tool with SpName must have a corresponding row in ToolCatalog with JsonSchema and Instruction."
+  - "ToolCatalog.SpName must start with ai_"
+  - "Tool args validation must use ToolDefinition.JsonSchema"
+
+acceptance_criteria:
+  - "A new module can register a tool by adding ToolDefinition + ToolCatalog row + ai_ SP."
+  - "Tool calls are rejected if tool not enabled or schema invalid."

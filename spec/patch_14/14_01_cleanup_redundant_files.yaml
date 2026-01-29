@@ -1,0 +1,41 @@
+schema_version: "1.0"
+document: "PATCH 14.1 - Remove Redundant / Conflicting SQL Scripts to Reduce Noise"
+language: "en"
+
+goal:
+  - "Delete redundant scripts that can reintroduce invalid schemas or create multiple migration paths."
+  - "Reduce noise so agents/tools do not pick the wrong script and drift the database schema."
+
+hard_constraints:
+  - "These deletes are mandatory. Do not keep deprecated migrations around."
+  - "If the repo requires historical reference, keep them only in git history, not in active deploy folder."
+
+mandatory_cleanup_actions:
+
+  - delete_file: "sql/01_core/008_migration_metadata_dictionary_multilang.sql"
+    reason: "Legacy migration can create invalid PK including nullable TenantId; replaced by Patch 14.2 universal migration (to_v4)."
+
+  - delete_file_if_exists: "sql/01_core/009_migration_metadata_dictionary_surrogate_pk.sql"
+    reason: "Superseded by 008_migration_metadata_dictionary_to_v4.sql (single path)."
+
+  - delete_file_if_exists: "sql/01_core/010_migration_normalization_rule_surrogate_pk.sql"
+    reason: "Superseded by 011_migration_normalization_rule_to_v4.sql (single path)."
+
+repo_wide_invariants (MUST enforce by search + delete/neutralize):
+  - invariant: "Only one active migration path per table"
+    checks:
+      - "Search for 'migration_metadata_dictionary' => only '008_migration_metadata_dictionary_to_v4.sql' remains."
+      - "Search for 'migration_normalization_rule' => only '011_migration_normalization_rule_to_v4.sql' remains."
+  - invariant: "No duplicated table definitions"
+    checks:
+      - "Search for 'CREATE TABLE dbo.MetadataDictionary' => exists ONLY in sql/01_core/001_tables_core.sql."
+      - "Search for 'CREATE TABLE dbo.NormalizationRule' => exists ONLY in sql/01_core/006_tables_normalization.sql."
+      - "Search for 'CREATE TABLE dbo.DatasetCatalog' => exists ONLY in sql/02_atomic/001_tables_catalog.sql."
+      - "Search for 'CREATE TABLE dbo.DiagnosticsRule' => exists ONLY in sql/04_diagnostics/001_tables_diagnostics.sql."
+  - invariant: "No duplicate ai_model_* definitions outside model module folder"
+    checks:
+      - "Search for 'CREATE OR ALTER PROCEDURE dbo.ai_model_' outside sql/02_modules/model/ => remove/neutralize."
+
+acceptance_criteria:
+  - "Repository contains no legacy migrations that can recreate invalid PKs."
+  - "There is exactly one authoritative script location per table and per set of ai_model_* procedures."

@@ -1,0 +1,39 @@
+schema_version: "1.0"
+document: "Contract Tests Template for a Module (SQL/C# sync)"
+language: "en"
+
+objective:
+  - "Prevent drift: module tools must map to existing ai_* stored procedures and registered ToolCatalog rows."
+
+required_tests (per module):
+  - name: "<DomainName>ToolCatalogRowsExist"
+    purpose: "Verify ToolCatalog has rows for each module tool."
+    method:
+      - "Query ToolCatalog where ToolName in module tool list; assert count matches."
+      - "Assert SpName starts with ai_ for all module tool rows."
+
+  - name: "<DomainName>AiStoredProceduresExist"
+    purpose: "Verify each ai_* SP exists in sys.procedures."
+    method:
+      - "Query sys.procedures for each expected ai_* SP name."
+
+  - name: "<DomainName>ToolRegistryMatchesToolCatalog"
+    purpose: "Verify module-registered ToolDefinitions align with SQL ToolCatalog."
+    method:
+      - "Load resolved tool registry (post-sync service)."
+      - "For each tool: assert SpName matches DB; schema/instruction are non-empty."
+
+  - name: "<DomainName>ToolInvocationSmokeTest"
+    purpose: "Optional: execute one ai_* SP with sample params against a test DB."
+    method:
+      - "Call ISqlExecutor.ExecuteToJsonAsync() and assert JSON is parseable."
+
+contract_test_project:
+  name: "TILSOFTAI.Tests.Contract"
+  required_infrastructure:
+    - "A test config that points to a test SQL database."
+    - "SQL deployment step in test setup (or pre-provisioned DB)."
+
+acceptance_criteria:
+  - "CI fails if module references missing ai_* SPs."
+  - "CI fails if ToolCatalog rows are missing or invalid."

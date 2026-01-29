@@ -1,0 +1,50 @@
+schema_version: "1.0"
+document: "Human-in-the-loop approval for WRITE actions"
+language: "en"
+
+objective:
+  - "Implement approval workflow: AI proposes -> system creates ActionId -> user approves -> backend executes."
+
+sql_tables_required:
+  - name: "ActionRequest"
+    columns:
+      - "ActionId nvarchar(64) PK"
+      - "TenantId nvarchar(50) NOT NULL"
+      - "ConversationId nvarchar(64) NOT NULL"
+      - "RequestedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+      - "Status nvarchar(20) NOT NULL"  # Pending|Approved|Rejected|Executed|Failed
+      - "ProposedToolName nvarchar(200) NOT NULL"
+      - "ProposedSpName nvarchar(200) NOT NULL"
+      - "ArgsJson nvarchar(max) NOT NULL"
+      - "RequestedByUserId nvarchar(50) NOT NULL"
+      - "ApprovedByUserId nvarchar(50) NULL"
+      - "ApprovedAtUtc datetime2(3) NULL"
+      - "ExecutedAtUtc datetime2(3) NULL"
+      - "ExecutionResultCompactJson nvarchar(max) NULL"
+
+stored_procedures_required:
+  internal_app:
+    - "app_actionrequest_create(@TenantId,@ConversationId,@ProposedToolName,@ProposedSpName,@ArgsJson,@RequestedByUserId)"
+    - "app_actionrequest_approve(@TenantId,@ActionId,@ApprovedByUserId)"
+    - "app_actionrequest_reject(@TenantId,@ActionId,@ApprovedByUserId)"
+    - "app_actionrequest_mark_executed(@TenantId,@ActionId,@ResultCompactJson,@Success)"
+  policy_rules:
+    - "WRITE actions MUST NOT be ai_ directly executable without approval."
+    - "Only approved actions can execute internal update SPs."
+
+required_csharp_classes:
+  - name: "ActionApprovalService"
+    file: "src/TILSOFTAI.Orchestration/Actions/ActionApprovalService.cs"
+    responsibilities:
+      - "Create action request from a proposed write tool call."
+      - "Expose API to approve/reject."
+      - "Execute only after approval and log ToolExecution."
+
+api_endpoints_required:
+  - "POST /api/actions/{actionId}/approve"
+  - "POST /api/actions/{actionId}/reject"
+  - "POST /api/actions/{actionId}/execute"
+
+acceptance_criteria:
+  - "A write proposal returns ActionId and does not mutate data."
+  - "Only after approval the system executes and persists result."

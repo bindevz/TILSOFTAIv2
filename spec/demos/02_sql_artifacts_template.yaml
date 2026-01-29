@@ -1,0 +1,68 @@
+schema_version: "1.0"
+document: "SQL Artifacts Template for a Module (views + SPs + catalogs)"
+language: "en"
+
+placeholders:
+  DomainName: "<DomainName>"
+  DomainKey: "<domainkey>"
+
+sql_rules:
+  - "All ai_* SPs are model-callable; must accept @TenantId and enforce tenant scope."
+  - "All app_* SPs are internal; must accept @TenantId if tenant-specific."
+  - "No dynamic SQL in ai_* unless strictly catalog-driven and injection-safe."
+  - "Prefer returning JSON: meta + columns + rows."
+  - "Semantic views should flatten complex joins for tool queries."
+
+templates:
+  semantic_views:
+    naming: "v_<DomainName>_<Purpose>"
+    requirement:
+      - "Create at least one semantic view for the module."
+      - "View must expose only fields required by tools and business reasoning."
+
+  internal_sps_app:
+    required:
+      - name: "app_<domainkey>_catalog_list"
+        purpose: "Return domain catalogs for prompt context packs (optional)."
+        params: ["@TenantId nvarchar(50)", "@Language nvarchar(10)"]
+        output: "rows or JSON"
+    optional:
+      - name: "app_<domainkey>_metadata_seed"
+        purpose: "Optional helper to seed metadata dictionary (if using SP-driven seeding)."
+
+  model_callable_sps_ai:
+    requirement:
+      - "For each tool, create exactly one ai_* SP with stable parameters."
+      - "ai_* SP name must match ToolCatalog.SpName."
+      - "ai_* SP must not return cross-tenant data."
+      - "ai_* SP must apply pagination and cap rows (limit) if it can return many rows."
+
+output_contract_standard:
+  json_object:
+    meta_fields:
+      - "tenantId"
+      - "generatedAtUtc"
+      - "rowCount"
+      - "warnings (optional)"
+    columns_fields:
+      - "name"
+      - "type"
+      - "descriptionKey (optional; maps to MetadataDictionary)"
+    rows:
+      - "array of objects where properties align with columns[].name"
+
+sql_files_to_generate:
+  - path: "sql/02_modules/<domainkey>/01_tables_and_views.sql"
+    must_include:
+      - "CREATE VIEW statements for semantic views"
+      - "CREATE TABLE statements for domain-specific catalogs (optional but recommended)"
+  - path: "sql/02_modules/<domainkey>/02_sps_app.sql"
+    must_include:
+      - "CREATE OR ALTER PROC app_<domainkey>_catalog_list ..."
+  - path: "sql/02_modules/<domainkey>/03_sps_ai.sql"
+    must_include:
+      - "CREATE OR ALTER PROC ai_<domainkey>_<toolaction> ... for each tool"
+
+safety_enforcement:
+  - "Add checks inside ai_* SPs: if @TenantId is NULL or empty, throw error."
+  - "If returning many rows, require @Limit parameter or use platform default cap."

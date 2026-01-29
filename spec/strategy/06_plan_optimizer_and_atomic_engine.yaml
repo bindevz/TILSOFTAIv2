@@ -1,0 +1,63 @@
+schema_version: "1.0"
+document: "Plan Optimizer + Atomic Data Engine (generic execution)"
+language: "en"
+
+objective:
+  - "Implement a generic plan validator/executor so the platform scales across modules."
+  - "This is the technical realization of the 'Plan Optimizer' idea in the strategy."
+
+plan_optimizer:
+  class:
+    name: "PlanOptimizer"
+    file: "src/TILSOFTAI.Orchestration/Planning/PlanOptimizer.cs"
+  responsibilities:
+    - "Validate plan JSON against schema (IJsonSchemaValidator)."
+    - "Enforce tenant policy limits: max rows, max time range, max joins, max recursion depth."
+    - "Normalize only trivial formatting (trim, casing) without changing meaning."
+    - "Reject unknown fields, unknown dataset keys, unknown field keys."
+  forbidden:
+    - "Must NOT guess missing values or invent filters."
+
+atomic_data_engine:
+  class:
+    name: "AtomicDataEngine"
+    file: "src/TILSOFTAI.Orchestration/Atomic/AtomicDataEngine.cs"
+  method:
+    - "Task<JsonDocument> ExecuteAsync(string planJson, TilsoftExecutionContext ctx, CancellationToken ct)"
+  dependencies:
+    - "PlanOptimizer"
+    - "IAtomicCatalogProvider"
+    - "ISqlExecutor"
+  rule:
+    - "AtomicDataEngine executes only via stored procedure ai_atomic_execute_plan."
+
+sql_catalogs_required (generic, module-agnostic):
+  tables:
+    - "DatasetCatalog (DatasetKey, TenantId, BaseObject, TimeColumn, IsEnabled, UpdatedAtUtc)"
+    - "FieldCatalog (DatasetKey, FieldKey, PhysicalColumn, DataType, IsMetric, IsDimension, AllowedAggregations, IsFilterable, IsGroupable, IsSortable, IsEnabled)"
+    - "EntityGraphCatalog (GraphKey, FromDatasetKey, ToDatasetKey, JoinType, JoinConditionTemplate, IsEnabled)"
+  internal_sps (app_):
+    - "app_catalog_dataset_list(@TenantId)"
+    - "app_catalog_field_list(@TenantId, @DatasetKey)"
+    - "app_catalog_entitygraph_list(@TenantId)"
+  model_callable_sps (ai_):
+    - "ai_atomic_execute_plan(@TenantId, @PlanJson, @CallerUserId, @CallerRoles)"
+
+atomic_plan_contract (minimum):
+  required_fields: ["datasetKey", "select"]
+  supported:
+    - "where (array)"
+    - "groupBy (array)"
+    - "orderBy (array)"
+    - "limit, offset"
+    - "timeRange {from,to,grain}"
+    - "drilldown {toDatasetKey, joinKey, where}"
+  safety_limits:
+    - "limit <= 5000 default"
+    - "max joins <= 3 default"
+    - "max time range days <= 3660 default"
+
+acceptance_criteria:
+  - "LLM can request generic analysis via atomic_execute_plan tool."
+  - "Plan validation prevents unknown fields/columns and blocks unsafe plans."
+  - "SQL enforces tenant filtering and returns JSON output in the standard format."

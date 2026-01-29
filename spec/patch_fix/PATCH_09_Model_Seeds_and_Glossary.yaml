@@ -1,0 +1,23 @@
+version: 1
+patch_id: PATCH_09_Model_Seeds_and_Glossary
+title: "Add idempotent seed scripts for enterprise Model demo + MetadataDictionary"
+risk_level: "P1"
+files_in_deliverable:
+  - "sql-seeds/seed_model_demo.sql"
+  - "sql-seeds/seed_metadata_dictionary_model.sql"
+goals:
+  - "Enable deterministic demo/testing for Model module."
+steps:
+  - id: S01_copy_seeds_into_repo
+    do:
+      - "Create sql/98_dev_seeds/model/"
+      - "Copy 001_seed_model_demo.sql"
+      - "Copy 002_seed_metadata_dictionary_model.sql"
+      - "Ensure these are NOT executed in production pipeline by default."
+
+  - id: S02_document
+    do:
+      - "Update root README to mention dev seeds and that Model is example only."
+
+verification:
+  - "Run seeds on dev DB; then call ai_model_count." 

@@ -1,0 +1,123 @@
+schema_version: "1.0"
+document: "Platform Core Foundation: context, config, auth, persistence surfaces"
+language: "en"
+
+objective:
+  - "Build enterprise-grade platform core that is domain-agnostic and supports many modules."
+
+deliverables:
+  solution_name: "TILSOFTAI"
+  projects_required:
+    - "TILSOFTAI.Api (ASP.NET Core Web API)"
+    - "TILSOFTAI.Domain (Class Library)"
+    - "TILSOFTAI.Orchestration (Class Library)"
+    - "TILSOFTAI.Infrastructure (Class Library)"
+    - "TILSOFTAI.Modules.* (future domain modules)"
+  program_cs_rule:
+    - "Program.cs must stay thin: AddTilsoftAi() + MapTilsoftAi() only."
+
+required_configuration (appsettings):
+  sections:
+    Sql:
+      keys: ["ConnectionString", "CommandTimeoutSeconds"]
+    Redis:
+      keys: ["Enabled", "ConnectionString", "DefaultTtlMinutes"]
+      rules: ["DefaultTtlMinutes MUST be >= 30, fail startup if < 30"]
+    Auth:
+      keys: ["Issuer", "Audience", "JwksUrl", "RoleClaimName", "ClockSkewSeconds"]
+    Chat:
+      keys: ["MaxSteps", "MaxTokens", "MaxToolCallsPerRequest", "MaxRecursiveDepth", "CompactionLimits"]
+    Localization:
+      keys: ["DefaultLanguage", "SupportedLanguages"]
+    Governance:
+      keys:
+        - "ToolAllowlist"
+        - "ModelCallableSpPrefix"  # must be 'ai_'
+        - "InternalSpPrefix"       # must be 'app_'
+        - "ToolRoleRequirements"
+    Modules:
+      keys: ["Enabled"]  # list of module assembly names
+    Observability:
+      keys: ["EnableSqlErrorLog", "EnableSqlToolLog", "EnableConversationPersistence"]
+
+execution_context:
+  type: "TilsoftExecutionContext"
+  file: "src/TILSOFTAI.Domain/ExecutionContext/TilsoftExecutionContext.cs"
+  properties:
+    - "string TenantId"
+    - "string UserId"
+    - "string[] Roles"
+    - "string CorrelationId"
+    - "string ConversationId"
+    - "string RequestId"
+    - "string TraceId"
+    - "string Language"
+
+required_classes:
+  - name: "IExecutionContextAccessor"
+    file: "src/TILSOFTAI.Domain/ExecutionContext/IExecutionContextAccessor.cs"
+    members:
+      - "TilsoftExecutionContext Current { get; }"
+
+  - name: "ExecutionContextAccessor"
+    file: "src/TILSOFTAI.Infrastructure/ExecutionContext/ExecutionContextAccessor.cs"
+    design:
+      - "Use AsyncLocal to store context per request."
+
+  - name: "ExecutionContextMiddleware"
+    file: "src/TILSOFTAI.Api/Middlewares/ExecutionContextMiddleware.cs"
+    responsibilities:
+      - "Read headers X-Tenant-Id, X-User-Id, X-Roles."
+      - "Generate CorrelationId if missing."
+      - "Generate ConversationId if missing."
+      - "Set RequestId (new GUID per request)."
+      - "Use HttpContext.TraceIdentifier as TraceId (or Activity trace id)."
+      - "Resolve Language using priority rule."
+      - "Store in ExecutionContextAccessor."
+
+  - name: "JwtAuthConfigurator"
+    file: "src/TILSOFTAI.Api/Auth/JwtAuthConfigurator.cs"
+    responsibilities:
+      - "Configure AddJwtBearer using Auth settings."
+      - "Validate issuer/audience/signature via JWKS."
+      - "Extract roles claim by Auth.RoleClaimName."
+      - "Merge with X-Roles per governance policy."
+
+  - name: "AddTilsoftAiExtensions"
+    file: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+    responsibilities:
+      - "Bind AppSettings and validate."
+      - "Register core services (Orchestration + Infrastructure)."
+      - "Register Redis cache provider."
+      - "Register module loader and scan enabled modules."
+      - "Register controllers + signalR."
+
+  - name: "MapTilsoftAiExtensions"
+    file: "src/TILSOFTAI.Api/Extensions/MapTilsoftAiExtensions.cs"
+    responsibilities:
+      - "Map controllers."
+      - "Map /hubs/chat if enabled."
+      - "Map health endpoint /health."
+
+api_surfaces_required:
+  - endpoint: "POST /api/chat"
+    notes:
+      - "Native chat endpoint"
+      - "Requires auth"
+  - endpoint: "POST /api/chat/stream"
+    notes:
+      - "SSE streaming"
+      - "Requires auth"
+  - endpoint: "POST /v1/chat/completions"
+    notes:
+      - "OpenAI-compatible adapter endpoint"
+      - "Requires auth"
+  - endpoint: "SignalR hub /hubs/chat"
+    notes:
+      - "Optional but implemented"
+      - "Must stream delta/tool events"
+
+acceptance_criteria:
+  - "Every request has a populated TilsoftExecutionContext."
+  - "Language is stable and present in context."
+  - "Program.cs does not expand with registrations."

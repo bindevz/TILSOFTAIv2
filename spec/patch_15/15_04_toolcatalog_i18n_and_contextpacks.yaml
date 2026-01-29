@@ -1,0 +1,79 @@
+schema_version: "1.0"
+document: "PATCH 15.04 - Multilingual ToolCatalog + Schema Context Packs for LLM"
+language: "en"
+
+problem_statement:
+  - "Error messages have en/vi, but tool instructions/descriptions are English-only."
+  - "LLM lacks structured visibility into the enterprise schema (datasets/fields), so it cannot reliably decide what to query."
+  - "Only MetadataDictionary is provided as a context pack; DatasetCatalog and Diagnostics rules are not provided."
+
+goal:
+  - "Add per-language tool texts (Instruction/Description) stored in SQL with fallback."
+  - "Provide schema context packs for LLM: Tool summary + DatasetCatalog + Diagnostics rules (budgeted)."
+  - "Support multiple context pack providers (composite)."
+
+sql_changes:
+  - "Create dbo.ToolCatalogI18n with (TenantId, ToolName, Language) PK and localized columns."
+  - "Create app_toolcatalog_list_localized(@TenantId,@Language,@DefaultLanguage) to overlay i18n onto base ToolCatalog."
+  - "Update seed scripts to insert both en and vi rows for ToolCatalogI18n."
+
+files_to_create_or_modify:
+  create:
+    - path: "sql/01_core/030_tables_toolcatalog_i18n.sql"
+      content_requirements:
+        - "Create dbo.ToolCatalogI18n with filtered unique indexes for TenantId NULL vs tenant rows (follow PATCH 14 pattern)."
+    - path: "sql/01_core/031_sps_app_toolcatalog_localized.sql"
+      content_requirements:
+        - "Create dbo.app_toolcatalog_list_localized returning ToolName,SpName,IsEnabled,RequiredRoles,JsonSchema,Instruction,Description."
+        - "Language fallback order: requested language -> default language -> base ToolCatalog columns."
+    - path: "src/TILSOFTAI.Orchestration/Prompting/CompositeContextPackProvider.cs"
+      content_requirements:
+        - "Implements IContextPackProvider by aggregating IEnumerable<IContextPackProvider>."
+        - "Collision rule: later providers overwrite earlier keys only if value is non-empty."
+    - path: "src/TILSOFTAI.Infrastructure/Prompting/ToolCatalogContextPackProvider.cs"
+      content_requirements:
+        - "Build a compact list of enabled tools: name + description + (short) usage hint."
+        - "Use IToolCatalogResolver and context.Language."
+    - path: "src/TILSOFTAI.Infrastructure/Prompting/AtomicCatalogContextPackProvider.cs"
+      content_requirements:
+        - "Use SqlAtomicCatalogProvider to fetch dataset/field catalogs."
+        - "Budget results: top N datasets, top M fields per dataset, sorted by importance."
+  modify:
+    - path: "src/TILSOFTAI.Infrastructure/Tools/ToolCatalogSyncService.cs"
+      changes:
+        - "Call dbo.app_toolcatalog_list_localized instead of app_toolcatalog_list."
+        - "Pass @Language from ExecutionContext and @DefaultLanguage from LocalizationOptions."
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      changes:
+        - "Register CompositeContextPackProvider as IContextPackProvider."
+        - "Register multiple providers: MetadataDictionaryContextPackProvider, ToolCatalogContextPackProvider, AtomicCatalogContextPackProvider."
+    - path: "sql/99_seed/002_seed_toolcatalog_core.sql"
+      changes:
+        - "Add corresponding rows into ToolCatalogI18n (en + vi)."
+    - path: "sql/99_seed/003_seed_toolcatalog_model.sql"
+      changes:
+        - "Add corresponding rows into ToolCatalogI18n (en + vi)."
+  note:
+    - "PATCH 15.05 will add platform tool seeds; include their i18n rows there."
+
+implementation_steps:
+  - step: "S1_SQL: ToolCatalogI18n + SP"
+    detail:
+      - "Create new SQL scripts under sql/01_core."
+      - "Keep idempotent guards."
+  - step: "S2_C#: localized catalog resolver"
+    detail:
+      - "Update ToolCatalogSyncService to pass language and call the new SP."
+  - step: "S3_Context packs composite"
+    detail:
+      - "Introduce CompositeContextPackProvider and update DI registrations."
+      - "Ensure PromptBuilder still receives IContextPackProvider and works unchanged."
+  - step: "S4_Context pack providers"
+    detail:
+      - "ToolCatalog pack: list tools (max 40) and truncate long instructions."
+      - "Atomic catalog pack: list datasets/fields (limit via configuration)."
+      - "Diagnostics pack is optional here; can be added later if token budget allows."
+
+acceptance_criteria:
+  - "Changing X-Lang/Accept-Language produces different tool instruction language returned by ToolCatalogSyncService."
+  - "System prompt includes ToolCatalog and DatasetCatalog packs alongside MetadataDictionary."

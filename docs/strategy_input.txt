@@ -1,0 +1,71 @@
+TÀI LIỆU CHIẾN LƯỢC: TRIỂN KHAI HỆ THỐNG AI PHÂN TÍCH DỮ LIỆU (TILSOFTAI)
+1. TỔNG QUAN Ý TƯỞNG (EXECUTIVE SUMMARY)
+Mục tiêu là xây dựng một AI Orchestrator thông minh, đóng vai trò trợ lý chuyên gia. AI không chỉ truy vấn dữ liệu đơn thuần mà phải có khả năng lập luận (Reasoning) dựa trên cấu trúc sản phẩm đa tầng (Model -> Pieces -> Materials -> Logistics) để đưa ra các nhận định về chi phí, quy cách và so sánh sản phẩm theo thời gian thực.
+
+2. KIẾN TRÚC THỰC THI (TECHNICAL ARCHITECTURE)
+2.1. Nguyên tắc thiết kế Core
+C# là Bộ điều phối (Orchestrator): Tuyệt đối không viết cứng logic nghiệp vụ vào mã nguồn C#. C# chỉ đóng vai trò kiểm soát luồng, bảo mật và gọi Tool.
+
+SQL là Nguồn tri thức (Knowledge Base): Mọi logic truy xuất được đóng gói trong các Stored Procedures (SPs) có tiền tố ai_.
+
+Tính nén dữ liệu (Compaction): Dữ liệu trả về từ SQL phải đi qua lớp ToolResultCompactor để lược bỏ các trường thừa (Audit columns như UpdatedDate, UpdatedBy), đảm bảo AI nhận được dữ liệu "sạch" và tối ưu Token.
+
+2.2. Luồng suy luận ReAct (Reasoning + Acting)
+Hệ thống hoạt động theo chu kỳ tự động: Nhận câu hỏi -> Suy nghĩ (Thought) -> Gọi Tool (Action) -> Quan sát dữ liệu (Observation) -> Kết luận.
+
+3. DANH MỤC CÔNG VIỆC CẦN BỔ SUNG (BACKLOG)
+3.1. Tầng SQL (Data & Knowledge Layer)
+Xây dựng Semantic Views: Tạo các View phẳng hóa dữ liệu từ Model, ModelPiece, ModelPackagingMethodOption và ModelMaterialConfig. Điều này giúp AI chỉ cần gọi 1 SP để có cái nhìn tổng thể thay vì JOIN quá nhiều bảng.
+
+SPs Phân tích đa tham số: Viết các SP nhận nhiều tham số như ai_compare_models để SQL thực hiện các phép so sánh số liệu (CBM, Weight, Loadability) trước khi trả kết quả cho AI.
+
+Metadata Dictionary: Xây dựng bảng mô tả nghiệp vụ cho các cột kỹ thuật (Ví dụ: CBM là "Thể tích khối", Qnt40HC là "Số lượng xếp container 40 feet cao").
+
+3.2. Tầng C# Orchestration (Phase 3 & 4)
+Tool Registry mở rộng: Mỗi Tool phải có thuộc tính Instruction hướng dẫn AI cách xử lý kết quả (Ví dụ: "Nếu model có PieceCount > 0, hãy truy vấn tiếp chi tiết các món con").
+
+Plan Optimizer: Lớp kiểm tra Plan JSON từ AI trước khi đẩy xuống SQL để đảm bảo tính an toàn và hiệu năng.
+
+Semantic Cache: Sử dụng Redis để lưu trữ các câu trả lời phân tích phức tạp. Nếu có câu hỏi tương tự từ cùng một TenantID, hệ thống sẽ trả về kết quả ngay lập tức.
+
+4. CÁC ĐỀ XUẤT NÂNG CAO (ADVANCED PROPOSALS)
+4.1. Cơ chế Phê duyệt Hành động (Human-in-the-loop)
+Đối với các yêu cầu mang tính chỉnh sửa (Write), hệ thống không thực thi ngay mà đưa vào trạng thái chờ xác nhận.
+
+Quy trình: AI đề xuất thay đổi -> Hệ thống tạo mã ActionID -> Người dùng bấm "Approve" trên UI -> C# thực thi SP cập nhật.
+
+4.2. Suy luận Đệ quy (Recursive Deep-Scan)
+Đối với sản phẩm dạng bộ (SET), AI phải tự động nhận diện thông qua bảng ModelPiece để thực hiện truy vấn đệ quy cho từng sản phẩm con mà không đợi người dùng yêu cầu.
+
+4.3. Chẩn đoán & Gợi ý Chủ động (Proactive Diagnostics)
+AI được cấu hình để tự động kiểm tra tính logic của dữ liệu (Ví dụ: Tổng kích thước các ModelPiece có vượt quá kích thước CartonBox trong bảng ModelPackagingMethodOption hay không?).
+
+5. KỊCH BẢN NGHIỆP VỤ MẪU (SAMPLE USE-CASES)
+Kịch bản 1: Phân tích chênh lệch đóng gói
+Người dùng: "Tại sao cùng một loại model mà mẫu A xếp được 200 sản phẩm vào container, mẫu B chỉ được 150?"
+
+AI Thought: Cần kiểm tra PackagingMethod và CartonBoxDim của cả 2 mẫu.
+
+Action: Gọi ai_get_packaging_details cho A và B.
+
+Phân tích: AI nhận thấy mẫu B có BoxInSet lớn hơn hoặc kích thước thùng lớn hơn dù cùng loại hàng.
+
+Kết luận: "Mẫu B có kích thước thùng lớn hơn 15% và phương pháp đóng gói lỏng lẻo hơn mẫu A, dẫn đến giảm khả năng xếp container".
+
+Kịch bản 2: So sánh cấu hình vật liệu
+Người dùng: "So sánh vật liệu giữa Model 'M01' và 'M02'."
+
+AI Thought: Truy vấn ModelMaterialConfig kết hợp ProductWizardSection.
+
+Action: Gọi ai_get_model_materials cho cả 2 ID.
+
+Kết luận: Trả về bảng so sánh chi tiết về loại gỗ, màu đệm và các tùy chọn FSC/RCS của từng mẫu.
+
+6. QUY TRÌNH KIỂM SOÁT HỢP ĐỒNG (CONTRACT SYNC)
+Để đảm bảo SQL và AI luôn hiểu nhau, cần áp dụng:
+
+SQL Contract Validation: Tự động kiểm tra sự tồn tại của các SP ai_ và app_ trong CI/CD.
+
+Enforce Prefix Policy: Chỉ những SP có tiền tố ai_ mới được phép đưa vào ToolRegistry cho LLM.
+
+Ghi chú: Tài liệu này là cơ sở để triển khai các Phase tiếp theo trong Master Plan của dự án TILSOFTAI.

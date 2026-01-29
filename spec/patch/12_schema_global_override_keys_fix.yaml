@@ -1,0 +1,112 @@
+schema_version: "1.0"
+document: "PATCH 12 - Fix Global Override Key Model (nullable TenantId) for MetadataDictionary + NormalizationRule"
+language: "en"
+
+goal:
+  - "Fix schema so global rows (TenantId NULL) are supported without invalid primary keys."
+  - "Preserve existing data through safe, repeatable migration scripts."
+  - "Keep SQL and C# synchronized; no changes to functional behavior beyond schema correctness."
+  - "Ensure multi-language + tenant override remain deterministic and queryable."
+
+problem:
+  - "Current design uses TenantId NULL inside PRIMARY KEY for MetadataDictionary/NormalizationRule."
+  - "Primary keys in SQL Server enforce NOT NULL; this breaks global-row semantics or deployment."
+
+design_decision (MUST implement exactly):
+  - "Use surrogate primary key Id (BIGINT IDENTITY) and enforce uniqueness with UNIQUE constraints including nullable TenantId."
+  - "Keep TenantId nullable to represent global rows."
+  - "Do not change business semantics: fallback logic remains the same."
+
+target_tables:
+  - name: "MetadataDictionary"
+    final_schema:
+      columns:
+        - "Id bigint IDENTITY(1,1) NOT NULL"
+        - "Key nvarchar(200) NOT NULL"
+        - "TenantId nvarchar(50) NULL"
+        - "Language nvarchar(10) NOT NULL"
+        - "DisplayName nvarchar(200) NOT NULL"
+        - "Description nvarchar(2000) NULL"
+        - "Unit nvarchar(50) NULL"
+        - "Examples nvarchar(2000) NULL"
+        - "UpdatedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+      primary_key: "PK_MetadataDictionary_Id (Id)"
+      unique_constraints:
+        - "UQ_MetadataDictionary_Key_Tenant_Lang (Key, TenantId, Language)"
+      indexes:
+        - "IX_MetadataDictionary_Tenant_Lang_Key (TenantId, Language, Key)"
+        - "IX_MetadataDictionary_Key_Lang (Key, Language)"
+  - name: "NormalizationRule"
+    final_schema:
+      columns:
+        - "Id bigint IDENTITY(1,1) NOT NULL"
+        - "RuleKey nvarchar(200) NOT NULL"
+        - "TenantId nvarchar(50) NULL"
+        - "Priority int NOT NULL"
+        - "Pattern nvarchar(1000) NOT NULL"
+        - "Replacement nvarchar(1000) NOT NULL"
+        - "Description nvarchar(2000) NULL"
+        - "IsEnabled bit NOT NULL DEFAULT(1)"
+        - "UpdatedAtUtc datetime2(3) NOT NULL DEFAULT sysutcdatetime()"
+      primary_key: "PK_NormalizationRule_Id (Id)"
+      unique_constraints:
+        - "UQ_NormalizationRule_RuleKey_Tenant (RuleKey, TenantId)"
+      indexes:
+        - "IX_NormalizationRule_Tenant_Priority (TenantId, Priority)"
+
+sql_migration_files_to_create (MUST be idempotent):
+  - path: "sql/01_core/009_migration_metadata_dictionary_surrogate_pk.sql"
+    responsibilities:
+      - "Detect current MetadataDictionary structure."
+      - "If table already has column Id and PK on Id, do nothing."
+      - "Else: migrate using shadow table approach:"
+      - "  1) Create MetadataDictionary_v3 with final schema."
+      - "  2) Copy data from MetadataDictionary into v3:"
+      - "     - Preserve Key, TenantId, Language, DisplayName, Description, Unit, Examples, UpdatedAtUtc."
+      - "     - If UpdatedAtUtc missing, use sysutcdatetime()."
+      - "  3) Drop or rename old table safely (rename to MetadataDictionary_old_yyyymmddHHMM)."
+      - "  4) Rename v3 to MetadataDictionary."
+      - "  5) Recreate indexes + unique constraints."
+      - "Must not lose rows, including TenantId NULL rows."
+      - "If duplicates exist for (Key,TenantId,Language), migration must FAIL with a clear error message."
+  - path: "sql/01_core/010_migration_normalization_rule_surrogate_pk.sql"
+    responsibilities:
+      - "Same shadow table approach for NormalizationRule."
+      - "Fail migration if duplicates exist for (RuleKey,TenantId)."
+
+sql_sp_updates:
+  - file: "sql/01_core/002_sps_app_core.sql"
+    procedure: "dbo.app_metadatadictionary_list"
+    required_behavior (unchanged logically):
+      - "Must return resolved entries by fallback order."
+      - "Should select the best match per Key; if multiple matches exist, prefer earlier fallback."
+    note:
+      - "No changes needed for signature; must already be: (@TenantId,@Language,@DefaultLanguage)."
+  - file: "sql/01_core/007_sps_app_normalization.sql"
+    procedure: "dbo.app_normalizationrule_list"
+    required_behavior (unchanged logically):
+      - "Return enabled rules with tenant override preference."
+
+seed_updates:
+  modify_seed_files:
+    - "sql/99_seed/001_seed_metadata_dictionary.sql"
+    - "sql/99_seed/005_seed_normalization_rules.sql"
+  rules:
+    - "MERGE must match on the UNIQUE key (Key,TenantId,Language) for MetadataDictionary."
+    - "MERGE must match on (RuleKey,TenantId) for NormalizationRule."
+    - "Do not reference Id in seeds."
+
+csharp_changes (minimal, schema-agnostic):
+  - "No code changes required if C# never inserts Id explicitly."
+  - "If any SQL insert statements specify column lists, ensure they do not include Id."
+  - "Ensure tests that insert rows include explicit columns and exclude Id."
+
+tests_to_add_or_update:
+  - "Integration test: insert global (TenantId NULL) and tenant-specific rows; ensure both exist and no PK errors."
+  - "Integration test: metadata fallback returns tenant-specific then global in correct language fallback order."
+  - "Integration test: normalization rule list returns tenant override over global."
+
+acceptance_criteria:
+  - "Database deploy succeeds with TenantId NULL global rows."
+  - "Unique constraints enforce no duplicates per key scope."
+  - "All existing functionality relying on global overrides continues to work."

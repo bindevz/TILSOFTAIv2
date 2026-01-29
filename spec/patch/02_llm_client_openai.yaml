@@ -1,0 +1,111 @@
+schema_version: "1.0"
+document: "PATCH 02 - Real LLM Client (OpenAI-compatible, tool calling + streaming)"
+language: "en"
+
+goal:
+  - "Replace NullLlmClient with a real implementation using an OpenAI-compatible HTTP endpoint."
+  - "Support function/tool calling (tools list -> OpenAI tools format)."
+  - "Support streaming and emit LlmStreamEvent delta/tool_call/final/error."
+
+non_goals:
+  - "Do NOT embed business logic. LLM client only transports requests/responses."
+  - "Do NOT add heavy OpenAI SDK dependencies; use HttpClient + System.Text.Json."
+
+configuration (MUST implement):
+  add_appsettings_section:
+    name: "Llm"
+    fields:
+      Provider:
+        type: "string"
+        allowed: ["Null","OpenAiCompatible"]
+        default: "Null"
+      Endpoint:
+        type: "string"
+        example: "https://api.openai.com/v1/chat/completions"
+      ApiKey:
+        type: "string"
+        description: "Bearer token for OpenAI-compatible endpoint."
+      Model:
+        type: "string"
+        example: "gpt-4.1-mini"
+      TimeoutSeconds:
+        type: "int"
+        default: 120
+      Temperature:
+        type: "double"
+        default: 0.2
+      MaxResponseTokens:
+        type: "int"
+        default: 1024
+  modify_files:
+    - "src/TILSOFTAI.Api/appsettings.json (add Llm section)"
+    - "src/TILSOFTAI.Api/appsettings.Development.json (add Llm section, keep Provider='Null' by default)"
+
+required_csharp_changes:
+  create:
+    - path: "src/TILSOFTAI.Domain/Configuration/LlmOptions.cs"
+      content:
+        - "public sealed class LlmOptions { string Provider; string Endpoint; string ApiKey; string Model; int TimeoutSeconds; double Temperature; int MaxResponseTokens; }"
+    - path: "src/TILSOFTAI.Infrastructure/Llm/OpenAiCompatibleLlmClient.cs"
+      implements: "TILSOFTAI.Orchestration.Llm.ILlmClient"
+      responsibilities:
+        - "Build HTTP request to LlmOptions.Endpoint with Authorization: Bearer <ApiKey>."
+        - "Map LlmRequest to OpenAI request JSON."
+        - "Parse OpenAI response into LlmResponse and LlmToolCall list."
+        - "Implement StreamAsync that parses SSE 'data:' lines."
+    - path: "src/TILSOFTAI.Infrastructure/Llm/OpenAiWireModels.cs"
+      responsibilities:
+        - "Define minimal request/response DTOs for JSON mapping (internal classes)."
+        - "Do NOT expose these DTOs outside Infrastructure."
+  modify:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      changes:
+        - "Register IOptions<LlmOptions> binding to 'Llm'."
+        - "Register ILlmClient based on LlmOptions.Provider: NullLlmClient or OpenAiCompatibleLlmClient."
+        - "Register a named HttpClient or default HttpClient for OpenAiCompatibleLlmClient."
+    - path: "src/TILSOFTAI.Domain/Configuration/ConfigurationSectionNames.cs"
+      change:
+        - "Add constant: public const string Llm = "Llm";"
+
+openai_mapping_rules (MUST follow exactly):
+  messages:
+    - "The system prompt MUST be injected as the first message: role='system', content=LlmRequest.SystemPrompt."
+    - "Then include LlmRequest.Messages mapped 1:1 (role/user/assistant/tool)."
+    - "Tool messages: role='tool', name=<toolName>, content=<compacted json string>."
+  tools:
+    - "Convert each ToolDefinition into OpenAI tool: {type:'function', function:{name, description, parameters}}."
+    - "parameters MUST be parsed from ToolDefinition.JsonSchema (string -> JsonDocument)."
+    - "description MUST include Instruction to avoid putting all tool instructions into system prompt:"
+    - "description = ToolDefinition.Description + '\nINSTRUCTION:\n' + ToolDefinition.Instruction"
+  tool_choice:
+    - "Set tool_choice='auto'."
+  response_format:
+    - "Do NOT enforce JSON-only response at the transport level (keep default)."
+
+response_parsing_rules:
+  non_stream:
+    - "If response has choices[0].message.content -> map to LlmResponse.Content."
+    - "If response has choices[0].message.tool_calls -> map each tool call to LlmToolCall {Name, ArgumentsJson}."
+    - "ArgumentsJson must be the raw JSON string from the tool call arguments."
+  stream:
+    - "Parse SSE lines beginning with 'data:'. Ignore empty lines."
+    - "Stop on 'data: [DONE]'."
+    - "For each chunk JSON: emit delta events for content parts (choices[].delta.content)."
+    - "Accumulate tool calls across chunks using tool_call.id or index; when arguments partial, concatenate."
+    - "When a tool call becomes complete, emit LlmStreamEvent.ToolCall(...) exactly once per call."
+    - "At end, emit LlmStreamEvent.Final(full_content)."
+
+error_handling:
+  - "On non-success HTTP status, read response body (max 32KB) and emit LlmStreamEvent.Error / throw InvalidOperationException."
+  - "Never log ApiKey."
+  - "Add structured logging: endpoint host, status code, latency."
+
+acceptance_criteria:
+  - "When Provider=Null, behavior is unchanged."
+  - "When Provider=OpenAiCompatible and ApiKey/Endpoint/Model configured, /api/chat returns real model output."
+  - "Tool calling works: if model requests a known tool, LlmResponse.ToolCalls contains that tool call."
+  - "Streaming works: delta events are emitted and final content equals concatenated deltas."
+
+unit_tests_to_add:
+  - "Add parsing unit tests in tests project: given sample OpenAI tool_call response JSON -> LlmResponse contains expected tool calls."
+  - "Add streaming parser unit test: given sample SSE chunks -> emitted sequence matches expected."

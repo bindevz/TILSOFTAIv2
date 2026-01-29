@@ -1,0 +1,44 @@
+version: 1
+patch_id: PATCH_08_Model_Module_RealSchema
+title: "Replace demo Model module with enterprise-schema semantic views + ai_model_* SPs"
+risk_level: "P0-High"
+inputs:
+  - "docs/model_schema_input.sql"
+  - "docs/model_mapping.md"
+current_state:
+  - "sql/02_modules/model currently creates demo tables Model/ModelPiece/ModelMaterial etc."
+objective:
+  - "Stop depending on demo schema; instead wrap enterprise schema tables (dbo.Model, dbo.ModelPiece, dbo.ModelPackagingMethodOption, dbo.ModelMaterialConfig...)."
+scope:
+  includes:
+    - "sql/02_modules/model/*"
+    - "sql/99_seed/003_seed_toolcatalog_model.sql"
+  excludes:
+    - "core orchestration"
+steps:
+  - id: S01_deprecate_demo_schema
+    do:
+      - "Mark sql/02_modules/model/001_tables_model.sql as DEMO ONLY (or remove from default run order)."
+      - "If you keep it, ensure it does not collide with enterprise schema (names already collide!) => recommended: remove from default." 
+
+  - id: S02_create_enterprise_views
+    do:
+      - "Create new scripts under sql/02_modules/model_enterprise/ (new module folder):"
+      - "  - 001_views_model_enterprise.sql (v_Model_Overview, v_Model_Pieces, v_Model_Packaging_Default, v_Model_Materials)"
+      - "Views must SELECT from real enterprise tables only." 
+
+  - id: S03_create_ai_sps
+    do:
+      - "Create sql/02_modules/model_enterprise/002_sps_model_enterprise.sql"
+      - "Add SPs: ai_model_get_overview, ai_model_get_pieces, ai_model_get_packaging, ai_model_get_materials, ai_model_compare_models, ai_model_count"
+      - "All SPs return JSON envelope." 
+
+  - id: S04_update_toolcatalog_seed
+    do:
+      - "Edit sql/99_seed/003_seed_toolcatalog_model.sql"
+      - "Ensure tool list includes model_count and model_get_packaging (new)."
+      - "Update instructions to match enterprise meaning: CBM, Qnt40HC, BoxInSet, FSC/RCS." 
+
+verification:
+  - "Run model_enterprise scripts against enterprise DB (or seeded demo)."
+  - "Ask: 'so sánh M01 và M02 về CBM và Qnt40HC' => compare_models returns correct." 

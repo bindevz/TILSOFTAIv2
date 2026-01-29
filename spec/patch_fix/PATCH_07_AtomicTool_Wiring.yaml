@@ -1,0 +1,31 @@
+version: 1
+patch_id: PATCH_07_AtomicTool_Wiring
+title: "Expose atomic_execute_plan as a ToolCatalog tool"
+risk_level: "P0-High"
+context:
+  - "AtomicDataEngine already exists: src/TILSOFTAI.Orchestration/Atomic/AtomicDataEngine.cs"
+  - "SQL executor exists: sql/03_atomic/*"
+scope:
+  includes:
+    - "sql/99_seed/002_seed_toolcatalog_core.sql"
+    - "src/TILSOFTAI.Api/Tools/* (if present)"
+    - "src/TILSOFTAI.Orchestration/Tools/NamedToolHandlerRegistry.cs"
+    - "src/TILSOFTAI.Orchestration/Tools/ToolHandlerRouter.cs"
+goals:
+  - "LLM can call 'atomic_execute_plan' and get JSON envelope results."
+steps:
+  - id: S01_add_toolcatalog_seed
+    do:
+      - "Edit sql/99_seed/002_seed_toolcatalog_core.sql"
+      - "Insert tool: ToolName='atomic_execute_plan', SpName='ai_atomic_execute_plan'"
+      - "JsonSchema: requires planJson (object). additionalProperties=false."
+      - "Instruction: how to select dataset/fields, grouping, limit; remind about tenant scope."
+
+  - id: S02_tool_handler_mapping
+    do:
+      - "Ensure ToolHandlerRouter routes tool calls to SqlToolHandler by default."
+      - "If AtomicDataEngine should be used instead of direct SQL, add a NamedToolHandler for 'atomic_execute_plan'."
+      - "Handler must validate plan via PlanOptimizer BEFORE calling SQL." 
+
+verification:
+  - "Ask: 'count models by season' => LLM chooses atomic_execute_plan" 

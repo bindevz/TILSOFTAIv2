@@ -1,0 +1,57 @@
+schema_version: "1.0"
+document: "PATCH 15.09 - Governance Hardening: SP Prefix Enforcement + Write Catalog + Rate Limiting"
+language: "en"
+
+problem_statement:
+  - "SqlExecutor.ExecuteToolAsync currently allows calling ANY stored procedure name."
+  - "ActionApprovalService can execute arbitrary SP names (only blocks ai_*), which is unsafe."
+  - "No allowlisted write catalog and no RBAC enforcement for approving/executing actions."
+  - "No API rate limiting; enterprise requires abuse protection."
+
+goal:
+  - "Enforce SP prefix policy at the lowest level (SqlExecutor)."
+  - "Introduce dbo.WriteActionCatalog allowlist with required roles and schema for args."
+  - "Lock down ActionsController with RBAC policies."
+  - "Add ASP.NET rate limiting for chat endpoints."
+
+sql_changes:
+  - "Create dbo.WriteActionCatalog(TenantId, ActionName, SpName, RequiredRoles, JsonSchema, Description)."
+  - "Create app_writeactioncatalog_list + app_writeactioncatalog_get."
+  - "Only SPs listed here can be used for action_request_write and executed after approval."
+
+csharp_changes:
+  - "SqlExecutor.ExecuteToolAsync: reject if storedProcedure does NOT start with Governance.ModelCallableSpPrefix (ai_)."
+  - "Add a new method ExecuteWriteActionAsync that only allows SPs found in WriteActionCatalog."
+  - "ActionApprovalService.CreateAsync: validate proposedSpName exists in WriteActionCatalog, validate argsJson against JsonSchema, validate caller role."
+  - "ActionApprovalService.ExecuteAsync: re-check allowlist and role; then execute via ExecuteWriteActionAsync."
+  - "ActionsController: require role 'ai_action_approver' for approve/reject/execute (configurable)."
+  - "Rate limit: apply to /api/chat and /v1/chat/completions endpoints."
+
+files_to_create_or_modify:
+  create:
+    - path: "sql/01_core/050_tables_write_action_catalog.sql"
+    - path: "sql/01_core/051_sps_app_write_action_catalog.sql"
+    - path: "sql/99_seed/008_seed_write_action_catalog.sql"
+      content_requirements:
+        - "Insert at least 1 example write action (disabled by default) to demonstrate pattern."
+  modify:
+    - path: "src/TILSOFTAI.Infrastructure/Sql/SqlExecutor.cs"
+      changes:
+        - "Add prefix enforcement for ExecuteToolAsync."
+        - "Add ExecuteWriteActionAsync which calls app_writeaction_execute (or direct SP) ONLY after catalog validation."
+    - path: "src/TILSOFTAI.Orchestration/Actions/ActionApprovalService.cs"
+      changes:
+        - "Validate allowlist + schema + roles at create and execute."
+        - "Do not construct ToolDefinition with JsonSchema='{}'; use catalog schema."
+    - path: "src/TILSOFTAI.Api/Controllers/ActionsController.cs"
+      changes:
+        - "Add [Authorize(Roles = "ai_action_approver")] or policy-based authorization."
+    - path: "src/TILSOFTAI.Api/Program.cs / AddTilsoftAiExtensions.cs"
+      changes:
+        - "Add RateLimiter middleware and configuration (e.g., fixed window per tenant/user)."
+
+acceptance_criteria:
+  - "LLM cannot call non-ai_* SPs via tools."
+  - "Write actions can only target allowlisted SPs and require approval + role."
+  - "Approving/executing actions without approver role returns 403."
+  - "High-frequency chat requests are rate-limited with 429."
