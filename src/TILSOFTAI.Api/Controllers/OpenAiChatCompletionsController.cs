@@ -23,6 +23,7 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
     private readonly ILogger<OpenAiChatCompletionsController> _logger;
     private readonly ChatStreamEnvelopeFactory _envelopeFactory;
     private readonly IOptions<StreamingOptions> _streamingOptions;
+    private readonly IOptions<ChatOptions> _chatOptions;
     private readonly ISensitivityClassifier _sensitivityClassifier;
 
     public OpenAiChatCompletionsController(
@@ -32,6 +33,7 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
         ILogger<OpenAiChatCompletionsController> logger,
         ChatStreamEnvelopeFactory envelopeFactory,
         IOptions<StreamingOptions> streamingOptions,
+        IOptions<ChatOptions> chatOptions,
         ISensitivityClassifier sensitivityClassifier)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
@@ -40,6 +42,7 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _envelopeFactory = envelopeFactory ?? throw new ArgumentNullException(nameof(envelopeFactory));
         _streamingOptions = streamingOptions ?? throw new ArgumentNullException(nameof(streamingOptions));
+        _chatOptions = chatOptions ?? throw new ArgumentNullException(nameof(chatOptions));
         _sensitivityClassifier = sensitivityClassifier ?? throw new ArgumentNullException(nameof(sensitivityClassifier));
     }
 
@@ -52,6 +55,16 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
         }
 
         var joinedInput = BuildUserInput(request.Messages);
+        
+        // Enforce input size limit
+        if (!string.IsNullOrEmpty(joinedInput) && joinedInput.Length > _chatOptions.Value.MaxInputChars)
+        {
+            throw new TilsoftApiException(
+                ErrorCode.InvalidArgument,
+                StatusCodes.Status400BadRequest,
+                detail: new { maxInputChars = _chatOptions.Value.MaxInputChars });
+        }
+        
         var context = _contextAccessor.Current;
         var created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var id = $"chatcmpl_{Guid.NewGuid():N}";
@@ -131,10 +144,11 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
         var resultNonStream = await _engine.RunChatAsync(chatRequestNonStream, context, cancellationToken);
         if (!resultNonStream.Success)
         {
+            var code = string.IsNullOrWhiteSpace(resultNonStream.Code) ? ErrorCode.ChatFailed : resultNonStream.Code;
             throw new TilsoftApiException(
-                ErrorCode.ChatFailed,
+                code,
                 StatusCodes.Status400BadRequest,
-                detail: resultNonStream.Error);
+                detail: resultNonStream.Detail ?? resultNonStream.Error);
         }
 
         var response = new OpenAiChatCompletionsResponse

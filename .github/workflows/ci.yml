@@ -8,7 +8,11 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
     
     steps:
     - uses: actions/checkout@v4
@@ -24,6 +28,20 @@ jobs:
     
     - name: Restore dependencies
       run: dotnet restore
+    
+    - name: Check for vulnerable packages
+      shell: pwsh
+      run: |
+        Write-Host "Checking for vulnerable packages..."
+        $output = dotnet list package --vulnerable --include-transitive 2>&1 | Out-String
+        Write-Host $output
+        
+        if ($output -match "has the following vulnerable packages") {
+          Write-Error "Vulnerable packages detected. Please update dependencies."
+          exit 1
+        }
+        
+        Write-Host "No vulnerable packages found."
     
     - name: Build
       run: dotnet build --no-restore --configuration Release

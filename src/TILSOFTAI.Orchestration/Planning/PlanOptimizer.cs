@@ -47,7 +47,7 @@ public sealed class PlanOptimizer
         var schemaValidation = _schemaValidator.Validate(AtomicPlanSchema, planJson);
         if (!schemaValidation.IsValid)
         {
-            return PlanValidationResult.Fail(schemaValidation.Error ?? "Plan JSON failed schema validation.");
+            return PlanValidationResult.Fail(schemaValidation.Summary ?? "Plan JSON failed schema validation.");
         }
 
         JsonNode? planNode;

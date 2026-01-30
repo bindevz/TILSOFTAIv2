@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
+using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Caching;
 using TILSOFTAI.Orchestration.Compaction;
@@ -154,7 +155,19 @@ public sealed class ChatPipeline
                 var validation = _toolGovernance.Validate(call, toolLookup, ctx);
                 if (!validation.IsValid || validation.Tool is null)
                 {
-                    return Fail(request, validation.Error ?? "Tool validation failed.");
+                    if (string.Equals(validation.Code, ErrorCode.ToolArgsInvalid, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new TilsoftApiException(
+                            ErrorCode.ToolArgsInvalid,
+                            400,
+                            detail: validation.Detail);
+                    }
+
+                    return Fail(
+                        request,
+                        validation.Error ?? "Tool validation failed.",
+                        validation.Code ?? ErrorCode.ToolValidationFailed,
+                        validation.Detail);
                 }
 
                 var tool = validation.Tool;
@@ -240,9 +253,9 @@ public sealed class ChatPipeline
         return response;
     }
 
-    private ChatResult Fail(ChatRequest request, string error)
+    private ChatResult Fail(ChatRequest request, string error, string? code = null, object? detail = null)
     {
         request.StreamObserver?.Report(ChatStreamEvent.Error(error));
-        return ChatResult.Fail(error);
+        return ChatResult.Fail(error, code, detail);
     }
 }

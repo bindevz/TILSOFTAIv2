@@ -1,0 +1,53 @@
+schema_version: "1.0"
+document: "PATCH 18.01 - Security: Role Trust Boundary (Claims-only Roles; Header Roles Ignored)"
+language: "en"
+
+problem_statement:
+  - "IdentityResolutionPolicy can merge roles from X-Roles header (HeaderRolesKeys)."
+  - "Even if tenant/user header fallback is restricted, trusting roles from headers is a privilege escalation risk."
+  - "Enterprise security requires: roles must come from JWT claims (or a signed token) only."
+
+goals:
+  - "Ensure roles are derived ONLY from JWT claims in all environments."
+  - "Header roles must be ignored (even in Development and trusted-gateway mode)."
+  - "Keep header fallback for tenant/user strictly controlled per existing Patch 17 rules, but do not elevate roles."
+
+hard_constraints:
+  - "NEVER use X-Roles (or configured HeaderRolesKeys) to set/augment roles."
+  - "If roles are missing in claims, roles must be empty (unless explicitly injected by a server-side trusted component)."
+  - "No breaking API changes; keep AuthOptions.HeaderRolesKeys for backward compatibility, but deprecate/ignore at runtime."
+
+files_to_modify_or_create:
+  modify:
+    - path: "src/TILSOFTAI.Domain/Security/IdentityResolutionPolicy.cs"
+    - path: "src/TILSOFTAI.Domain/Configuration/AuthOptions.cs"
+    - path: "src/TILSOFTAI.Api/Middlewares/ExecutionContextMiddleware.cs"
+  create:
+    - path: "tests/TILSOFTAI.Tests.Contract/Identity/RoleResolutionTests.cs"
+
+implementation_steps:
+  - step: "S1 - IdentityResolutionPolicy: remove header role merge"
+    detail:
+      - "In ResolveCore(...), set roles ONLY from claimsRoleClaim (AuthOptions.RoleClaimName)."
+      - "Delete/stop using includeHeaderRoles flag entirely (or force it false)."
+      - "Do NOT parse HeaderRolesKeys; keep constants only if needed for spoof detection (optional)."
+  - step: "S2 - AuthOptions: mark HeaderRolesKeys as obsolete"
+    detail:
+      - "Add [Obsolete] attribute and comment: roles must come from claims."
+      - "Do not remove property to avoid config breakage."
+  - step: "S3 - ExecutionContextMiddleware: ensure context.Roles cannot be influenced by headers"
+    detail:
+      - "Confirm it only uses IdentityResolutionPolicy result roles."
+      - "Add a defensive invariant: if any role contains whitespace-only or suspicious tokens -> normalize/trim."
+  - step: "S4 - Add contract tests"
+    detail:
+      - "Create tests that build a fake HttpContext with:"
+      - "  (a) roles in claims + X-Roles header => roles == claims only."
+      - "  (b) no roles in claims + X-Roles header => roles == empty."
+      - "Use IdentityResolutionPolicy.ResolveForRequest and assert outputs."
+
+acceptance_criteria:
+  - "Roles returned by IdentityResolutionPolicy are claims-only."
+  - "X-Roles has zero effect in all environments."
+  - "New tests pass and demonstrate the behavior."
+  - "spec/PROGRESS.md updated with Patch 18.01 results."

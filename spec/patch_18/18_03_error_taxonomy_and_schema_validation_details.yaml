@@ -1,0 +1,70 @@
+schema_version: "1.0"
+document: "PATCH 18.03 - Error Taxonomy + Schema Validation Details (ToolArgsInvalid with structured paths)"
+language: "en"
+
+problem_statement:
+  - "Tool schema validation failures are currently returned as ChatFailed with a free-text message."
+  - "Json schema validator returns only a generic error string, losing field-level error info."
+  - "Enterprise support requires stable error codes and structured validation details (path + messageKey)."
+
+goals:
+  - "Tool/schema validation failures must produce ErrorCode.ToolArgsInvalid with 400."
+  - "Validation detail must be structured and machine-readable, following existing middleware conventions."
+  - "Enhance schema validation to return multiple errors with JSON pointer paths (when possible)."
+
+hard_constraints:
+  - "Client-facing error code must be stable: ToolArgsInvalid."
+  - "In production, detail must remain suppressed unless ErrorHandling policy allows it."
+  - "No leaking of internal SQL/SP names in client messages."
+
+files_to_modify_or_create:
+  modify:
+    - path: "src/TILSOFTAI.Orchestration/Tools/IJsonSchemaValidator.cs"
+    - path: "src/TILSOFTAI.Orchestration/Tools/RealJsonSchemaValidator.cs"
+    - path: "src/TILSOFTAI.Orchestration/Tools/BasicJsonSchemaValidator.cs"
+    - path: "src/TILSOFTAI.Orchestration/Tools/ToolGovernance.cs"
+    - path: "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+    - path: "src/TILSOFTAI.Orchestration/Pipeline/ChatResult.cs"
+    - path: "src/TILSOFTAI.Api/Controllers/ChatController.cs"
+    - path: "src/TILSOFTAI.Domain/Errors/ErrorCode.cs"
+    - path: "src/TILSOFTAI.Infrastructure/Errors/InMemoryErrorCatalog.cs"
+  create:
+    - path: "tests/TILSOFTAI.Tests.Contract/Validation/ToolArgsInvalidContractTests.cs"
+
+implementation_steps:
+  - step: "S1 - Extend JsonSchemaValidationResult to include Errors"
+    detail:
+      - "Change record to: (bool IsValid, IReadOnlyList<string> Errors, string? Summary)"
+      - "Keep compatibility by providing helper ctors or default empty list."
+  - step: "S2 - RealJsonSchemaValidator: generate field-level errors"
+    detail:
+      - "Use Json.Schema evaluation output to extract instance location (e.g., result.InstanceLocation) and message."
+      - "Format each error as '<jsonPointer>: <message>' (e.g., '/modelId: required')."
+      - "Return Errors list; Summary may be 'Arguments JSON failed schema validation.'"
+  - step: "S3 - ToolGovernance: return structured errors instead of free-text"
+    detail:
+      - "When schema invalid: return ToolValidationResult.Fail(errorsList, code=ToolArgsInvalid)."
+      - "Update ToolValidationResult to include ErrorCode and Detail object (or errors list)."
+  - step: "S4 - ChatPipeline: propagate tool validation failure as TilsoftApiException"
+    detail:
+      - "Replace Fail(request, ...) for tool validation failure with:"
+      - "  throw new TilsoftApiException(ErrorCode.ToolArgsInvalid, 400, detail: errorsList);"
+      - "For other pipeline failures, keep ChatFailed but ensure detail is safe (or null)."
+  - step: "S5 - ChatResult: carry code/detail when returning Fail()"
+    detail:
+      - "If you keep ChatResult.Fail, extend it to include ErrorCode and optional Detail."
+      - "ChatController should throw TilsoftApiException(result.Code, 400, result.Detail) when !Success."
+  - step: "S6 - Error catalog"
+    detail:
+      - "Ensure InMemoryErrorCatalog has ToolArgsInvalid messages in en/vi (already exists; verify)."
+  - step: "S7 - Tests"
+    detail:
+      - "Add tests that simulate a tool call with invalid args -> expect ToolArgsInvalid."
+      - "Verify ExceptionHandlingMiddleware produces validation detail list with paths (when detail allowed)."
+
+acceptance_criteria:
+  - "Invalid tool arguments produce ErrorCode.ToolArgsInvalid (400)."
+  - "Validation detail contains a list of objects with { path, messageKey } or a list of strings that middleware maps into that shape."
+  - "No tool schema invalid errors are surfaced as ChatFailed."
+  - "New tests pass."
+  - "spec/PROGRESS.md updated with Patch 18.03 results."

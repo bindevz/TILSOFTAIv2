@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
+using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Sensitivity;
 using TILSOFTAI.Orchestration.Pipeline;
@@ -51,10 +52,14 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
         {
             return _chatPipeline.RunAsync(request, ctx, ct);
         }
+        catch (TilsoftApiException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Chat orchestration failed.");
-            return Task.FromResult(ChatResult.Fail("Chat request failed."));
+            return Task.FromResult(ChatResult.Fail("Chat request failed.", ErrorCode.ChatFailed));
         }
     }
 
@@ -121,6 +126,18 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
             catch (OperationCanceledException)
             {
                 // Cancellation is normal, complete the channel
+            }
+            catch (TilsoftApiException apiEx)
+            {
+                _logger.LogWarning(apiEx, "Chat pipeline failed during streaming.");
+                if (Interlocked.CompareExchange(ref terminalEmitted, 1, 0) == 0)
+                {
+                    channel.Writer.TryWrite(ChatStreamEvent.Error(new ErrorEnvelope
+                    {
+                        Code = apiEx.Code,
+                        Detail = apiEx.Detail
+                    }));
+                }
             }
             catch (Exception ex)
             {

@@ -16,7 +16,20 @@ public static class MapTilsoftAiExtensions
 
         app.MapControllers();
         app.MapHub<ChatHub>("/hubs/chat");
-        app.MapHealthChecks("/health");
+        
+        // Health endpoints for operational readiness
+        app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+        {
+            Predicate = _ => false // No checks for liveness - always returns 200 if process is up
+        }).AllowAnonymous();
+        
+        app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains("ready")
+        }).AllowAnonymous();
+        
+        // Keep backward compatible /health endpoint
+        app.MapHealthChecks("/health").AllowAnonymous();
 
         return app;
     }

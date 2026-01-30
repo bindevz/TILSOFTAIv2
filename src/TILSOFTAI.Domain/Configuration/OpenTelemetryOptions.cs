@@ -35,4 +35,10 @@ public sealed class OpenTelemetryOptions
     /// Example: "http://localhost:4317" or "http://jaeger-collector:4317".
     /// </summary>
     public string? OtlpEndpoint { get; set; }
+
+    /// <summary>
+    /// Emit auth/JWKS refresh activities for diagnostics.
+    /// Default: false.
+    /// </summary>
+    public bool EnableAuthKeyRefreshTracing { get; set; } = false;
 }

@@ -7,6 +7,12 @@ public sealed class AuthOptions
     public string JwksUrl { get; set; } = string.Empty;
     public string RoleClaimName { get; set; } = "roles";
     
+    // JWKS refresh configuration (background refresh only; never on request path)
+    public int JwksRefreshIntervalMinutes { get; set; } = 10;
+    public int JwksRefreshFailureBackoffSeconds { get; set; } = 15;
+    public int JwksRefreshMaxBackoffSeconds { get; set; } = 300;
+    public int JwksRequestTimeoutSeconds { get; set; } = 5;
+    
     // Claim names for identity resolution (defaults follow JWT standards)
     // 'tid' = tenant identifier (common in multi-tenant JWTs)
     // 'sub' = subject (standard JWT claim for user ID, RFC 7519)
@@ -31,6 +37,7 @@ public sealed class AuthOptions
     // Configurable header names for fallback (when AllowHeaderFallback=true)
     public string[] HeaderTenantKeys { get; set; } = new[] { "X-Tenant-Id" };
     public string[] HeaderUserKeys { get; set; } = new[] { "X-User-Id" };
+    [Obsolete("Header roles are ignored. Roles must come from JWT claims only.")]
     public string[] HeaderRolesKeys { get; set; } = new[] { "X-Roles" };
     
     public int ClockSkewSeconds { get; set; } = 300;

@@ -20,12 +20,12 @@ public sealed class BasicJsonSchemaValidator : IJsonSchemaValidator
     {
         if (string.IsNullOrWhiteSpace(schemaJson))
         {
-            return new JsonSchemaValidationResult(false, "Schema is empty.");
+            return new JsonSchemaValidationResult(false, Array.Empty<string>(), "Schema is empty.");
         }
 
         if (string.IsNullOrWhiteSpace(instanceJson))
         {
-            return new JsonSchemaValidationResult(false, "Arguments JSON is empty.");
+            return new JsonSchemaValidationResult(false, Array.Empty<string>(), "Arguments JSON is empty.");
         }
 
         // Parse schema (with caching)
@@ -37,7 +37,7 @@ public sealed class BasicJsonSchemaValidator : IJsonSchemaValidator
         }
         catch (Exception ex)
         {
-            return new JsonSchemaValidationResult(false, $"Schema JSON invalid: {ex.Message}");
+            return new JsonSchemaValidationResult(false, Array.Empty<string>(), $"Schema JSON invalid: {ex.Message}");
         }
 
         // Parse instance
@@ -48,30 +48,28 @@ public sealed class BasicJsonSchemaValidator : IJsonSchemaValidator
         }
         catch (JsonException ex)
         {
-            return new JsonSchemaValidationResult(false, $"Arguments JSON invalid: {ex.Message}");
+            return new JsonSchemaValidationResult(false, Array.Empty<string>(), $"Arguments JSON invalid: {ex.Message}");
         }
 
         if (instance is null)
         {
-            return new JsonSchemaValidationResult(false, "Arguments JSON is null.");
+            return new JsonSchemaValidationResult(false, Array.Empty<string>(), "Arguments JSON is null.");
         }
 
         // Evaluate schema
         var result = schema.Evaluate(instance, _evaluationOptions);
         if (result.IsValid)
         {
-            return new JsonSchemaValidationResult(true, null);
+            return new JsonSchemaValidationResult(true, Array.Empty<string>(), null);
         }
 
         // Collect errors
         var errors = new List<string>();
         CollectErrors(result, errors);
-
-        var errorMessage = errors.Count > 0
-            ? string.Join("; ", errors)
-            : "Schema validation failed.";
-
-        return new JsonSchemaValidationResult(false, errorMessage);
+        return new JsonSchemaValidationResult(
+            false,
+            errors,
+            "Arguments JSON failed schema validation.");
     }
 
     private static void CollectErrors(EvaluationResults results, List<string> errors)
@@ -79,10 +77,11 @@ public sealed class BasicJsonSchemaValidator : IJsonSchemaValidator
         // Check if this result has errors
         if (!results.IsValid && results.Errors != null && results.Errors.Count > 0)
         {
-            var path = results.InstanceLocation?.ToString() ?? "/";
+            var path = NormalizePath(results.InstanceLocation?.ToString());
             foreach (var kvp in results.Errors)
             {
-                errors.Add($"{path}: {kvp.Key} - {kvp.Value}");
+                var message = kvp.Value?.ToString() ?? kvp.Key;
+                errors.Add($"{path}: {message}");
             }
         }
 
@@ -100,5 +99,15 @@ public sealed class BasicJsonSchemaValidator : IJsonSchemaValidator
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(bytes);
+    }
+
+    private static string NormalizePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "/";
+        }
+
+        return path.StartsWith('/') ? path : "/" + path;
     }
 }

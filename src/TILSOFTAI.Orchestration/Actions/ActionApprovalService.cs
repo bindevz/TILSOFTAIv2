@@ -82,9 +82,11 @@ public sealed class ActionApprovalService
             var validation = _schemaValidator.Validate(catalogEntry.JsonSchema, argsJson);
             if (!validation.IsValid)
             {
-                var errorDetail = string.IsNullOrWhiteSpace(validation.Error)
-                    ? "Arguments do not match the required schema."
-                    : validation.Error;
+                var errorDetail = validation.Errors.Count > 0
+                    ? string.Join("; ", validation.Errors)
+                    : string.IsNullOrWhiteSpace(validation.Summary)
+                        ? "Arguments do not match the required schema."
+                        : validation.Summary;
                 throw new ArgumentException($"Schema validation failed: {errorDetail}");
             }
         }
@@ -167,9 +169,11 @@ public sealed class ActionApprovalService
             var validation = _schemaValidator.Validate(catalogEntry.JsonSchema, request.ArgsJson);
             if (!validation.IsValid)
             {
-                var errorDetail = string.IsNullOrWhiteSpace(validation.Error)
-                    ? "Arguments no longer match the current schema."
-                    : validation.Error;
+                var errorDetail = validation.Errors.Count > 0
+                    ? string.Join("; ", validation.Errors)
+                    : string.IsNullOrWhiteSpace(validation.Summary)
+                        ? "Arguments no longer match the current schema."
+                        : validation.Summary;
                 throw new ArgumentException($"Schema validation failed at execution time: {errorDetail}");
             }
         }

@@ -20,9 +20,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\TILSOFTAI.Api\TILSOFTAI.Api.csproj" />
     <ProjectReference Include="..\..\src\TILSOFTAI.Infrastructure\TILSOFTAI.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\TILSOFTAI.Modules.Model\TILSOFTAI.Modules.Model.csproj" />
     <ProjectReference Include="..\..\src\TILSOFTAI.Orchestration\TILSOFTAI.Orchestration.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
 </Project>

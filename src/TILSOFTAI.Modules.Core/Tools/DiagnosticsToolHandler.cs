@@ -38,7 +38,7 @@ public sealed class DiagnosticsToolHandler : IToolHandler
         var schemaValidation = _schemaValidator.Validate(tool.JsonSchema, argumentsJson);
         if (!schemaValidation.IsValid)
         {
-            throw new InvalidOperationException(schemaValidation.Error ?? "Diagnostics arguments failed schema validation.");
+            throw new InvalidOperationException(schemaValidation.Summary ?? "Diagnostics arguments failed schema validation.");
         }
 
         using var doc = JsonDocument.Parse(argumentsJson);

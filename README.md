@@ -211,6 +211,75 @@ Contract tests enforce:
 
 ---
 
+## Configuration & Secrets
+
+### Overview
+
+The project uses ASP.NET Core's layered configuration system. **Never commit real secrets to the repository.**
+
+**Configuration sources (in order of precedence)**:
+1. `appsettings.json` - **Non-secret defaults only** (committed to repo)
+2. `appsettings.Local.json` - **Local override file** (gitignored, optional)
+3. Environment variables - **Production secret injection** (recommended for deployments)
+4. Command-line arguments
+
+### Local Development Secrets
+
+For local development, you have two options:
+
+#### Option 1: Local Override File (Recommended for Development)
+
+Create `src/TILSOFTAI.Api/appsettings.Local.json` and add your secrets:
+
+```json
+{
+  "Sql": {
+    "ConnectionString": "Server=localhost;Database=TILSOFTAI;Integrated Security=true;TrustServerCertificate=True;"
+  },
+  "Auth": {
+    "JwksUrl": "https://your-auth-server/.well-known/jwks.json"
+  },
+  "Llm": {
+    "Provider": "OpenAiCompatible",
+    "Endpoint": "https://api.openai.com/v1/chat/completions",
+    "ApiKey": "sk-your-actual-api-key-here"
+  },
+  "Redis": {
+    "Enabled": true,
+    "ConnectionString": "localhost:6379"
+  }
+}
+```
+
+This file is **automatically ignored by git** and will override values from `appsettings.json`.
+
+#### Option 2: Environment Variables (Recommended for Production)
+
+Use ASP.NET Core's environment variable mapping with double-underscore (`__`) as the hierarchy separator:
+
+**Examples**:
+```bash
+# Windows (PowerShell)
+$env:Sql__ConnectionString = "Server=prod-sql;Database=TILSOFTAI;..."
+$env:Auth__JwksUrl = "https://auth.company.com/.well-known/jwks.json"
+$env:Llm__ApiKey = "sk-prod-key"
+$env:Redis__ConnectionString = "redis-prod:6379"
+
+# Linux/macOS (Bash)
+export Sql__ConnectionString="Server=prod-sql;Database=TILSOFTAI;..."
+export Auth__JwksUrl="https://auth.company.com/.well-known/jwks.json"
+export Llm__ApiKey="sk-prod-key"
+export Redis__ConnectionString="redis-prod:6379"
+```
+
+**Docker/Kubernetes**: Pass environment variables via container orchestration (`-e` flags, ConfigMaps, Secrets).
+
+### Sample Configuration
+
+A sample configuration file with placeholders is available at `src/TILSOFTAI.Api/appsettings.Sample.json`. Use this as a reference when creating your local override file.
+
+---
+
 ## Configuration
 
 All settings are centralized in `appsettings*.json` and bound to Options classes.
@@ -224,7 +293,7 @@ Common sections:
 - `Localization` (DefaultLanguage, SupportedLanguages)
 - `Streaming` (ChannelCapacity, DropDeltaWhenFull)
 
-> Security: never log API keys. Ensure secrets are stored outside repo in production.
+> **Security**: Never commit API keys, connection strings with passwords, or other secrets to the repository. Use `appsettings.Local.json` for local development or environment variables for production deployments.
 
 ---
 

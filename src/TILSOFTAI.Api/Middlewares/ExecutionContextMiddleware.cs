@@ -71,7 +71,7 @@ public sealed class ExecutionContextMiddleware : IMiddleware
         {
             TenantId = tenantId?.Trim() ?? string.Empty,
             UserId = userId?.Trim() ?? string.Empty,
-            Roles = identity.Roles ?? Array.Empty<string>(),
+            Roles = NormalizeRoles(identity.Roles),
             CorrelationId = identity.CorrelationId,
             ConversationId = identity.ConversationId,
             RequestId = identity.RequestId,
@@ -82,5 +82,45 @@ public sealed class ExecutionContextMiddleware : IMiddleware
         _accessor.Set(executionContext);
 
         await next(context);
+    }
+
+    private static string[] NormalizeRoles(string[]? roles)
+    {
+        if (roles is null || roles.Length == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var normalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var role in roles)
+        {
+            if (string.IsNullOrWhiteSpace(role))
+            {
+                continue;
+            }
+
+            var trimmed = role.Trim();
+            if (trimmed.Length == 0 || ContainsSuspiciousToken(trimmed))
+            {
+                continue;
+            }
+
+            normalized.Add(trimmed);
+        }
+
+        return normalized.ToArray();
+    }
+
+    private static bool ContainsSuspiciousToken(string role)
+    {
+        foreach (var ch in role)
+        {
+            if (char.IsWhiteSpace(ch) || char.IsControl(ch))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -6,6 +6,7 @@ using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using TILSOFTAI.Api.Auth;
+using TILSOFTAI.Api.Health;
 using TILSOFTAI.Api.Middlewares;
 using TILSOFTAI.Api.Streaming;
 using TILSOFTAI.Api.Tools;
@@ -66,6 +67,14 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<ISensitivityClassifier, BasicSensitivityClassifier>();
         services.AddSingleton<ISqlErrorLogWriter, SqlErrorLogWriter>();
         services.AddSingleton<ChatStreamEnvelopeFactory>();
+        services.AddHttpClient("jwks", (sp, client) =>
+        {
+            var options = sp.GetRequiredService<IOptions<AuthOptions>>().Value;
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.JwksRequestTimeoutSeconds));
+        });
+        services.AddSingleton<JwtSigningKeyProvider>();
+        services.AddSingleton<IJwtSigningKeyProvider>(sp => sp.GetRequiredService<JwtSigningKeyProvider>());
+        services.AddHostedService<JwtSigningKeyRefreshHostedService>();
 
         services.AddOrchestrationEngine();
         services.AddSingleton<IToolRegistry, ToolRegistry>();
@@ -167,7 +176,9 @@ public static class AddTilsoftAiExtensions
 
         services.AddControllers();
         services.AddSignalR();
-        services.AddHealthChecks();
+        services.AddHealthChecks()
+            .AddCheck<SqlHealthCheck>("sql", tags: new[] { "ready" })
+            .AddCheck<RedisHealthCheck>("redis", tags: new[] { "ready" });
 
         return services;
     }
@@ -195,6 +206,11 @@ public static class AddTilsoftAiExtensions
             .Validate(options => !string.IsNullOrWhiteSpace(options.TenantClaimName), "Auth:TenantClaimName is required.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.UserIdClaimName), "Auth:UserIdClaimName is required.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.TrustedGatewayClaimName), "Auth:TrustedGatewayClaimName is required.")
+            .Validate(options => options.JwksRefreshIntervalMinutes > 0, "Auth:JwksRefreshIntervalMinutes must be > 0.")
+            .Validate(options => options.JwksRefreshFailureBackoffSeconds > 0, "Auth:JwksRefreshFailureBackoffSeconds must be > 0.")
+            .Validate(options => options.JwksRefreshMaxBackoffSeconds >= options.JwksRefreshFailureBackoffSeconds,
+                "Auth:JwksRefreshMaxBackoffSeconds must be >= Auth:JwksRefreshFailureBackoffSeconds.")
+            .Validate(options => options.JwksRequestTimeoutSeconds > 0, "Auth:JwksRequestTimeoutSeconds must be > 0.")
             .ValidateOnStart();
 
         services.AddOptions<ChatOptions>()
@@ -203,6 +219,8 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.MaxTokens > 0, "Chat:MaxTokens must be > 0.")
             .Validate(options => options.MaxToolCallsPerRequest > 0, "Chat:MaxToolCallsPerRequest must be > 0.")
             .Validate(options => options.MaxRecursiveDepth > 0, "Chat:MaxRecursiveDepth must be > 0.")
+            .Validate(options => options.MaxInputChars > 0, "Chat:MaxInputChars must be > 0.")
+            .Validate(options => options.MaxRequestBytes > 0, "Chat:MaxRequestBytes must be > 0.")
             .ValidateOnStart();
 
         services.AddOptions<LocalizationOptions>()

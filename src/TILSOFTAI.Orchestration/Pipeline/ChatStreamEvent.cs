@@ -10,4 +10,5 @@ public sealed record ChatStreamEvent(string Type, object? Payload)
     public static ChatStreamEvent ToolResult(ToolExecutionRecord record) => new("tool_result", record);
     public static ChatStreamEvent Final(string content) => new("final", content);
     public static ChatStreamEvent Error(string error) => new("error", error);
+    public static ChatStreamEvent Error(object? error) => new("error", error);
 }

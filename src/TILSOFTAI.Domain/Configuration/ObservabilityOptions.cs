@@ -8,4 +8,7 @@ public sealed class ObservabilityOptions
     public bool RedactLogs { get; set; } = true;
     public string RedactionMode { get; set; } = "basic";
     public int RetentionDays { get; set; } = 30;
+    public bool PurgeEnabled { get; set; } = false;
+    public int PurgeRunHourUtc { get; set; } = 2;
+    public int PurgeBatchSize { get; set; } = 5000;
 }

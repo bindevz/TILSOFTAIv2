@@ -10,6 +10,7 @@ namespace TILSOFTAI.Infrastructure.Observability;
 /// <summary>
 /// Background hosted service that purges old observability data daily.
 /// Calls dbo.app_observability_purge based on ObservabilityOptions.RetentionDays.
+/// Only runs if ObservabilityOptions.PurgeEnabled is true.
 /// </summary>
 public sealed class ObservabilityPurgeHostedService : IHostedService, IDisposable
 {
@@ -30,19 +31,55 @@ public sealed class ObservabilityPurgeHostedService : IHostedService, IDisposabl
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Observability purge service starting. Purge will run daily at startup+1min, then every 24 hours.");
+        var purgeEnabled = _observabilityOptions.Value.PurgeEnabled;
         
-        // Run once on startup after 1 minute, then every 24 hours
-        _timer = new Timer(ExecutePurge, null, TimeSpan.FromMinutes(1), TimeSpan.FromHours(24));
+        if (!purgeEnabled)
+        {
+            _logger.LogInformation("Observability purge service disabled. Set Observability:PurgeEnabled=true to enable.");
+            return Task.CompletedTask;
+        }
+
+        var purgeHour = _observabilityOptions.Value.PurgeRunHourUtc;
+        _logger.LogInformation(
+            "Observability purge service starting. Purge will run daily at {PurgeHour}:00 UTC.",
+            purgeHour);
+        
+        // Calculate time until next purge
+        var now = DateTime.UtcNow;
+        var nextRun = new DateTime(now.Year, now.Month, now.Day, purgeHour, 0, 0, DateTimeKind.Utc);
+        
+        if (nextRun <= now)
+        {
+            // If the time has already passed today, schedule for tomorrow
+            nextRun = nextRun.AddDays(1);
+        }
+        
+        var initialDelay = nextRun - now;
+        var period = TimeSpan.FromHours(24);
+        
+        _logger.LogInformation(
+            "First purge scheduled for {NextRun:yyyy-MM-dd HH:mm:ss} UTC (in {Hours}h {Minutes}m)",
+            nextRun, (int)initialDelay.TotalHours, initialDelay.Minutes);
+        
+        _timer = new Timer(ExecutePurge, null, initialDelay, period);
         
         return Task.CompletedTask;
     }
 
     private async void ExecutePurge(object? state)
     {
+        if (!_observabilityOptions.Value.PurgeEnabled)
+        {
+            _logger.LogWarning("Purge triggered but PurgeEnabled is false. Skipping.");
+            return;
+        }
+
         var retentionDays = _observabilityOptions.Value.RetentionDays;
+        var batchSize = _observabilityOptions.Value.PurgeBatchSize;
         
-        _logger.LogInformation("Starting observability purge. Retention: {RetentionDays} days", retentionDays);
+        _logger.LogInformation(
+            "Starting observability purge. Retention: {RetentionDays} days, BatchSize: {BatchSize}",
+            retentionDays, batchSize);
         
         try
         {
@@ -55,8 +92,9 @@ public sealed class ObservabilityPurgeHostedService : IHostedService, IDisposabl
                 CommandTimeout = 300 // 5 minutes for large purges
             };
             
+            command.Parameters.AddWithValue("@RetentionDays", retentionDays);
+            command.Parameters.AddWithValue("@BatchSize", batchSize);
             command.Parameters.AddWithValue("@TenantId", DBNull.Value); // Purge all tenants
-            command.Parameters.AddWithValue("@OlderThanDays", retentionDays);
             
             await using var reader = await command.ExecuteReaderAsync();
             

@@ -22,6 +22,7 @@ public sealed class ChatController : ControllerBase
     private readonly ILogger<ChatController> _logger;
     private readonly ChatStreamEnvelopeFactory _envelopeFactory;
     private readonly IOptions<StreamingOptions> _streamingOptions;
+    private readonly IOptions<ChatOptions> _chatOptions;
     private readonly ISensitivityClassifier _sensitivityClassifier;
 
     public ChatController(
@@ -30,6 +31,7 @@ public sealed class ChatController : ControllerBase
         ILogger<ChatController> logger,
         ChatStreamEnvelopeFactory envelopeFactory,
         IOptions<StreamingOptions> streamingOptions,
+        IOptions<ChatOptions> chatOptions,
         ISensitivityClassifier sensitivityClassifier)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
@@ -37,6 +39,7 @@ public sealed class ChatController : ControllerBase
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _envelopeFactory = envelopeFactory ?? throw new ArgumentNullException(nameof(envelopeFactory));
         _streamingOptions = streamingOptions ?? throw new ArgumentNullException(nameof(streamingOptions));
+        _chatOptions = chatOptions ?? throw new ArgumentNullException(nameof(chatOptions));
         _sensitivityClassifier = sensitivityClassifier ?? throw new ArgumentNullException(nameof(sensitivityClassifier));
     }
 
@@ -47,6 +50,15 @@ public sealed class ChatController : ControllerBase
         
         // Compute sensitivity server-side (ignore client value)
         var input = request?.Input ?? string.Empty;
+        
+        // Enforce input size limit
+        if (!string.IsNullOrEmpty(input) && input.Length > _chatOptions.Value.MaxInputChars)
+        {
+            throw new TilsoftApiException(
+                ErrorCode.InvalidArgument,
+                StatusCodes.Status400BadRequest,
+                detail: new { maxInputChars = _chatOptions.Value.MaxInputChars });
+        }
         var sensitivityResult = _sensitivityClassifier.Classify(input);
         
         var chatRequest = new ChatRequest
@@ -61,10 +73,11 @@ public sealed class ChatController : ControllerBase
         
         if (!result.Success)
         {
+            var code = string.IsNullOrWhiteSpace(result.Code) ? ErrorCode.ChatFailed : result.Code;
             throw new TilsoftApiException(
-                ErrorCode.ChatFailed,
+                code,
                 StatusCodes.Status400BadRequest,
-                detail: result.Error);
+                detail: result.Detail ?? result.Error);
         }
         
         var response = new ChatApiResponse
@@ -92,6 +105,15 @@ public sealed class ChatController : ControllerBase
 
         // Compute sensitivity server-side (ignore client value)
         var input = request?.Input ?? string.Empty;
+        
+        // Enforce input size limit
+        if (!string.IsNullOrEmpty(input) && input.Length > _chatOptions.Value.MaxInputChars)
+        {
+            throw new TilsoftApiException(
+                ErrorCode.InvalidArgument,
+                StatusCodes.Status400BadRequest,
+                detail: new { maxInputChars = _chatOptions.Value.MaxInputChars });
+        }
         var sensitivityResult = _sensitivityClassifier.Classify(input);
 
         var chatRequest = new ChatRequest

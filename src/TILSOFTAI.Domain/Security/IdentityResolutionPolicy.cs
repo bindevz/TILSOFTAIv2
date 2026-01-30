@@ -14,7 +14,6 @@ public sealed class IdentityResolutionPolicy
     private const string LanguageHeader = "X-Lang";
     private const string AcceptLanguageHeader = "Accept-Language";
 
-    private static readonly string[] DefaultRoleClaimTypes = { "roles", "role" };
     private readonly LocalizationOptions _localizationOptions;
 
     public IdentityResolutionPolicy(IOptions<LocalizationOptions> localizationOptions)
@@ -38,7 +37,7 @@ public sealed class IdentityResolutionPolicy
         }
 
         var allowHeaderFallback = IsHeaderFallbackAllowed(context.User, authOptions, environment);
-        return ResolveCore(context, authOptions, allowHeaderFallback, includeHeaderRoles: allowHeaderFallback);
+        return ResolveCore(context, authOptions, allowHeaderFallback);
     }
 
     public IdentityResolutionResult ResolveForError(HttpContext context, AuthOptions authOptions, IWebHostEnvironment environment)
@@ -57,14 +56,13 @@ public sealed class IdentityResolutionPolicy
         }
 
         // Never trust header-based tenant/user for error handling.
-        return ResolveCore(context, authOptions, allowHeaderFallback: false, includeHeaderRoles: false);
+        return ResolveCore(context, authOptions, allowHeaderFallback: false);
     }
 
     private IdentityResolutionResult ResolveCore(
         HttpContext context,
         AuthOptions authOptions,
-        bool allowHeaderFallback,
-        bool includeHeaderRoles)
+        bool allowHeaderFallback)
     {
         var correlationId = ResolveCorrelationId(context);
         var conversationId = ResolveConversationId(context, correlationId);
@@ -88,11 +86,7 @@ public sealed class IdentityResolutionPolicy
             ? userClaim
             : (allowHeaderFallback ? headerUser : null);
 
-        var headerRoles = includeHeaderRoles
-            ? GetHeaderValues(context, authOptions.HeaderRolesKeys)
-            : Array.Empty<string>();
-
-        var roles = ResolveRoles(context.User, authOptions, headerRoles);
+        var roles = ResolveRoles(context.User, authOptions);
 
         return new IdentityResolutionResult
         {
@@ -164,26 +158,13 @@ public sealed class IdentityResolutionPolicy
         return string.IsNullOrWhiteSpace(traceId) ? correlationId : traceId;
     }
 
-    private static string[] ResolveRoles(ClaimsPrincipal principal, AuthOptions authOptions, IEnumerable<string> headerRoles)
+    private static string[] ResolveRoles(ClaimsPrincipal principal, AuthOptions authOptions)
     {
         var roleSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var claimTypes = new List<string>();
         if (!string.IsNullOrWhiteSpace(authOptions.RoleClaimName))
         {
-            claimTypes.Add(authOptions.RoleClaimName);
-        }
-        claimTypes.AddRange(DefaultRoleClaimTypes);
-        claimTypes.Add(ClaimTypes.Role);
-
-        foreach (var role in GetRolesFromClaims(principal, claimTypes))
-        {
-            AddRole(roleSet, role);
-        }
-
-        foreach (var headerValue in headerRoles)
-        {
-            foreach (var role in SplitRoles(headerValue))
+            foreach (var role in GetRolesFromClaims(principal, authOptions.RoleClaimName))
             {
                 AddRole(roleSet, role);
             }
@@ -192,20 +173,19 @@ public sealed class IdentityResolutionPolicy
         return roleSet.ToArray();
     }
 
-    private static IEnumerable<string> GetRolesFromClaims(ClaimsPrincipal principal, IEnumerable<string> claimTypes)
+    private static IEnumerable<string> GetRolesFromClaims(ClaimsPrincipal principal, string claimType)
     {
         if (principal is null)
         {
             return Array.Empty<string>();
         }
 
-        var types = claimTypes
-            .Where(type => !string.IsNullOrWhiteSpace(type))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        if (string.IsNullOrWhiteSpace(claimType))
+        {
+            return Array.Empty<string>();
+        }
 
-        return types
-            .SelectMany(type => principal.FindAll(type))
+        return principal.FindAll(claimType)
             .SelectMany(claim => SplitRoles(claim.Value));
     }
 
@@ -253,26 +233,6 @@ public sealed class IdentityResolutionPolicy
         }
 
         return null;
-    }
-
-    private static string[] GetHeaderValues(HttpContext context, string[]? headerKeys)
-    {
-        if (headerKeys is null || headerKeys.Length == 0)
-        {
-            return Array.Empty<string>();
-        }
-
-        var values = new List<string>();
-        foreach (var key in headerKeys)
-        {
-            var value = GetHeader(context, key);
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                values.Add(value.Trim());
-            }
-        }
-
-        return values.ToArray();
     }
 
     private static bool IsMismatch(string? claimValue, string? headerValue)

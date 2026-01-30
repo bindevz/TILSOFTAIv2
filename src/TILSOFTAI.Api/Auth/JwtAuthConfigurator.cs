@@ -1,8 +1,7 @@
-using System.Collections.Concurrent;
-using System.Net.Http.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using TILSOFTAI.Domain.Configuration;
 
@@ -16,7 +15,7 @@ public static class JwtAuthConfigurator
     {
         var options = authOptions.Value;
 
-        return services
+        var builder = services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(jwtOptions =>
             {
@@ -31,40 +30,23 @@ public static class JwtAuthConfigurator
                     ClockSkew = TimeSpan.FromSeconds(options.ClockSkewSeconds),
                     RoleClaimType = options.RoleClaimName
                 };
+            });
 
-                jwtOptions.TokenValidationParameters.IssuerSigningKeyResolver = (_, _, _, _) =>
+        services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+            .Configure<IJwtSigningKeyProvider, ILoggerFactory>((jwtOptions, keyProvider, loggerFactory) =>
+            {
+                jwtOptions.TokenValidationParameters ??= new TokenValidationParameters();
+                jwtOptions.TokenValidationParameters.IssuerSigningKeyResolver = (_, _, _, _) => keyProvider.GetKeys();
+
+                jwtOptions.Events ??= new JwtBearerEvents();
+                jwtOptions.Events.OnAuthenticationFailed = context =>
                 {
-                    if (string.IsNullOrWhiteSpace(options.JwksUrl))
-                    {
-                        return Array.Empty<SecurityKey>();
-                    }
-
-                    var jwks = JwksCache.GetAsync(options.JwksUrl).GetAwaiter().GetResult();
-                    return jwks?.Keys?.Cast<SecurityKey>() ?? Array.Empty<SecurityKey>();
+                    var logger = loggerFactory.CreateLogger("JwtAuthentication");
+                    logger.LogWarning(context.Exception, "JWT authentication failed.");
+                    return Task.CompletedTask;
                 };
             });
-    }
 
-    private static class JwksCache
-    {
-        private static readonly ConcurrentDictionary<string, (DateTimeOffset fetchedAt, JsonWebKeySet jwks)> Cache = new();
-        private static readonly HttpClient HttpClient = new();
-        private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(10);
-
-        public static async Task<JsonWebKeySet?> GetAsync(string jwksUrl)
-        {
-            if (Cache.TryGetValue(jwksUrl, out var entry) && DateTimeOffset.UtcNow - entry.fetchedAt < Ttl)
-            {
-                return entry.jwks;
-            }
-
-            var jwks = await HttpClient.GetFromJsonAsync<JsonWebKeySet>(jwksUrl);
-            if (jwks is not null)
-            {
-                Cache[jwksUrl] = (DateTimeOffset.UtcNow, jwks);
-            }
-
-            return jwks;
-        }
+        return builder;
     }
 }

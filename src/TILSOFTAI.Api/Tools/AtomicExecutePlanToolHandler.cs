@@ -27,7 +27,7 @@ public sealed class AtomicExecutePlanToolHandler : IToolHandler
         var schemaValidation = _schemaValidator.Validate(tool.JsonSchema, argumentsJson);
         if (!schemaValidation.IsValid)
         {
-            throw new InvalidOperationException(schemaValidation.Error ?? "Atomic execute plan arguments failed schema validation.");
+            throw new InvalidOperationException(schemaValidation.Summary ?? "Atomic execute plan arguments failed schema validation.");
         }
 
         using var doc = JsonDocument.Parse(argumentsJson);
