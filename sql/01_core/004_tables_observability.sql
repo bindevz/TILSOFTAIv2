@@ -58,7 +58,7 @@ BEGIN
         ConversationId nvarchar(64) NOT NULL,
         MessageId nvarchar(64) NOT NULL,
         Role nvarchar(20) NOT NULL,
-        Content nvarchar(max) NOT NULL,
+        Content nvarchar(max) NULL,
         ToolName nvarchar(200) NULL,
         CorrelationId nvarchar(64) NULL,
         TraceId nvarchar(64) NULL,
@@ -66,6 +66,9 @@ BEGIN
         UserId nvarchar(50) NULL,
         Language nvarchar(10) NULL,
         IsRedacted bit NOT NULL CONSTRAINT DF_ConversationMessage_IsRedacted DEFAULT 0,
+        PayloadHash nvarchar(64) NULL,
+        PayloadLength int NULL,
+        IsPayloadOmitted bit NOT NULL CONSTRAINT DF_ConversationMessage_IsPayloadOmitted DEFAULT 0,
         CreatedAtUtc datetime2(3) NOT NULL CONSTRAINT DF_ConversationMessage_CreatedAtUtc DEFAULT sysutcdatetime(),
         CONSTRAINT PK_ConversationMessage PRIMARY KEY (TenantId, ConversationId, MessageId)
     );
@@ -106,6 +109,30 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.ConversationMessage') AND name = 'IsRedacted')
 BEGIN
     ALTER TABLE dbo.ConversationMessage ADD IsRedacted bit NOT NULL CONSTRAINT DF_ConversationMessage_IsRedacted DEFAULT 0;
+END;
+GO
+
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.ConversationMessage') AND name = 'Content' AND is_nullable = 0)
+BEGIN
+    ALTER TABLE dbo.ConversationMessage ALTER COLUMN Content nvarchar(max) NULL;
+END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.ConversationMessage') AND name = 'PayloadHash')
+BEGIN
+    ALTER TABLE dbo.ConversationMessage ADD PayloadHash nvarchar(64) NULL;
+END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.ConversationMessage') AND name = 'PayloadLength')
+BEGIN
+    ALTER TABLE dbo.ConversationMessage ADD PayloadLength int NULL;
+END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.ConversationMessage') AND name = 'IsPayloadOmitted')
+BEGIN
+    ALTER TABLE dbo.ConversationMessage ADD IsPayloadOmitted bit NOT NULL CONSTRAINT DF_ConversationMessage_IsPayloadOmitted DEFAULT 0;
 END;
 GO
 

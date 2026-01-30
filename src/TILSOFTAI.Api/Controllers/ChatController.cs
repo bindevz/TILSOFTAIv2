@@ -6,6 +6,7 @@ using TILSOFTAI.Api.Streaming;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Domain.Sensitivity;
 using TILSOFTAI.Orchestration;
 using TILSOFTAI.Orchestration.Pipeline;
 
@@ -21,51 +22,62 @@ public sealed class ChatController : ControllerBase
     private readonly ILogger<ChatController> _logger;
     private readonly ChatStreamEnvelopeFactory _envelopeFactory;
     private readonly IOptions<StreamingOptions> _streamingOptions;
+    private readonly ISensitivityClassifier _sensitivityClassifier;
 
     public ChatController(
         IOrchestrationEngine engine,
         IExecutionContextAccessor contextAccessor,
         ILogger<ChatController> logger,
         ChatStreamEnvelopeFactory envelopeFactory,
-        IOptions<StreamingOptions> streamingOptions)
+        IOptions<StreamingOptions> streamingOptions,
+        ISensitivityClassifier sensitivityClassifier)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(contextAccessor));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _envelopeFactory = envelopeFactory ?? throw new ArgumentNullException(nameof(envelopeFactory));
         _streamingOptions = streamingOptions ?? throw new ArgumentNullException(nameof(streamingOptions));
+        _sensitivityClassifier = sensitivityClassifier ?? throw new ArgumentNullException(nameof(sensitivityClassifier));
     }
 
     [HttpPost]
     public async Task<ActionResult<ChatApiResponse>> Post([FromBody] ChatApiRequest request, CancellationToken cancellationToken)
     {
         var context = _contextAccessor.Current;
+        
+        // Compute sensitivity server-side (ignore client value)
+        var input = request?.Input ?? string.Empty;
+        var sensitivityResult = _sensitivityClassifier.Classify(input);
+        
         var chatRequest = new ChatRequest
         {
-            Input = request?.Input ?? string.Empty,
+            Input = input,
             AllowCache = request?.AllowCache ?? true,
-            ContainsSensitive = request?.ContainsSensitive ?? false
+            ContainsSensitive = sensitivityResult.ContainsSensitive,
+            SensitivityReasons = sensitivityResult.Reasons
         };
 
         var result = await _engine.RunChatAsync(chatRequest, context, cancellationToken);
+        
+        if (!result.Success)
+        {
+            throw new TilsoftApiException(
+                ErrorCode.ChatFailed,
+                StatusCodes.Status400BadRequest,
+                detail: result.Error);
+        }
+        
         var response = new ChatApiResponse
         {
-            Success = result.Success,
-            Content = result.Success ? result.Content ?? string.Empty : string.Empty,
+            Success = true,
+            Content = result.Content ?? string.Empty,
             ConversationId = context.ConversationId,
             CorrelationId = context.CorrelationId,
             TraceId = context.TraceId,
-            Language = context.Language,
-            Error = result.Success
-                ? null
-                : new ErrorEnvelope
-                {
-                    Code = ErrorCode.ChatFailed,
-                    Message = result.Error ?? "Chat request failed."
-                }
+            Language = context.Language
         };
 
-        return result.Success ? Ok(response) : BadRequest(response);
+        return Ok(response);
     }
 
     [HttpPost("stream")]
@@ -78,11 +90,16 @@ public sealed class ChatController : ControllerBase
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, HttpContext.RequestAborted);
         var linkedToken = linkedCts.Token;
 
+        // Compute sensitivity server-side (ignore client value)
+        var input = request?.Input ?? string.Empty;
+        var sensitivityResult = _sensitivityClassifier.Classify(input);
+
         var chatRequest = new ChatRequest
         {
-            Input = request?.Input ?? string.Empty,
+            Input = input,
             AllowCache = request?.AllowCache ?? true,
-            ContainsSensitive = request?.ContainsSensitive ?? false
+            ContainsSensitive = sensitivityResult.ContainsSensitive,
+            SensitivityReasons = sensitivityResult.Reasons
         };
 
         try

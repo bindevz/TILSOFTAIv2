@@ -59,7 +59,10 @@ CREATE OR ALTER PROCEDURE dbo.app_conversationmessage_insert
     @RequestId nvarchar(64) = NULL,
     @UserId nvarchar(50) = NULL,
     @Language nvarchar(10) = NULL,
-    @IsRedacted bit = 0
+    @IsRedacted bit = 0,
+    @PayloadHash nvarchar(64) = NULL,
+    @PayloadLength int = NULL,
+    @IsPayloadOmitted bit = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -77,7 +80,10 @@ BEGIN
         RequestId,
         UserId,
         Language,
-        IsRedacted
+        IsRedacted,
+        PayloadHash,
+        PayloadLength,
+        IsPayloadOmitted
     )
     VALUES
     (
@@ -92,7 +98,10 @@ BEGIN
         @RequestId,
         @UserId,
         @Language,
-        @IsRedacted
+        @IsRedacted,
+        @PayloadHash,
+        @PayloadLength,
+        @IsPayloadOmitted
     );
 END;
 GO

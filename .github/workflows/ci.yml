@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Verify repo clean
+      shell: pwsh
+      run: ./tools/verify-repo-clean.ps1
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+    
+    - name: Test
+      run: dotnet test --no-build --configuration Release --verbosity normal
+    
+    - name: SQL Lint Check
+      shell: pwsh
+      run: |
+        Write-Host "Checking SQL files for common issues..."
+        $sqlFiles = Get-ChildItem -Path sql -Filter *.sql -Recurse -ErrorAction SilentlyContinue
+        $warningCount = 0
+        
+        foreach ($file in $sqlFiles) {
+          $content = Get-Content $file.FullName -Raw
+          
+          # Check for SELECT *
+          if ($content -match "SELECT \*") {
+            Write-Warning "Found SELECT * in $($file.Name) - consider explicit columns for production code"
+            $warningCount++
+          }
+          
+          # Check for missing SET NOCOUNT ON in procedures
+          if ($content -match "CREATE (OR ALTER )?PROCEDURE" -and $content -notmatch "SET NOCOUNT ON") {
+            Write-Warning "Missing SET NOCOUNT ON in procedure $($file.Name)"
+            $warningCount++
+          }
+        }
+        
+        Write-Host "SQL lint check complete. Found $warningCount potential issues."
+        if ($warningCount -gt 0) {
+          Write-Host "These are warnings only - build will continue."
+        }

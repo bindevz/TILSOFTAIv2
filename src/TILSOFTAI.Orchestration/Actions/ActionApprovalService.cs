@@ -3,7 +3,6 @@ using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Compaction;
 using TILSOFTAI.Orchestration.Conversations;
-using TILSOFTAI.Orchestration.Conversations;
 using TILSOFTAI.Orchestration.Tools;
 using TILSOFTAI.Orchestration.Sql;
 
@@ -17,6 +16,7 @@ public sealed class ActionApprovalService
     private readonly ToolResultCompactor _toolResultCompactor;
     private readonly IConversationStore _conversationStore;
     private readonly ChatOptions _chatOptions;
+    private readonly IJsonSchemaValidator _schemaValidator;
 
     public ActionApprovalService(
         IActionRequestStore requestStore,
@@ -24,7 +24,8 @@ public sealed class ActionApprovalService
         ISqlExecutor sqlExecutor,
         ToolResultCompactor toolResultCompactor,
         IConversationStore conversationStore,
-        IOptions<ChatOptions> chatOptions)
+        IOptions<ChatOptions> chatOptions,
+        IJsonSchemaValidator schemaValidator)
     {
         _requestStore = requestStore ?? throw new ArgumentNullException(nameof(requestStore));
         _toolHandler = toolHandler ?? throw new ArgumentNullException(nameof(toolHandler));
@@ -32,6 +33,7 @@ public sealed class ActionApprovalService
         _toolResultCompactor = toolResultCompactor ?? throw new ArgumentNullException(nameof(toolResultCompactor));
         _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
         _chatOptions = chatOptions?.Value ?? throw new ArgumentNullException(nameof(chatOptions));
+        _schemaValidator = schemaValidator ?? throw new ArgumentNullException(nameof(schemaValidator));
     }
 
     public async Task<ActionRequestRecord> CreateAsync(
@@ -58,6 +60,12 @@ public sealed class ActionApprovalService
             throw new InvalidOperationException($"Write action '{proposedSpName}' is not allowed or not found in the WriteActionCatalog.");
         }
 
+        // Check IsEnabled flag
+        if (!catalogEntry.IsEnabled)
+        {
+            throw new InvalidOperationException($"Write action '{proposedSpName}' is currently disabled.");
+        }
+
         // Validate Roles
         if (!string.IsNullOrWhiteSpace(catalogEntry.RequiredRoles))
         {
@@ -68,14 +76,29 @@ public sealed class ActionApprovalService
             }
         }
 
-        // Basic JSON Validation
-        try
+        // Validate JSON Schema
+        if (!string.IsNullOrWhiteSpace(catalogEntry.JsonSchema))
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(argsJson);
+            var validation = _schemaValidator.Validate(catalogEntry.JsonSchema, argsJson);
+            if (!validation.IsValid)
+            {
+                var errorDetail = string.IsNullOrWhiteSpace(validation.Error)
+                    ? "Arguments do not match the required schema."
+                    : validation.Error;
+                throw new ArgumentException($"Schema validation failed: {errorDetail}");
+            }
         }
-        catch (System.Text.Json.JsonException)
+        else
         {
-            throw new ArgumentException("Arguments must be valid JSON.");
+            // Fallback: Basic JSON parse validation if no schema defined
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(argsJson);
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                throw new ArgumentException($"Arguments must be valid JSON: {ex.Message}");
+            }
         }
 
         var request = new ActionRequestRecord
@@ -115,19 +138,39 @@ public sealed class ActionApprovalService
             throw new InvalidOperationException("Action request must be approved before execution.");
         }
 
-        // Re-validate Catalog and Roles at execution time
+        // Re-validate Catalog and Roles at execution time (defense-in-depth)
         var catalogEntry = await GetCatalogEntryAsync(context.TenantId, request.ProposedSpName, ct);
         if (catalogEntry == null)
         {
              throw new InvalidOperationException($"Write action '{request.ProposedSpName}' is no longer allowed.");
         }
 
+        // Re-check IsEnabled flag
+        if (!catalogEntry.IsEnabled)
+        {
+            throw new InvalidOperationException($"Write action '{request.ProposedSpName}' has been disabled.");
+        }
+
+        // Re-validate Roles
         if (!string.IsNullOrWhiteSpace(catalogEntry.RequiredRoles))
         {
             var required = catalogEntry.RequiredRoles.Split(',', StringSplitOptions.RemoveEmptyEntries);
             if (!required.Any(r => context.Roles.Contains(r.Trim(), StringComparer.OrdinalIgnoreCase)))
             {
                 throw new UnauthorizedAccessException($"User does not have required roles ({catalogEntry.RequiredRoles}) for execution.");
+            }
+        }
+
+        // Re-validate JSON Schema (catalog could have changed)
+        if (!string.IsNullOrWhiteSpace(catalogEntry.JsonSchema))
+        {
+            var validation = _schemaValidator.Validate(catalogEntry.JsonSchema, request.ArgsJson);
+            if (!validation.IsValid)
+            {
+                var errorDetail = string.IsNullOrWhiteSpace(validation.Error)
+                    ? "Arguments no longer match the current schema."
+                    : validation.Error;
+                throw new ArgumentException($"Schema validation failed at execution time: {errorDetail}");
             }
         }
 
@@ -150,7 +193,7 @@ public sealed class ActionApprovalService
             CompactedResult = compacted,
             Success = true,
             DurationMs = 0
-        }, ct);
+        }, RequestPolicy.Default, ct);
 
         return new ActionExecutionResult
         {
@@ -176,12 +219,18 @@ public sealed class ActionApprovalService
         
         return new CatalogEntry
         {
-            RequiredRoles = row.ContainsKey("RequiredRoles") ? row["RequiredRoles"]?.ToString() : null
+            ActionName = row.ContainsKey("ActionName") ? row["ActionName"]?.ToString() : null,
+            RequiredRoles = row.ContainsKey("RequiredRoles") ? row["RequiredRoles"]?.ToString() : null,
+            JsonSchema = row.ContainsKey("JsonSchema") ? row["JsonSchema"]?.ToString() : null,
+            IsEnabled = true // SQL SP already filters by IsEnabled=1
         };
     }
 
     private class CatalogEntry
     {
+        public string? ActionName { get; set; }
         public string? RequiredRoles { get; set; }
+        public string? JsonSchema { get; set; }
+        public bool IsEnabled { get; set; }
     }
 }

@@ -18,6 +18,7 @@ public sealed class SemanticCache : ISemanticCache
     private readonly CacheStampedeGuard _stampedeGuard;
     private readonly RedisOptions _redisOptions;
     private readonly SemanticCacheOptions _options;
+    private readonly SensitiveDataOptions _sensitiveDataOptions;
     private readonly SqlOptions _sqlOptions;
     private readonly ILogger<SemanticCache> _logger;
     private readonly TimeSpan _defaultTtl;
@@ -27,6 +28,7 @@ public sealed class SemanticCache : ISemanticCache
         CacheStampedeGuard stampedeGuard,
         IOptions<RedisOptions> redisOptions,
         IOptions<SemanticCacheOptions> options,
+        IOptions<SensitiveDataOptions> sensitiveDataOptions,
         IOptions<SqlOptions> sqlOptions,
         ILogger<SemanticCache> logger)
     {
@@ -34,6 +36,7 @@ public sealed class SemanticCache : ISemanticCache
         _stampedeGuard = stampedeGuard ?? throw new ArgumentNullException(nameof(stampedeGuard));
         _redisOptions = redisOptions?.Value ?? throw new ArgumentNullException(nameof(redisOptions));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _sensitiveDataOptions = sensitiveDataOptions?.Value ?? throw new ArgumentNullException(nameof(sensitiveDataOptions));
         _sqlOptions = sqlOptions?.Value ?? throw new ArgumentNullException(nameof(sqlOptions));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -149,6 +152,11 @@ public sealed class SemanticCache : ISemanticCache
     private bool CanCache(bool containsSensitive)
     {
         if (!Enabled)
+        {
+            return false;
+        }
+
+        if (containsSensitive && _sensitiveDataOptions.DisableCachingWhenSensitive)
         {
             return false;
         }

@@ -4,7 +4,9 @@ using Microsoft.Extensions.Options;
 using TILSOFTAI.Api.Contracts.OpenAi;
 using TILSOFTAI.Api.Streaming;
 using TILSOFTAI.Domain.Configuration;
+using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Domain.Sensitivity;
 using TILSOFTAI.Orchestration;
 using TILSOFTAI.Orchestration.Pipeline;
 
@@ -21,6 +23,7 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
     private readonly ILogger<OpenAiChatCompletionsController> _logger;
     private readonly ChatStreamEnvelopeFactory _envelopeFactory;
     private readonly IOptions<StreamingOptions> _streamingOptions;
+    private readonly ISensitivityClassifier _sensitivityClassifier;
 
     public OpenAiChatCompletionsController(
         IOrchestrationEngine engine,
@@ -28,7 +31,8 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
         IOptions<LlmOptions> llmOptions,
         ILogger<OpenAiChatCompletionsController> logger,
         ChatStreamEnvelopeFactory envelopeFactory,
-        IOptions<StreamingOptions> streamingOptions)
+        IOptions<StreamingOptions> streamingOptions,
+        ISensitivityClassifier sensitivityClassifier)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(contextAccessor));
@@ -36,6 +40,7 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _envelopeFactory = envelopeFactory ?? throw new ArgumentNullException(nameof(envelopeFactory));
         _streamingOptions = streamingOptions ?? throw new ArgumentNullException(nameof(streamingOptions));
+        _sensitivityClassifier = sensitivityClassifier ?? throw new ArgumentNullException(nameof(sensitivityClassifier));
     }
 
     [HttpPost]
@@ -61,11 +66,15 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
             var linkedToken = linkedCts.Token;
             var translator = new OpenAiStreamTranslator(id, created, model);
 
+            // Compute sensitivity server-side
+            var sensitivityResult = _sensitivityClassifier.Classify(joinedInput);
+
             var chatRequest = new ChatRequest
             {
                 Input = joinedInput,
                 AllowCache = true,
-                ContainsSensitive = false
+                ContainsSensitive = sensitivityResult.ContainsSensitive,
+                SensitivityReasons = sensitivityResult.Reasons
             };
 
             try
@@ -84,11 +93,8 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
                     {
                         if (isError)
                         {
-                            _logger.LogWarning("OpenAI stream error: {Error}", envelope.Payload);
-                            if (!Response.HasStarted)
-                            {
-                                throw new InvalidOperationException(envelope.Payload?.ToString() ?? "OpenAI stream error.");
-                            }
+                            _logger.LogWarning("OpenAI stream error.");
+                            await OpenAiSseWriter.WriteErrorAsync(Response, envelope.Payload ?? new { code = ErrorCode.ChatFailed }, linkedToken);
                         }
 
                         await OpenAiSseWriter.WriteDoneAsync(Response, linkedToken);
@@ -111,17 +117,24 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
             return new EmptyResult();
         }
 
+        // Compute sensitivity server-side
+        var sensitivityResultNonStream = _sensitivityClassifier.Classify(joinedInput);
+
         var chatRequestNonStream = new ChatRequest
         {
             Input = joinedInput,
             AllowCache = true,
-            ContainsSensitive = false
+            ContainsSensitive = sensitivityResultNonStream.ContainsSensitive,
+            SensitivityReasons = sensitivityResultNonStream.Reasons
         };
 
         var resultNonStream = await _engine.RunChatAsync(chatRequestNonStream, context, cancellationToken);
         if (!resultNonStream.Success)
         {
-            throw new InvalidOperationException(resultNonStream.Error ?? "Chat request failed.");
+            throw new TilsoftApiException(
+                ErrorCode.ChatFailed,
+                StatusCodes.Status400BadRequest,
+                detail: resultNonStream.Error);
         }
 
         var response = new OpenAiChatCompletionsResponse

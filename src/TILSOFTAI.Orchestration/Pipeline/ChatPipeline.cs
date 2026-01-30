@@ -8,7 +8,6 @@ using TILSOFTAI.Orchestration.Compaction;
 using TILSOFTAI.Orchestration.Conversations;
 using TILSOFTAI.Orchestration.Llm;
 using TILSOFTAI.Orchestration.Normalization;
-using TILSOFTAI.Orchestration.Observability;
 using TILSOFTAI.Orchestration.Policies;
 using TILSOFTAI.Orchestration.Prompting;
 using TILSOFTAI.Orchestration.Tools;
@@ -28,7 +27,6 @@ public sealed class ChatPipeline
     private readonly ISemanticCache _semanticCache;
     private readonly RecursionPolicy _recursionPolicy;
     private readonly ChatOptions _chatOptions;
-    private readonly ILogRedactor _logRedactor;
     private readonly ILogger<ChatPipeline> _logger;
 
     public ChatPipeline(
@@ -43,7 +41,6 @@ public sealed class ChatPipeline
         ISemanticCache semanticCache,
         RecursionPolicy recursionPolicy,
         IOptions<ChatOptions> chatOptions,
-        ILogRedactor logRedactor,
         ILogger<ChatPipeline> logger)
     {
         _normalizationService = normalizationService ?? throw new ArgumentNullException(nameof(normalizationService));
@@ -57,7 +54,6 @@ public sealed class ChatPipeline
         _semanticCache = semanticCache ?? throw new ArgumentNullException(nameof(semanticCache));
         _recursionPolicy = recursionPolicy ?? throw new ArgumentNullException(nameof(recursionPolicy));
         _chatOptions = chatOptions?.Value ?? throw new ArgumentNullException(nameof(chatOptions));
-        _logRedactor = logRedactor ?? throw new ArgumentNullException(nameof(logRedactor));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -76,7 +72,11 @@ public sealed class ChatPipeline
         }
 
         var userMessage = new ChatMessage(ChatRoles.User, normalized);
-        await _conversationStore.SaveUserMessageAsync(ctx, userMessage, ct);
+        var policy = request.RequestPolicy ?? new RequestPolicy
+        {
+            ContainsSensitive = request.ContainsSensitive
+        };
+        await _conversationStore.SaveUserMessageAsync(ctx, userMessage, policy, ct);
 
         var messages = new List<LlmMessage>
         {
@@ -86,11 +86,9 @@ public sealed class ChatPipeline
         var tools = await _toolCatalogResolver.GetResolvedToolsAsync(ct);
         var toolLookup = tools.ToDictionary(tool => tool.Name, StringComparer.OrdinalIgnoreCase);
 
-        // Compute sensitive flag server-side
-        var (_, sensitiveFound) = _logRedactor.RedactText(normalized);
-        var containsSensitive = sensitiveFound; 
+        var containsSensitive = policy.ContainsSensitive;
 
-        if (request.AllowCache && _semanticCache.Enabled)
+        if (request.AllowCache && _semanticCache.Enabled && !policy.ShouldBypassCache)
         {
             var cached = await _semanticCache.TryGetAnswerAsync(
                 ctx,
@@ -121,10 +119,10 @@ public sealed class ChatPipeline
             {
                 var content = response.Content ?? string.Empty;
                 var assistantMessage = new ChatMessage(ChatRoles.Assistant, content);
-                await _conversationStore.SaveAssistantMessageAsync(ctx, assistantMessage, ct);
+                await _conversationStore.SaveAssistantMessageAsync(ctx, assistantMessage, policy, ct);
                 request.StreamObserver?.Report(ChatStreamEvent.Final(content));
 
-                if (request.AllowCache && _semanticCache.Enabled)
+                if (request.AllowCache && _semanticCache.Enabled && !policy.ShouldBypassCache)
                 {
                     await _semanticCache.SetAnswerAsync(
                         ctx,
@@ -191,7 +189,7 @@ public sealed class ChatPipeline
                     DurationMs = stopwatch.ElapsedMilliseconds
                 };
 
-                await _conversationStore.SaveToolExecutionAsync(ctx, executionRecord, ct);
+                await _conversationStore.SaveToolExecutionAsync(ctx, executionRecord, policy, ct);
                 request.StreamObserver?.Report(ChatStreamEvent.ToolResult(executionRecord));
 
                 messages.Add(new LlmMessage(ChatRoles.Tool, compacted, tool.Name));

@@ -6,12 +6,12 @@ namespace TILSOFTAI.Infrastructure.Conversations;
 
 public sealed class NullConversationStore : IConversationStore
 {
-    public Task SaveUserMessageAsync(TilsoftExecutionContext context, ChatMessage message, CancellationToken cancellationToken = default)
+    public Task SaveUserMessageAsync(TilsoftExecutionContext context, ChatMessage message, RequestPolicy policy, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 
-    public Task SaveAssistantMessageAsync(TilsoftExecutionContext context, ChatMessage message, CancellationToken cancellationToken = default)
+    public Task SaveAssistantMessageAsync(TilsoftExecutionContext context, ChatMessage message, RequestPolicy policy, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 
-    public Task SaveToolExecutionAsync(TilsoftExecutionContext context, ToolExecutionRecord execution, CancellationToken cancellationToken = default)
+    public Task SaveToolExecutionAsync(TilsoftExecutionContext context, ToolExecutionRecord execution, RequestPolicy policy, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }

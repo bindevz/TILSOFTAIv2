@@ -2,6 +2,34 @@ namespace TILSOFTAI.Orchestration.Prompting;
 
 public sealed class ContextPackBudgeter
 {
+    public int EstimateTokens(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return 0;
+        }
+
+        var tokens = SplitTokens(text);
+        return tokens.Length;
+    }
+
+    public string TrimToTokens(string text, int maxTokens)
+    {
+        if (string.IsNullOrWhiteSpace(text) || maxTokens <= 0)
+        {
+            return string.Empty;
+        }
+
+        var tokens = SplitTokens(text);
+        if (tokens.Length <= maxTokens)
+        {
+            return text;
+        }
+
+        var trimmed = string.Join(' ', tokens.Take(maxTokens));
+        return $"{trimmed}...";
+    }
+
     public IReadOnlyList<KeyValuePair<string, string>> Budget(IReadOnlyDictionary<string, string> packs)
     {
         if (packs is null || packs.Count == 0)
@@ -31,5 +59,10 @@ public sealed class ContextPackBudgeter
         var header = $"## {key}{Environment.NewLine}";
         var body = value ?? string.Empty;
         return header.Length + body.Length + Environment.NewLine.Length;
+    }
+
+    private static string[] SplitTokens(string text)
+    {
+        return text.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
     }
 }

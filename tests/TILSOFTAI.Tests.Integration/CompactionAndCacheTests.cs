@@ -56,12 +56,19 @@ public sealed class CompactionAndCacheTests
             ConnectionString = "Server=.;Database=TILSOFTAI;Trusted_Connection=True;TrustServerCertificate=True;",
             CommandTimeoutSeconds = 30
         });
+        var sensitiveOptions = Options.Create(new SensitiveDataOptions
+        {
+            HandlingMode = SensitiveHandlingMode.Redact,
+            DisableCachingWhenSensitive = true,
+            DisableToolResultPersistenceWhenSensitive = true
+        });
         var memoryCache = new InMemoryRedisCacheProvider();
         var cache = new SemanticCache(
             memoryCache,
             new CacheStampedeGuard(),
             redisOptions,
             cacheOptions,
+            sensitiveOptions,
             sqlOptions,
             NullLogger<SemanticCache>.Instance);
 

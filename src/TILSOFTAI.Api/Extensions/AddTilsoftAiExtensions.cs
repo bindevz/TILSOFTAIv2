@@ -1,5 +1,10 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
+using OpenTelemetry;
+using OpenTelemetry.Context.Propagation;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using TILSOFTAI.Api.Auth;
 using TILSOFTAI.Api.Middlewares;
 using TILSOFTAI.Api.Streaming;
@@ -8,6 +13,8 @@ using TILSOFTAI.Domain.Caching;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Domain.Sensitivity;
+using TILSOFTAI.Domain.Security;
 using TILSOFTAI.Infrastructure.Actions;
 using TILSOFTAI.Infrastructure.Caching;
 using TILSOFTAI.Infrastructure.ExecutionContext;
@@ -19,6 +26,7 @@ using TILSOFTAI.Infrastructure.Atomic;
 using TILSOFTAI.Infrastructure.Llm;
 using TILSOFTAI.Infrastructure.Metadata;
 using TILSOFTAI.Infrastructure.Prompting;
+using TILSOFTAI.Infrastructure.Sensitivity;
 using TILSOFTAI.Infrastructure.Sql;
 using TILSOFTAI.Infrastructure.Tools;
 using TILSOFTAI.Orchestration;
@@ -47,12 +55,15 @@ public static class AddTilsoftAiExtensions
     public static IServiceCollection AddTilsoftAi(this IServiceCollection services, IConfiguration configuration)
     {
         RegisterOptions(services, configuration);
+        ConfigureOpenTelemetry(services, configuration);
 
         services.AddSingleton<ExecutionContextAccessor>();
         services.AddSingleton<IExecutionContextAccessor>(sp => sp.GetRequiredService<ExecutionContextAccessor>());
         services.AddTransient<ExecutionContextMiddleware>();
+        services.AddSingleton<IdentityResolutionPolicy>();
         services.AddSingleton<IErrorCatalog, InMemoryErrorCatalog>();
         services.AddSingleton<ILogRedactor, BasicLogRedactor>();
+        services.AddSingleton<ISensitivityClassifier, BasicSensitivityClassifier>();
         services.AddSingleton<ISqlErrorLogWriter, SqlErrorLogWriter>();
         services.AddSingleton<ChatStreamEnvelopeFactory>();
 
@@ -123,6 +134,7 @@ public static class AddTilsoftAiExtensions
 
         services.AddSingleton<IModuleLoader, ModuleLoader>();
         services.AddHostedService<ModuleLoaderHostedService>();
+        services.AddHostedService<ObservabilityPurgeHostedService>();
 
         ConfigureRedis(services, configuration);
         ConfigureAuthentication(services, configuration);
@@ -131,15 +143,18 @@ public static class AddTilsoftAiExtensions
         
         services.AddRateLimiter(options =>
         {
+            var rateLimitOpts = configuration.GetSection("RateLimit").Get<RateLimitOptions>() 
+                             ?? new RateLimitOptions();
+            
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
             {
                 var factory = new FixedWindowRateLimiterOptions
                 {
                     AutoReplenishment = true,
-                    PermitLimit = 100,
-                    QueueLimit = 2,
-                    Window = TimeSpan.FromMinutes(1)
+                    PermitLimit = rateLimitOpts.PermitLimit,
+                    QueueLimit = rateLimitOpts.QueueLimit,
+                    Window = TimeSpan.FromSeconds(rateLimitOpts.WindowSeconds)
                 };
                 
                 var partitionKey = httpContext.User.Identity?.Name 
@@ -179,6 +194,7 @@ public static class AddTilsoftAiExtensions
             .Validate(options => !string.IsNullOrWhiteSpace(options.JwksUrl), "Auth:JwksUrl is required.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.TenantClaimName), "Auth:TenantClaimName is required.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.UserIdClaimName), "Auth:UserIdClaimName is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.TrustedGatewayClaimName), "Auth:TrustedGatewayClaimName is required.")
             .ValidateOnStart();
 
         services.AddOptions<ChatOptions>()
@@ -210,6 +226,29 @@ public static class AddTilsoftAiExtensions
             .Bind(configuration.GetSection(ConfigurationSectionNames.Observability))
             .ValidateOnStart();
 
+        services.AddOptions<SensitiveDataOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.SensitiveData))
+            .Validate(options => Enum.IsDefined(typeof(SensitiveHandlingMode), options.HandlingMode),
+                "SensitiveData:HandlingMode must be Redact, MetadataOnly, or DisablePersistence.")
+            .ValidateOnStart();
+
+        services.AddOptions<ErrorHandlingOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.ErrorHandling))
+            .Validate(options => options.MaxDetailLength > 0, "ErrorHandling:MaxDetailLength must be > 0.")
+            .ValidateOnStart();
+
+        services.AddOptions<ToolCatalogContextPackOptions>()
+            .Bind(configuration.GetSection("ToolCatalogContextPack"))
+            .Validate(options => options.MaxTools > 0, "ToolCatalogContextPack:MaxTools must be > 0.")
+            .Validate(options => options.MaxTotalTokens > 0, "ToolCatalogContextPack:MaxTotalTokens must be > 0.")
+            .Validate(options => options.MaxInstructionTokensPerTool > 0, "ToolCatalogContextPack:MaxInstructionTokensPerTool must be > 0.")
+            .Validate(options => options.MaxDescriptionTokensPerTool > 0, "ToolCatalogContextPack:MaxDescriptionTokensPerTool must be > 0.")
+            .ValidateOnStart();
+
+        services.AddOptions<OpenTelemetryOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.OpenTelemetry))
+            .ValidateOnStart();
+
         services.AddOptions<SemanticCacheOptions>()
             .Bind(configuration.GetSection(ConfigurationSectionNames.SemanticCache))
             .ValidateOnStart();
@@ -228,6 +267,13 @@ public static class AddTilsoftAiExtensions
 
         services.AddOptions<LlmOptions>()
             .Bind(configuration.GetSection(ConfigurationSectionNames.Llm))
+            .ValidateOnStart();
+
+        services.AddOptions<RateLimitOptions>()
+            .Bind(configuration.GetSection("RateLimit"))
+            .Validate(options => options.PermitLimit > 0, "RateLimit:PermitLimit must be > 0.")
+            .Validate(options => options.WindowSeconds > 0, "RateLimit:WindowSeconds must be > 0.")
+            .Validate(options => options.QueueLimit >= 0, "RateLimit:QueueLimit must be >= 0.")
             .ValidateOnStart();
     }
 
@@ -259,5 +305,55 @@ public static class AddTilsoftAiExtensions
     {
         var authOptions = configuration.GetSection(ConfigurationSectionNames.Auth).Get<AuthOptions>() ?? new AuthOptions();
         services.AddTilsoftJwtAuthentication(Options.Create(authOptions));
+    }
+
+    private static void ConfigureOpenTelemetry(IServiceCollection services, IConfiguration configuration)
+    {
+        var telemetryOptions = configuration.GetSection(ConfigurationSectionNames.OpenTelemetry)
+            .Get<OpenTelemetryOptions>() ?? new OpenTelemetryOptions();
+
+        if (!telemetryOptions.Enabled)
+        {
+            return;
+        }
+
+        Activity.DefaultIdFormat = ActivityIdFormat.W3C;
+        Activity.ForceDefaultIdFormat = true;
+        Sdk.SetDefaultTextMapPropagator(new TraceContextPropagator());
+
+        services.AddOpenTelemetry()
+            .WithTracing(builder =>
+            {
+                var resourceBuilder = ResourceBuilder.CreateDefault()
+                    .AddService(
+                        telemetryOptions.ServiceName,
+                        serviceVersion: telemetryOptions.ServiceVersion);
+
+                builder.SetResourceBuilder(resourceBuilder)
+                    .AddAspNetCoreInstrumentation()
+                    .AddSqlClientInstrumentation();
+
+                var exporterType = (telemetryOptions.ExporterType ?? "console").Trim().ToLowerInvariant();
+                switch (exporterType)
+                {
+                    case "otlp":
+                        builder.AddOtlpExporter(options =>
+                        {
+                            if (!string.IsNullOrWhiteSpace(telemetryOptions.OtlpEndpoint))
+                            {
+                                options.Endpoint = new Uri(telemetryOptions.OtlpEndpoint);
+                            }
+                        });
+                        break;
+                    case "console":
+                        builder.AddConsoleExporter();
+                        break;
+                    case "none":
+                        break;
+                    default:
+                        builder.AddConsoleExporter();
+                        break;
+                }
+            });
     }
 }

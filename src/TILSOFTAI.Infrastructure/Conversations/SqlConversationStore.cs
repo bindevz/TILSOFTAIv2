@@ -1,4 +1,6 @@
 using System.Data;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
@@ -25,26 +27,44 @@ public sealed class SqlConversationStore : IConversationStore
         _logRedactor = logRedactor ?? throw new ArgumentNullException(nameof(logRedactor));
     }
 
-    public async Task SaveUserMessageAsync(TilsoftExecutionContext context, ChatMessage message, CancellationToken cancellationToken = default)
+    public async Task SaveUserMessageAsync(
+        TilsoftExecutionContext context,
+        ChatMessage message,
+        RequestPolicy policy,
+        CancellationToken cancellationToken = default)
     {
-        await SaveMessageAsync(context, message, cancellationToken);
+        await SaveMessageAsync(context, message, policy, cancellationToken);
     }
 
-    public async Task SaveAssistantMessageAsync(TilsoftExecutionContext context, ChatMessage message, CancellationToken cancellationToken = default)
+    public async Task SaveAssistantMessageAsync(
+        TilsoftExecutionContext context,
+        ChatMessage message,
+        RequestPolicy policy,
+        CancellationToken cancellationToken = default)
     {
-        await SaveMessageAsync(context, message, cancellationToken);
+        await SaveMessageAsync(context, message, policy, cancellationToken);
     }
 
-    public async Task SaveToolExecutionAsync(TilsoftExecutionContext context, ToolExecutionRecord execution, CancellationToken cancellationToken = default)
+    public async Task SaveToolExecutionAsync(
+        TilsoftExecutionContext context,
+        ToolExecutionRecord execution,
+        RequestPolicy policy,
+        CancellationToken cancellationToken = default)
     {
         if (!ShouldPersistConversation() || !_observabilityOptions.EnableSqlToolLog)
         {
             return;
         }
 
+        policy ??= RequestPolicy.Default;
         ValidateContext(context);
 
         await UpsertConversationAsync(context, cancellationToken);
+
+        if (policy.DisablePersistence)
+        {
+            return;
+        }
 
         var executionId = Guid.NewGuid().ToString("N");
 
@@ -53,16 +73,26 @@ public sealed class SqlConversationStore : IConversationStore
         var resultJson = execution.Result;
         var compactedJson = execution.CompactedResult;
 
-        if (_observabilityOptions.RedactLogs)
+        if (policy.ShouldDisableToolResultPersistence)
         {
-            argsJson = _logRedactor.RedactJson(argsJson ?? string.Empty).redacted;
-            if (resultJson != null)
+            argsJson = "{}";
+            resultJson = null;
+            compactedJson = null;
+        }
+        else
+        {
+            var shouldRedact = _observabilityOptions.RedactLogs || policy.ShouldRedact;
+            if (shouldRedact)
             {
-                resultJson = _logRedactor.RedactJson(resultJson).redacted;
-            }
-            if (compactedJson != null)
-            {
-                compactedJson = _logRedactor.RedactJson(compactedJson).redacted;
+                argsJson = _logRedactor.RedactJson(argsJson ?? string.Empty).redacted;
+                if (resultJson != null)
+                {
+                    resultJson = _logRedactor.RedactJson(resultJson).redacted;
+                }
+                if (compactedJson != null)
+                {
+                    compactedJson = _logRedactor.RedactJson(compactedJson).redacted;
+                }
             }
         }
 
@@ -88,24 +118,44 @@ public sealed class SqlConversationStore : IConversationStore
             cancellationToken);
     }
 
-    private async Task SaveMessageAsync(TilsoftExecutionContext context, ChatMessage message, CancellationToken cancellationToken)
+    private async Task SaveMessageAsync(
+        TilsoftExecutionContext context,
+        ChatMessage message,
+        RequestPolicy policy,
+        CancellationToken cancellationToken)
     {
         if (!ShouldPersistConversation())
         {
             return;
         }
 
+        policy ??= RequestPolicy.Default;
         ValidateContext(context);
 
         await UpsertConversationAsync(context, cancellationToken);
+
+        if (policy.DisablePersistence)
+        {
+            return;
+        }
 
         var messageId = Guid.NewGuid().ToString("N");
 
         // Redact message content if enabled
         var content = message.Content;
         var isRedacted = false;
+        string? payloadHash = null;
+        int? payloadLength = null;
+        var isPayloadOmitted = false;
 
-        if (_observabilityOptions.RedactLogs && !string.IsNullOrWhiteSpace(content))
+        if (policy.IsMetadataOnly)
+        {
+            payloadLength = string.IsNullOrEmpty(content) ? 0 : content.Length;
+            payloadHash = ComputePayloadHash(context.TenantId, content);
+            content = null;
+            isPayloadOmitted = true;
+        }
+        else if ((_observabilityOptions.RedactLogs || policy.ShouldRedact) && !string.IsNullOrWhiteSpace(content))
         {
             var (redacted, changed) = _logRedactor.RedactText(content);
             content = redacted;
@@ -127,7 +177,10 @@ public sealed class SqlConversationStore : IConversationStore
                 ["@RequestId"] = context.RequestId,
                 ["@UserId"] = context.UserId,
                 ["@Language"] = context.Language,
-                ["@IsRedacted"] = isRedacted
+                ["@IsRedacted"] = isRedacted,
+                ["@PayloadHash"] = payloadHash,
+                ["@PayloadLength"] = payloadLength,
+                ["@IsPayloadOmitted"] = isPayloadOmitted
             },
             cancellationToken);
     }
@@ -190,5 +243,23 @@ public sealed class SqlConversationStore : IConversationStore
         {
             throw new InvalidOperationException("Execution context UserId is required.");
         }
+    }
+
+    private static string ComputePayloadHash(string tenantId, string content)
+    {
+        var normalized = NormalizePayload(content);
+        using var sha = SHA256.Create();
+        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes($"{tenantId}|{normalized}"));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static string NormalizePayload(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return string.Empty;
+        }
+
+        return content.Trim().ToLowerInvariant();
     }
 }

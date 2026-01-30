@@ -22,6 +22,22 @@ public sealed class BasicLogRedactor : ILogRedactor
         @"\b[0-9a-f]{32,}\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex ConnectionStringRegex = new Regex(
+        @"(?i)\b(?<key>Server|Data Source|Initial Catalog|Database|User ID|UID|Password|PWD|Trusted_Connection|TrustServerCertificate)\s*=\s*[^;]+",
+        RegexOptions.Compiled);
+
+    private static readonly Regex StoredProcedureRegex = new Regex(
+        @"\b(?:dbo\.)?(?:app|ai)_[A-Za-z0-9_]+\b|\bdbo\.[A-Za-z0-9_]+\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex WindowsPathRegex = new Regex(
+        @"[A-Za-z]:\\[^""'\s]+",
+        RegexOptions.Compiled);
+
+    private static readonly Regex UnixPathRegex = new Regex(
+        @"/[^""'\s]+",
+        RegexOptions.Compiled);
+
     private static readonly string[] SensitiveKeys = 
     {
         "password", "token", "email", "phone", "address", 
@@ -87,6 +103,42 @@ public sealed class BasicLogRedactor : ILogRedactor
             // If it's not valid JSON, treat as text
             return RedactText(json);
         }
+    }
+
+    public (string redacted, bool changed) RedactForClient(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return (text, false);
+        }
+
+        var (redacted, changed) = RedactText(text);
+
+        if (ConnectionStringRegex.IsMatch(redacted))
+        {
+            redacted = ConnectionStringRegex.Replace(redacted, "${key}=***");
+            changed = true;
+        }
+
+        if (StoredProcedureRegex.IsMatch(redacted))
+        {
+            redacted = StoredProcedureRegex.Replace(redacted, "[REDACTED_SP]");
+            changed = true;
+        }
+
+        if (WindowsPathRegex.IsMatch(redacted))
+        {
+            redacted = WindowsPathRegex.Replace(redacted, "[REDACTED_PATH]");
+            changed = true;
+        }
+
+        if (UnixPathRegex.IsMatch(redacted))
+        {
+            redacted = UnixPathRegex.Replace(redacted, "[REDACTED_PATH]");
+            changed = true;
+        }
+
+        return (redacted, changed);
     }
 
     private string RedactJsonElement(JsonElement element, out bool changed)

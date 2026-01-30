@@ -1,0 +1,38 @@
+schema_version: "1.0"
+document: "PATCH 17.05 - Repo Hygiene + Progress Discipline (CI Guard for Artifacts)"
+language: "en"
+
+problem_statement:
+  - "Repo/zip handoffs sometimes contain .vs/bin/obj artifacts, which is noisy and risky."
+  - "spec/PROGRESS.md needs consistent patch tracking for auditability."
+
+goals:
+  - "Add a standard .NET .gitignore."
+  - "Add a repo-clean verification script and enforce it in CI."
+  - "Update spec/PROGRESS.md with Patch 17 entries."
+
+hard_constraints:
+  - "CI must fail if tracked files match .vs/**, **/bin/**, **/obj/**, TestResults/**."
+  - "Artifacts must not be included in repo zip deliverables."
+
+files_to_modify_or_create:
+  create:
+    - path: ".gitignore"
+    - path: "tools/verify-repo-clean.ps1"
+    - path: "tools/verify-repo-clean.sh"
+  modify:
+    - path: ".github/workflows/ci.yml"
+    - path: "spec/PROGRESS.md"
+
+implementation_steps:
+  - step: "S1 - Add .gitignore and scripts"
+  - step: "S2 - Update CI to run scripts"
+  - step: "S3 - Remove tracked artifacts"
+    detail:
+      - "git rm -r --cached .vs **/bin **/obj TestResults"
+  - step: "S4 - Update PROGRESS.md with Patch 17 entries"
+
+acceptance_criteria:
+  - "CI fails if artifacts are tracked."
+  - "Repo zip contains no artifacts."
+  - "PROGRESS.md includes Patch 17 entries."

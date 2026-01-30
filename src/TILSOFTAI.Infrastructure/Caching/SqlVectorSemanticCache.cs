@@ -17,17 +17,20 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
 {
     private readonly IEmbeddingClient _embeddingClient;
     private readonly SemanticCacheOptions _options;
+    private readonly SensitiveDataOptions _sensitiveDataOptions;
     private readonly SqlOptions _sqlOptions;
     private readonly ILogger<SqlVectorSemanticCache> _logger;
 
     public SqlVectorSemanticCache(
         IEmbeddingClient embeddingClient,
         IOptions<SemanticCacheOptions> options,
+        IOptions<SensitiveDataOptions> sensitiveDataOptions,
         IOptions<SqlOptions> sqlOptions,
         ILogger<SqlVectorSemanticCache> logger)
     {
         _embeddingClient = embeddingClient ?? throw new ArgumentNullException(nameof(embeddingClient));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _sensitiveDataOptions = sensitiveDataOptions?.Value ?? throw new ArgumentNullException(nameof(sensitiveDataOptions));
         _sqlOptions = sqlOptions?.Value ?? throw new ArgumentNullException(nameof(sqlOptions));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -44,6 +47,7 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
         CancellationToken ct)
     {
         if (!Enabled) return null;
+        if (containsSensitive && _sensitiveDataOptions.DisableCachingWhenSensitive) return null;
         if (containsSensitive && !_options.AllowSensitiveContent) return null;
 
         try
@@ -51,8 +55,25 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
             var normalizedQuestion = NormalizeQuestion(question);
             var (digest, _, toolDigest, planDigest) = ComputeCacheDigests(context, normalizedQuestion, tools, planJson);
             
-            // 1. Generate Embedding
-            var embedding = await _embeddingClient.GenerateEmbeddingAsync(normalizedQuestion, ct);
+            // 1. Generate Embedding (SQL or C#)
+            float[] embedding;
+            if (_options.UseSqlEmbeddings)
+            {
+                _logger.LogDebug("Attempting to use SQL Server AI embeddings.");
+                embedding = await GenerateEmbeddingSqlAsync(normalizedQuestion, ct);
+                
+                // Fallback to C# if SQL returns null/empty
+                if (embedding == null || embedding.Length == 0)
+                {
+                    _logger.LogWarning("SQL embedding failed or unavailable, falling back to C# embedding client.");
+                    embedding = await _embeddingClient.GenerateEmbeddingAsync(normalizedQuestion, ct);
+                }
+            }
+            else
+            {
+                embedding = await _embeddingClient.GenerateEmbeddingAsync(normalizedQuestion, ct);
+            }
+            
             if (embedding.Length == 0) return null;
 
             // 2. Search in SQL
@@ -77,6 +98,7 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
         CancellationToken ct)
     {
         if (!Enabled) return;
+        if (containsSensitive && _sensitiveDataOptions.DisableCachingWhenSensitive) return;
         if (containsSensitive && !_options.AllowSensitiveContent) return;
 
         try
@@ -84,8 +106,25 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
             var normalizedQuestion = NormalizeQuestion(question);
             var (digest, questionHash, toolDigest, planDigest) = ComputeCacheDigests(context, normalizedQuestion, tools, planJson);
 
-            // 1. Generate Embedding
-            var embedding = await _embeddingClient.GenerateEmbeddingAsync(normalizedQuestion, ct);
+            // 1. Generate Embedding (SQL or C#)
+            float[] embedding;
+            if (_options.UseSqlEmbeddings)
+            {
+                _logger.LogDebug("Attempting to use SQL Server AI embeddings for cache write.");
+                embedding = await GenerateEmbeddingSqlAsync(normalizedQuestion, ct);
+                
+                // Fallback to C# if SQL returns null/empty
+                if (embedding == null || embedding.Length == 0)
+                {
+                    _logger.LogWarning("SQL embedding failed or unavailable for cache write, falling back to C# embedding client.");
+                    embedding = await _embeddingClient.GenerateEmbeddingAsync(normalizedQuestion, ct);
+                }
+            }
+            else
+            {
+                embedding = await _embeddingClient.GenerateEmbeddingAsync(normalizedQuestion, ct);
+            }
+            
             if (embedding.Length == 0) return;
 
             // 2. Upsert in SQL
@@ -188,5 +227,59 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
         var combined = string.Join('|', parts.Where(part => !string.IsNullOrWhiteSpace(part)));
         var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(combined));
         return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private async Task<float[]?> GenerateEmbeddingSqlAsync(string text, CancellationToken ct)
+    {
+        try
+        {
+            await using var connection = new SqlConnection(_sqlOptions.ConnectionString);
+            await connection.OpenAsync(ct);
+
+            await using var command = new SqlCommand("dbo.app_semanticcache_embed", connection)
+            {
+                CommandType = CommandType.StoredProcedure,
+                CommandTimeout = _sqlOptions.CommandTimeoutSeconds
+            };
+
+            command.Parameters.Add(new SqlParameter("@ModelName", _options.SqlEmbeddingModelName));
+            command.Parameters.Add(new SqlParameter("@Text", text));
+
+            var result = await command.ExecuteScalarAsync(ct);
+            if (result == null || result == DBNull.Value)
+            {
+                _logger.LogWarning("SQL embedding procedure returned NULL. AI_GENERATE_EMBEDDINGS may not be available or EXTERNAL MODEL not configured.");
+                return null;
+            }
+
+            var embeddingJson = result.ToString();
+            if (string.IsNullOrWhiteSpace(embeddingJson))
+            {
+                _logger.LogWarning("SQL embedding procedure returned empty string.");
+                return null;
+            }
+
+            // Parse JSON array to float[]
+            var embedding = JsonSerializer.Deserialize<float[]>(embeddingJson);
+            if (embedding == null || embedding.Length == 0)
+            {
+                _logger.LogWarning("SQL embedding JSON deserialization failed or returned empty array.");
+                return null;
+            }
+
+            _logger.LogDebug("Successfully generated embedding using SQL Server AI (dimension: {Dimension}).", embedding.Length);
+            return embedding;
+        }
+        catch (SqlException ex)
+        {
+            // Common errors: procedure not found, EXTERNAL MODEL missing, permissions
+            _logger.LogError(ex, "SQL error generating embedding. Procedure may not exist or AI function unavailable.");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error generating SQL embedding.");
+            return null;
+        }
     }
 }

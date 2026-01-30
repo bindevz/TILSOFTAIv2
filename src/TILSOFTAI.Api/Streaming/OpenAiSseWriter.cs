@@ -31,4 +31,17 @@ public static class OpenAiSseWriter
         await response.WriteAsync("data: [DONE]\n\n", cancellationToken);
         await response.Body.FlushAsync(cancellationToken);
     }
+
+    public static async Task WriteErrorAsync(HttpResponse response, object payload, CancellationToken cancellationToken)
+    {
+        if (response is null)
+        {
+            throw new ArgumentNullException(nameof(response));
+        }
+
+        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        await response.WriteAsync("event: error\n", cancellationToken);
+        await response.WriteAsync($"data: {json}\n\n", cancellationToken);
+        await response.Body.FlushAsync(cancellationToken);
+    }
 }

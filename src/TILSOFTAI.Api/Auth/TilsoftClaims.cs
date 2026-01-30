@@ -2,8 +2,9 @@ namespace TILSOFTAI.Api.Auth;
 
 public static class TilsoftClaims
 {
-    public const string TenantId = "tenant_id";
-    public const string UserId = "user_id";
+    // JWT standard claim names
+    public const string TenantId = "tid";     // Tenant identifier (common in multi-tenant JWTs)
+    public const string UserId = "sub";       // Subject (RFC 7519 standard for user ID)
     public const string Roles = "roles";
     public const string Role = "role";
     public const string Language = "lang";

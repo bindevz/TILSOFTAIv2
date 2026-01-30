@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Domain.Sensitivity;
 using TILSOFTAI.Orchestration.Pipeline;
 
 namespace TILSOFTAI.Orchestration;
@@ -12,15 +13,21 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
 {
     private readonly ChatPipeline _chatPipeline;
     private readonly IOptions<StreamingOptions> _streamingOptions;
+    private readonly ISensitivityClassifier _sensitivityClassifier;
+    private readonly SensitiveDataOptions _sensitiveDataOptions;
     private readonly ILogger<OrchestrationEngine> _logger;
 
     public OrchestrationEngine(
         ChatPipeline chatPipeline,
         IOptions<StreamingOptions> streamingOptions,
+        ISensitivityClassifier sensitivityClassifier,
+        IOptions<SensitiveDataOptions> sensitiveDataOptions,
         ILogger<OrchestrationEngine> logger)
     {
         _chatPipeline = chatPipeline ?? throw new ArgumentNullException(nameof(chatPipeline));
         _streamingOptions = streamingOptions ?? throw new ArgumentNullException(nameof(streamingOptions));
+        _sensitivityClassifier = sensitivityClassifier ?? throw new ArgumentNullException(nameof(sensitivityClassifier));
+        _sensitiveDataOptions = sensitiveDataOptions?.Value ?? throw new ArgumentNullException(nameof(sensitiveDataOptions));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -38,6 +45,7 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
 
         request.Stream = false;
         request.StreamObserver = null;
+        ApplySensitivePolicy(request);
 
         try
         {
@@ -100,6 +108,7 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
 
         request.Stream = true;
         request.StreamObserver = progress;
+        ApplySensitivePolicy(request);
 
         // Start pipeline execution in background
         var pipelineTask = Task.Run(async () =>
@@ -166,5 +175,21 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
     {
         return string.Equals(eventType, "final", StringComparison.OrdinalIgnoreCase)
             || string.Equals(eventType, "error", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ApplySensitivePolicy(ChatRequest request)
+    {
+        var input = request.Input ?? string.Empty;
+        var sensitivity = _sensitivityClassifier.Classify(input);
+
+        request.ContainsSensitive = sensitivity.ContainsSensitive;
+        request.SensitivityReasons = sensitivity.Reasons;
+        request.RequestPolicy = new RequestPolicy
+        {
+            ContainsSensitive = sensitivity.ContainsSensitive,
+            HandlingMode = _sensitiveDataOptions.HandlingMode,
+            DisableCachingWhenSensitive = _sensitiveDataOptions.DisableCachingWhenSensitive,
+            DisableToolResultPersistenceWhenSensitive = _sensitiveDataOptions.DisableToolResultPersistenceWhenSensitive
+        };
     }
 }

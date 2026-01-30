@@ -11,6 +11,10 @@ public sealed class ChatApiRequest
     [JsonPropertyName("allowCache")]
     public bool AllowCache { get; set; } = true;
 
+    /// <summary>
+    /// DEPRECATED: This flag is ignored. Sensitivity is now computed server-side.
+    /// Kept for backward compatibility only.
+    /// </summary>
     [JsonPropertyName("containsSensitive")]
     public bool ContainsSensitive { get; set; }
 

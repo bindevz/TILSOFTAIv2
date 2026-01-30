@@ -20,6 +20,11 @@ public sealed class InMemoryErrorCatalog : IErrorCatalog
                 ["en"] = "Invalid request parameters.",
                 ["vi"] = "Tham so yeu cau khong hop le."
             },
+            [ErrorCode.Unauthenticated] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Authentication is required.",
+                ["vi"] = "Can xac thuc truoc khi truy cap."
+            },
             [ErrorCode.Unauthorized] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["en"] = "Authentication is required.",
@@ -44,6 +49,31 @@ public sealed class InMemoryErrorCatalog : IErrorCatalog
             {
                 ["en"] = "Tool execution failed.",
                 ["vi"] = "Thuc thi cong cu that bai."
+            },
+            [ErrorCode.ToolArgsInvalid] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Tool arguments validation failed.",
+                ["vi"] = "Xac thuc tham so cong cu that bai."
+            },
+            [ErrorCode.TenantMismatch] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Tenant authorization failed.",
+                ["vi"] = "Xac thuc tenant that bai."
+            },
+            [ErrorCode.WriteActionArgsInvalid] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Write action arguments are invalid.",
+                ["vi"] = "Tham so hanh dong ghi khong hop le."
+            },
+            [ErrorCode.WriteActionDisabled] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Write action is currently disabled.",
+                ["vi"] = "Hanh dong ghi hien tai bi vo hieu hoa."
+            },
+            [ErrorCode.WriteActionNotFound] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Write action not found or not allowed.",
+                ["vi"] = "Khong tim thay hanh dong ghi."
             },
             [ErrorCode.LlmTransportError] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {

@@ -10,6 +10,9 @@ public static class ConfigurationSectionNames
     public const string Governance = "Governance";
     public const string Modules = "Modules";
     public const string Observability = "Observability";
+    public const string SensitiveData = "SensitiveData";
+    public const string OpenTelemetry = "OpenTelemetry";
+    public const string ErrorHandling = "ErrorHandling";
     public const string SemanticCache = "SemanticCache";
     public const string Llm = "Llm";
     public const string Streaming = "Streaming";

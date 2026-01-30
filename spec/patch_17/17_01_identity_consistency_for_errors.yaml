@@ -1,0 +1,74 @@
+schema_version: "1.0"
+document: "PATCH 17.01 - Identity Consistency for Error Handling (No Header-based Tenant Attribution in Prod)"
+language: "en"
+
+problem_statement:
+  - "ExceptionHandlingMiddleware runs before ExecutionContextMiddleware; early failures (auth/route/DI) happen before context is set."
+  - "Current error handler may resolve tenant/user via header fallback, enabling log poisoning and incorrect tenant attribution."
+  - "Enterprise requires consistent tenant/user attribution from JWT claims; header fallback is only for Development or trusted-gateway mode."
+
+goals:
+  - "Ensure ALL identity resolution paths (especially error handling) share ONE policy: claims-first, no header tenant/user in Production."
+  - "When context is not ready, error handler still resolves: language, correlationId, traceId, requestId. Tenant/user only if claims exist."
+  - "Provide a bootstrap identity result for early-error logging with strict rules."
+
+hard_constraints:
+  - "In Production: NEVER use X-Tenant-Id/X-User-Id to set tenant/user, even if AllowHeaderFallback=true."
+  - "If claims exist and headers differ -> respond 403 TENANT_MISMATCH and log suspicious_identity_header=true."
+  - "If endpoint is [AllowAnonymous], tenantId may be null or 'public' by policy, but NEVER invent userId."
+
+files_to_modify_or_create:
+  create:
+    - path: "src/TILSOFTAI.Domain/Security/IdentityResolutionPolicy.cs"
+      requirements:
+        - "Expose ResolveForRequest(HttpContext, AuthOptions, IWebHostEnvironment) -> IdentityResolutionResult"
+        - "Expose ResolveForError(HttpContext, AuthOptions, IWebHostEnvironment) -> IdentityResolutionResult"
+        - "ResolveForError MUST ignore header-based tenant/user in non-Development env."
+        - "Return fields: TenantId, UserId, Roles[], Language, CorrelationId, ConversationId, TraceId, RequestId, IsHeaderSpoofAttempt(bool)."
+  modify:
+    - path: "src/TILSOFTAI.Api/Middlewares/ExecutionContextMiddleware.cs"
+      changes:
+        - "Replace inline logic by calling IdentityResolutionPolicy.ResolveForRequest."
+        - "If endpoint requires auth and TenantId/UserId missing -> throw UnauthorizedAccessException with stable ErrorCode.UNAUTHENTICATED."
+        - "If IsHeaderSpoofAttempt -> throw TilsoftApiException(ErrorCode.TENANT_MISMATCH, httpStatus=403)."
+    - path: "src/TILSOFTAI.Api/Middlewares/ExceptionHandlingMiddleware.cs"
+      changes:
+        - "Replace ResolveContext() by IdentityResolutionPolicy.ResolveForError (no header tenant/user in prod)."
+        - "If IsHeaderSpoofAttempt -> override response to TENANT_MISMATCH (403) even during exception handling."
+        - "Ensure error log writer receives tenant/user only if resolved from claims."
+    - path: "src/TILSOFTAI.Domain/Configuration/AuthOptions.cs"
+      changes:
+        - "Add: TrustedGatewayClaimName (default 'gateway_trusted')"
+        - "Clarify AllowHeaderFallback semantics: only Development or when gateway_trusted claim present."
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      changes:
+        - "Validate new AuthOptions fields not empty."
+        - "Register IdentityResolutionPolicy as singleton."
+
+implementation_steps:
+  - step: "S1 - Implement IdentityResolutionPolicy"
+    detail:
+      - "Language: X-Lang > first Accept-Language token > Localization.DefaultLanguage."
+      - "CorrelationId: X-Correlation-Id > Activity.TraceId > HttpContext.TraceIdentifier."
+      - "ConversationId: X-Conversation-Id > CorrelationId."
+      - "TraceId: Activity.Current?.TraceId (string) else CorrelationId."
+      - "RequestId: HttpContext.TraceIdentifier."
+      - "Claims identity: TenantId/UserId only from claims (tenant claim + user claim)."
+      - "Header identity allowed ONLY in ResolveForRequest when (env=Development AND AllowHeaderFallback=true) OR (gateway_trusted claim=true)."
+      - "Spoof detection: if claims tenant/user exist and headers present but differ -> IsHeaderSpoofAttempt=true."
+  - step: "S2 - Wire middleware"
+    detail:
+      - "ExecutionContextMiddleware uses ResolveForRequest."
+      - "ExceptionHandlingMiddleware uses ResolveForError (never trusts headers for tenant/user in prod)."
+      - "Logging uses resolved fields; if tenantId null, log as public but do not mix with real tenant scopes unless schema supports it."
+
+acceptance_criteria:
+  - "Prod: X-Tenant-Id cannot affect tenant attribution in error logs."
+  - "Dev + AllowHeaderFallback=true: header identity works only if claims are missing."
+  - "Claims present + header mismatch => 403 TENANT_MISMATCH and suspicious flag is logged."
+  - "All error responses include correlationId + traceId consistently."
+
+tests_required:
+  - "Integration: claim tenant=T1 and header tenant=T2 => 403 TENANT_MISMATCH."
+  - "Integration: unauthenticated request with headers => still UNAUTHENTICATED (headers ignored)."
+  - "Integration: early exception before ExecutionContextMiddleware still logs traceId/correlationId without tenant spoofing."
