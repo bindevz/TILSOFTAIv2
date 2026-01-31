@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
 using TILSOFTAI.Tests.Contract.Fixtures;
 using TILSOFTAI.Api.Hubs;
@@ -33,37 +34,85 @@ public class SignalRClaimsEnforcementTests : IClassFixture<TestWebApplicationFac
     {
         // Arrange: Create SignalR connection with valid claims (using default TestAuth)
         var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Tenant", "TENANT_A");
+        client.DefaultRequestHeaders.Add("X-Test-User", "USER_1");
+        client.DefaultRequestHeaders.Add("X-Test-Roles", "Admin");
+
         _connection = new HubConnectionBuilder()
             .WithUrl($"{client.BaseAddress}hubs/chat", options =>
             {
                 options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
+                options.Headers.Add("X-Test-Tenant", "TENANT_A");
+                options.Headers.Add("X-Test-User", "USER_1");
+                options.Headers.Add("X-Test-Roles", "Admin");
             })
             .Build();
 
         await _connection.StartAsync();
 
-        // Act & Assert: Connection should be established
-        // (If claims were invalid, the hub filter would reject before we could invoke)
-        Assert.Equal(HubConnectionState.Connected, _connection.State);
+        // Act & Assert: Invoke EchoContext to verify claims are present
+        var result = await _connection.InvokeAsync<dynamic>("EchoContext");
+        
+        Assert.NotNull(result);
+        Assert.Equal("TENANT_A", (string)result.TenantId);
+        Assert.Equal("USER_1", (string)result.UserId);
 
         await _connection.StopAsync();
     }
 
     [Fact]
-    public async Task StartChat_MissingTenantClaim_ThrowsException()
+    public async Task EchoContext_MissingTenantClaim_ThrowsUnauthenticated()
     {
-        // Note: Current TestAuth implementation always provides claims
-        // This test documents expected behavior when claims are missing
-        // In real scenarios, missing claims would be caught by the hub filter
-        Assert.True(true, "Test documents that missing tenant claims should throw");
+        // Arrange: Create connection without tenant claim (empty string)
+        var client = _factory.CreateClient();
+        _connection = new HubConnectionBuilder()
+            .WithUrl($"{client.BaseAddress}hubs/chat", options =>
+            {
+                options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
+                options.Headers.Add("X-Test-Tenant", ""); // Empty tenant
+                options.Headers.Add("X-Test-User", "USER_1");
+                options.Headers.Add("X-Test-Roles", "Admin");
+            })
+            .Build();
+
+        await _connection.StartAsync();
+
+        // Act & Assert: Invoking EchoContext should throw HubException
+        var exception = await Assert.ThrowsAsync<HubException>(async () =>
+        {
+            await _connection.InvokeAsync<dynamic>("EchoContext");
+        });
+
+        Assert.Contains("UNAUTHENTICATED", exception.Message.ToUpperInvariant());
+
+        await _connection.StopAsync();
     }
 
     [Fact]
-    public async Task StartChat_MissingUserClaim_ThrowsException()
+    public async Task EchoContext_MissingUserClaim_ThrowsUnauthenticated()
     {
-        // Note: Current TestAuth implementation always provides claims
-        // This test documents expected behavior when claims are missing
-        // In real scenarios, missing claims would be caught by the hub filter
-        Assert.True(true, "Test documents that missing user claims should throw");
+        // Arrange: Create connection without user claim (empty string)
+        var client = _factory.CreateClient();
+        _connection = new HubConnectionBuilder()
+            .WithUrl($"{client.BaseAddress}hubs/chat", options =>
+            {
+                options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
+                options.Headers.Add("X-Test-Tenant", "TENANT_A");
+                options.Headers.Add("X-Test-User", ""); // Empty user
+                options.Headers.Add("X-Test-Roles", "Admin");
+            })
+            .Build();
+
+        await _connection.StartAsync();
+
+        // Act & Assert: Invoking EchoContext should throw HubException
+        var exception = await Assert.ThrowsAsync<HubException>(async () =>
+        {
+            await _connection.InvokeAsync<dynamic>("EchoContext");
+        });
+
+        Assert.Contains("UNAUTHENTICATED", exception.Message.ToUpperInvariant());
+
+        await _connection.StopAsync();
     }
 }

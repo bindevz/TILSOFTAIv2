@@ -4,6 +4,8 @@ using Microsoft.Extensions.Options;
 using TILSOFTAI.Api.Middlewares;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Errors;
+using TILSOFTAI.Tests.Contract.Fixtures;
+using System.Text.Json;
 using Xunit;
 
 namespace TILSOFTAI.Tests.Contract.Ops;
@@ -12,8 +14,69 @@ namespace TILSOFTAI.Tests.Contract.Ops;
 /// Contract tests for request size limit enforcement on chat endpoints.
 /// Verifies that MaxRequestBytes is enforced at the server layer.
 /// </summary>
-public sealed class RequestSizeLimitContractTests
+public sealed class RequestSizeLimitContractTests : IClassFixture<TestWebApplicationFactory>
 {
+    private readonly TestWebApplicationFactory _factory;
+
+    public RequestSizeLimitContractTests(TestWebApplicationFactory factory)
+    {
+        _factory = factory;
+    }
+
+    [Fact]
+    public async Task RequestSizeLimitMiddleware_OversizeRequest_Returns413WithErrorEnvelope()
+    {
+        // Arrange - This is the integration test that verifies end-to-end middleware ordering
+        var client = _factory.CreateClient();
+        
+        // Create oversized request body (> 1MB default limit)
+        var largePayload = new string('x', 2 * 1024 * 1024); // 2MB
+        var requestBody = new
+        {
+            model = "test-model",
+            messages = new[] { new { role = "user", content = largePayload } }
+        };
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/chat");
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(requestBody), 
+            System.Text.Encoding.UTF8, 
+            "application/json");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Test", "test-token");
+
+        // Act
+        var response = await client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(System.Net.HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.False(string.IsNullOrWhiteSpace(content), "Response body should not be empty");
+
+        using var doc = JsonDocument.Parse(content);
+        var root = doc.RootElement;
+
+        // Verify ErrorEnvelope structure
+        Assert.True(root.TryGetProperty("success", out var success), "Missing 'success' property");
+        Assert.False(success.GetBoolean(), "success should be false");
+
+        Assert.True(root.TryGetProperty("error", out var error), "Missing 'error' property");
+        Assert.True(error.TryGetProperty("code", out var code), "Missing error.code");
+        Assert.Equal("REQUEST_TOO_LARGE", code.GetString());
+
+        Assert.True(error.TryGetProperty("messageKey", out _), "Missing error.messageKey");
+        Assert.True(error.TryGetProperty("localizedMessage", out _), "Missing error.localizedMessage");
+        
+        // Verify observability fields
+        Assert.True(error.TryGetProperty("correlationId", out _), "Missing error.correlationId");
+        Assert.True(error.TryGetProperty("traceId", out _), "Missing error.traceId");
+        Assert.True(error.TryGetProperty("requestId", out _), "Missing error.requestId");
+        
+        // Verify root-level observability fields
+        Assert.True(root.TryGetProperty("correlationId", out _), "Missing root correlationId");
+        Assert.True(root.TryGetProperty("traceId", out _), "Missing root traceId");
+    }
+
     [Fact]
     public async Task RequestSizeLimitMiddleware_EnforcesLimit_OnChatEndpoint()
     {

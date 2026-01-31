@@ -37,3 +37,14 @@ This log tracks spec pack completion at a high level.
 - 2026-01-31: 22_06_replace_fake_tests_health_cors_streaming.yaml (DONE)
 - 2026-01-31: 22_07_docs_readme_accuracy_and_no_overclaims.yaml (DONE)
 - 2026-01-31: 22_08_progress_audit_and_cleanup.yaml (DONE)
+
+## Patch 23
+- 2026-01-31: 23_01_pipeline_order_exception_outermost.yaml (DONE)
+- 2026-01-31: 23_02_options_ssot_remove_rebind_auth_redis_ratelimit.yaml (DONE)
+- 2026-01-31: 23_03_test_infra_real_auth_and_signalr_connection_claims.yaml (DONE)
+- 2026-01-31: 23_04_signalr_contract_tests_enforcement_and_isolation.yaml (DONE)
+- 2026-01-31: 23_05_streaming_error_envelope_contract_tests.yaml (DONE)
+- 2026-01-31: 23_06_localization_guard_strict_coverage_and_supported_languages.yaml (DONE)
+- 2026-01-31: 23_07_cors_validation_strict_enabled_requires_origins.yaml (DONE)
+- 2026-01-31: 23_08_signalr_language_negotiation_end_to_end.yaml (DONE)
+- 2026-01-31: 23_09_progress_audit_and_cleanup.yaml (DONE)

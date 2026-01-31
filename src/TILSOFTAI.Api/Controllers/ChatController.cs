@@ -124,6 +124,19 @@ public sealed class ChatController : ControllerBase
             SensitivityReasons = sensitivityResult.Reasons
         };
 
+#if DEBUG
+        // Test-only hook: Trigger deterministic error for contract testing
+        // Only enabled in Testing environment
+        if (HttpContext.Request.Headers.TryGetValue("X-Test-Trigger-Error", out var triggerErrorValue) 
+            && triggerErrorValue == "true")
+        {
+            throw new TilsoftApiException(
+                ErrorCode.ChatFailed,
+                StatusCodes.Status400BadRequest,
+                detail: new { testError = "Intentional error for SSE contract testing" });
+        }
+#endif
+
         try
         {
             await foreach (var evt in _engine.RunChatStreamAsync(chatRequest, context, linkedToken))

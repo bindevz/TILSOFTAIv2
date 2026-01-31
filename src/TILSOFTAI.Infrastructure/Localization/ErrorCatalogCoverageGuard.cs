@@ -17,6 +17,7 @@ public sealed class ErrorCatalogCoverageGuard : IHostedService
     private readonly IErrorCatalog _errorCatalog;
     private readonly LocalizationOptions _options;
     private readonly ILogger<ErrorCatalogCoverageGuard> _logger;
+    private readonly IHostEnvironment _environment;
 
     // List of critical error codes that MUST have specific translations.
     // We reflect over ErrorCode struct to get all constant values to ensure generic coverage.
@@ -32,43 +33,64 @@ public sealed class ErrorCatalogCoverageGuard : IHostedService
     public ErrorCatalogCoverageGuard(
         IErrorCatalog errorCatalog,
         IOptions<LocalizationOptions> options,
-        ILogger<ErrorCatalogCoverageGuard> logger)
+        ILogger<ErrorCatalogCoverageGuard> logger,
+        IHostEnvironment environment)
     {
         _errorCatalog = errorCatalog ?? throw new ArgumentNullException(nameof(errorCatalog));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        // Validate LocalizationOptions configuration
+        ValidateLocalizationOptions();
+
         _logger.LogInformation("Verifying Error Catalog coverage for languages: {Languages}", string.Join(", ", _options.SupportedLanguages));
 
         var missingEntries = new List<string>();
 
+        // Use TryGetExact to detect missing translations (strict check - no fallback allowed)
         foreach (var lang in _options.SupportedLanguages)
         {
             foreach (var code in RequiredErrorCodes.Value)
             {
-                var definition = _errorCatalog.Get(code, lang);
-                
-                // If the returned code doesn't match requested code, it means we hit fallback to UnhandledError
-                // Or if message matches fallback/default exactly (imperfect check, but catches generic fallback)
-                if (definition.Code != code)
+                if (!_errorCatalog.TryGetExact(code, lang, out _))
                 {
-                    missingEntries.Add($"Missing '{code}' in '{lang}'");
+                    missingEntries.Add($"Missing exact translation for '{code}' in '{lang}'");
                 }
             }
         }
 
         if (missingEntries.Count > 0)
         {
-            var errorMsg = $"Error Catalog is missing translations for enabled languages: {string.Join("; ", missingEntries)}";
+            var errorMsg = $"Error Catalog is missing required translations: {string.Join("; ", missingEntries)}";
             _logger.LogCritical(errorMsg);
             throw new InvalidOperationException(errorMsg);
         }
 
         _logger.LogInformation("Error Catalog coverage verified successfully.");
         return Task.CompletedTask;
+    }
+
+    private void ValidateLocalizationOptions()
+    {
+        // Validate SupportedLanguages is not empty
+        if (_options.SupportedLanguages == null || _options.SupportedLanguages.Length == 0)
+        {
+            var errorMsg = "LocalizationOptions.SupportedLanguages must not be empty.";
+            _logger.LogCritical(errorMsg);
+            throw new InvalidOperationException(errorMsg);
+        }
+
+        // In Production, 'en' must be included in SupportedLanguages
+        if (_environment.IsProduction() && !_options.SupportedLanguages.Contains("en", StringComparer.OrdinalIgnoreCase))
+        {
+            var errorMsg = "LocalizationOptions.SupportedLanguages must include 'en' in Production environment.";
+            _logger.LogCritical(errorMsg);
+            throw new InvalidOperationException(errorMsg);
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

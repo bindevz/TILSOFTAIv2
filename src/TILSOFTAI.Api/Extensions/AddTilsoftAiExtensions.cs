@@ -56,6 +56,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using System.Threading.RateLimiting;
+using TILSOFTAI.Api.Options;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
+using Microsoft.IdentityModel.Tokens;
 
 namespace TILSOFTAI.Api.Extensions;
 
@@ -155,7 +158,7 @@ public static class AddTilsoftAiExtensions
         services.AddHostedService<ErrorCatalogCoverageGuard>();
 
         RegisterCaching(services, configuration);
-        ConfigureAuthentication(services, configuration);
+        ConfigureAuthentication(services);
 
         services.AddAuthorization(options =>
         {
@@ -164,36 +167,9 @@ public static class AddTilsoftAiExtensions
                 .Build();
         });
         
-        services.AddRateLimiter(options =>
-        {
-            var rateLimitOpts = configuration.GetSection("RateLimit").Get<RateLimitOptions>() 
-                             ?? new RateLimitOptions();
-            
-            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
-            {
-                // Exempt health endpoints from rate limiting to prevent monitoring failures
-                var path = httpContext.Request.Path.Value ?? string.Empty;
-                if (path.StartsWith("/health", StringComparison.OrdinalIgnoreCase))
-                {
-                    return RateLimitPartition.GetNoLimiter("health");
-                }
-                
-                var factory = new FixedWindowRateLimiterOptions
-                {
-                    AutoReplenishment = true,
-                    PermitLimit = rateLimitOpts.PermitLimit,
-                    QueueLimit = rateLimitOpts.QueueLimit,
-                    Window = TimeSpan.FromSeconds(rateLimitOpts.WindowSeconds)
-                };
-                
-                var partitionKey = httpContext.User.Identity?.Name 
-                                   ?? httpContext.Connection.RemoteIpAddress?.ToString() 
-                                   ?? "anonymous";
-                                   
-                return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => factory);
-            });
-        });
+        // Register RateLimiter configurator and service
+        services.AddSingleton<IConfigureOptions<RateLimiterOptions>, ConfigureRateLimiterOptions>();
+        services.AddRateLimiter(_ => { }); // Configuration happens via ConfigureRateLimiterOptions
 
         services.AddControllers();
         
@@ -207,11 +183,13 @@ public static class AddTilsoftAiExtensions
         services.AddSignalR();
         
         // Health checks - register Redis check only when enabled
-        var redisOptions = configuration.GetSection(ConfigurationSectionNames.Redis).Get<RedisOptions>() ?? new RedisOptions();
+        // Read configuration directly for conditional registration (acceptable pattern)
+        var redisEnabled = configuration.GetValue<bool>("Redis:Enabled");
+        
         var healthChecksBuilder = services.AddHealthChecks()
             .AddCheck<SqlHealthCheck>("sql", tags: new[] { "ready" });
         
-        if (redisOptions.Enabled)
+        if (redisEnabled)
         {
             healthChecksBuilder.AddCheck<RedisHealthCheck>("redis", tags: new[] { "ready" });
         }
@@ -271,16 +249,28 @@ public static class AddTilsoftAiExtensions
         // Bind and validate CorsOptions
         services.AddOptions<CorsOptions>()
             .Bind(configuration.GetSection("Cors"))
+            .PostConfigure(options =>
+            {
+                // Normalize origins after binding
+                options.Normalize();
+            })
             .Validate(options =>
             {
+                // Validate: Enabled requires non-empty AllowedOrigins
                 if (!options.Enabled) return true;
-                
+
+                return options.AllowedOrigins != null && options.AllowedOrigins.Length > 0;
+            }, "CORS: Enabled=true requires at least one allowed origin. Update Cors:AllowedOrigins in configuration.")
+            .Validate(options =>
+            {
                 // Validate: no wildcard origins if AllowCredentials is true
+                if (!options.Enabled) return true;
+
                 if (options.AllowCredentials && options.AllowedOrigins.Any(o => o == "*"))
                 {
                     return false;
                 }
-                
+
                 return true;
             }, "CORS: AllowCredentials=true requires explicit origins, not wildcard '*'. Update Cors:AllowedOrigins in configuration.")
             .ValidateOnStart();
@@ -354,19 +344,14 @@ public static class AddTilsoftAiExtensions
 
     private static void RegisterCaching(IServiceCollection services, IConfiguration configuration)
     {
-        // Determine cache type from configuration
+        // Determine cache type from configuration - read boolean directly (allowed for conditional registration)
         var redisEnabled = configuration.GetValue<bool>("Redis:Enabled");
 
         if (redisEnabled)
         {
-            // Redis cache - configuration reads from validated IOptions at runtime
-            services.AddStackExchangeRedisCache(options =>
-            {
-                // Options configured inline reading from appsettings
-                // This is acceptable as AddOptions<RedisOptions>() validates connectionString elsewhere
-                var connectionString = configuration.GetValue<string>("Redis:ConnectionString") ?? string.Empty;
-                options.Configuration = connectionString;
-            });
+            // Register Redis cache configurator
+            services.AddSingleton<IConfigureOptions<RedisCacheOptions>, ConfigureRedisCacheOptions>();
+            services.AddStackExchangeRedisCache(_ => { }); // Configuration happens via ConfigureRedisCacheOptions
 
             services.AddSingleton<IRedisCacheProvider>(sp =>
             {
@@ -384,21 +369,64 @@ public static class AddTilsoftAiExtensions
         }
     }
 
-    private static void ConfigureAuthentication(IServiceCollection services, IConfiguration configuration)
+    private static void ConfigureAuthentication(IServiceCollection services)
     {
-        var authOptions = configuration.GetSection(ConfigurationSectionNames.Auth).Get<AuthOptions>() ?? new AuthOptions();
-        services.AddTilsoftJwtAuthentication(Microsoft.Extensions.Options.Options.Create(authOptions));
+        // Register JWT Bearer configurator
+        services.AddSingleton<IConfigureNamedOptions<JwtBearerOptions>, ConfigureJwtBearerOptions>();
+        
+        // Add authentication with JWT Bearer
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer();
+        
+        // Configure signing key resolver (existing pattern from JwtAuthConfigurator)
+        services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+            .Configure<IJwtSigningKeyProvider, ILoggerFactory>((jwtOptions, keyProvider, loggerFactory) =>
+            {
+                jwtOptions.TokenValidationParameters ??= new TokenValidationParameters();
+                jwtOptions.TokenValidationParameters.IssuerSigningKeyResolver = (_, _, _, _) =>
+                {
+                    var keys = keyProvider.GetKeys();
+                    if (keys.Count == 0)
+                    {
+                        var logger = loggerFactory.CreateLogger("JwtAuthentication");
+                        logger.LogWarning("JWT signing key resolver returned empty key set. Token validation will fail.");
+                    }
+                    return keys;
+                };
+
+                jwtOptions.Events ??= new JwtBearerEvents();
+                jwtOptions.Events.OnAuthenticationFailed = context =>
+                {
+                    var logger = loggerFactory.CreateLogger("JwtAuthentication");
+                    var correlationId = context.HttpContext.TraceIdentifier;
+                    
+                    logger.LogWarning(
+                        context.Exception,
+                        "JWT authentication failed. CorrelationId: {CorrelationId}, Failure: {FailureMessage}",
+                        correlationId,
+                        context.Exception?.Message ?? "Unknown");
+                    
+                    return Task.CompletedTask;
+                };
+            });
     }
 
     private static void ConfigureOpenTelemetry(IServiceCollection services, IConfiguration configuration)
     {
-        var telemetryOptions = configuration.GetSection(ConfigurationSectionNames.OpenTelemetry)
-            .Get<OpenTelemetryOptions>() ?? new OpenTelemetryOptions();
+        // Read configuration directly for conditional registration (acceptable pattern)
+        var telemetryEnabled = configuration.GetValue<bool>("OpenTelemetry:Enabled");
 
-        if (!telemetryOptions.Enabled)
+        if (!telemetryEnabled)
         {
             return;
         }
+
+        // For the actual configuration values, use IOptions at runtime
+        // This method configures services, not runtime behavior
+        var serviceName = configuration.GetValue<string>("OpenTelemetry:ServiceName") ?? "TilsoftAI";
+        var serviceVersion = configuration.GetValue<string>("OpenTelemetry:ServiceVersion") ?? "1.0.0";
+        var exporterType = (configuration.GetValue<string>("OpenTelemetry:ExporterType") ?? "console").Trim().ToLowerInvariant();
+        var otlpEndpoint = configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint");
 
         Activity.DefaultIdFormat = ActivityIdFormat.W3C;
         Activity.ForceDefaultIdFormat = true;
@@ -409,22 +437,21 @@ public static class AddTilsoftAiExtensions
             {
                 var resourceBuilder = ResourceBuilder.CreateDefault()
                     .AddService(
-                        telemetryOptions.ServiceName,
-                        serviceVersion: telemetryOptions.ServiceVersion);
+                        serviceName,
+                        serviceVersion: serviceVersion);
 
                 builder.SetResourceBuilder(resourceBuilder)
                     .AddAspNetCoreInstrumentation()
                     .AddSqlClientInstrumentation();
 
-                var exporterType = (telemetryOptions.ExporterType ?? "console").Trim().ToLowerInvariant();
                 switch (exporterType)
                 {
                     case "otlp":
                         builder.AddOtlpExporter(options =>
                         {
-                            if (!string.IsNullOrWhiteSpace(telemetryOptions.OtlpEndpoint))
+                            if (!string.IsNullOrWhiteSpace(otlpEndpoint))
                             {
-                                options.Endpoint = new Uri(telemetryOptions.OtlpEndpoint);
+                                options.Endpoint = new Uri(otlpEndpoint);
                             }
                         });
                         break;

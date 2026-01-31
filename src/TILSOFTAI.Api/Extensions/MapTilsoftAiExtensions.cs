@@ -14,6 +14,9 @@ public static class MapTilsoftAiExtensions
         // Security headers for all responses
         app.UseMiddleware<SecurityHeadersMiddleware>();
         
+        // Exception handling must be outermost to ensure all errors are envelope-shaped
+        app.UseMiddleware<ExceptionHandlingMiddleware>();
+        
         // CORS (if enabled via configuration)
         var corsOptions = app.Services.GetRequiredService<IOptions<CorsOptions>>().Value;
         if (corsOptions.Enabled)
@@ -31,10 +34,9 @@ public static class MapTilsoftAiExtensions
             });
         }
         
-        app.UseMiddleware<RequestSizeLimitMiddleware>();
-        app.UseMiddleware<ExceptionHandlingMiddleware>();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseMiddleware<RequestSizeLimitMiddleware>();
         app.UseRateLimiter();
         app.UseMiddleware<ExecutionContextMiddleware>();
 

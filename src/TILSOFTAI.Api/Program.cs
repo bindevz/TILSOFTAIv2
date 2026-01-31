@@ -7,13 +7,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
 // Configure Kestrel server limits for request body size enforcement
+// Reading configuration directly here is acceptable as this is host builder time, not runtime
 builder.WebHost.ConfigureKestrel((context, options) =>
 {
-    var chatOptions = context.Configuration
-        .GetSection(ConfigurationSectionNames.Chat)
-        .Get<ChatOptions>() ?? new ChatOptions();
+    var maxRequestBytes = context.Configuration.GetValue<long?>("Chat:MaxRequestBytes") ?? 1048576; // 1MB default
     
-    options.Limits.MaxRequestBodySize = chatOptions.MaxRequestBytes;
+    options.Limits.MaxRequestBodySize = maxRequestBytes;
 });
 
 builder.Services.AddTilsoftAi(builder.Configuration);

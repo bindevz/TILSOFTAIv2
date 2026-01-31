@@ -20,4 +20,11 @@ public sealed class ChatApiRequest
 
     [JsonPropertyName("metadata")]
     public JsonElement? Metadata { get; set; }
+
+    /// <summary>
+    /// Optional preferred language for this request (e.g., "en", "es", "fr").
+    /// If not provided or invalid, uses the connection-level language or default.
+    /// </summary>
+    [JsonPropertyName("preferredLanguage")]
+    public string? PreferredLanguage { get; set; }
 }

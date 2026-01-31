@@ -22,6 +22,7 @@ public sealed class HubIdentityResolutionPolicy
     /// <summary>
     /// Resolves identity for a SignalR hub invocation.
     /// Uses JWT claims only - no header fallback.
+    /// Supports language negotiation via querystring 'lang' parameter.
     /// </summary>
     public IdentityResolutionResult ResolveForHub(
         HubCallerContext hubContext,
@@ -47,8 +48,8 @@ public sealed class HubIdentityResolutionPolicy
         var userId = GetClaim(principal, authOptions.UserIdClaimName);
         var roles = ResolveRoles(principal, authOptions);
 
-        // Use configured default language for SignalR
-        var language = ResolveDefaultLanguage();
+        // Negotiate language from querystring or use default
+        var language = NegotiateLanguage(hubContext);
 
         return new IdentityResolutionResult
         {
@@ -80,6 +81,43 @@ public sealed class HubIdentityResolutionPolicy
     {
         var language = _localizationOptions.DefaultLanguage;
         return string.IsNullOrWhiteSpace(language) ? "en" : language.Trim();
+    }
+
+    /// <summary>
+    /// Negotiates language from querystring 'lang' parameter.
+    /// Validates against SupportedLanguages and falls back to default if invalid.
+    /// </summary>
+    private string NegotiateLanguage(HubCallerContext hubContext)
+    {
+        var httpContext = hubContext.GetHttpContext();
+        if (httpContext is null)
+        {
+            return ResolveDefaultLanguage();
+        }
+
+        var langParam = httpContext.Request.Query["lang"].ToString();
+        if (string.IsNullOrWhiteSpace(langParam))
+        {
+            return ResolveDefaultLanguage();
+        }
+
+        var normalized = langParam.Trim().ToLowerInvariant();
+
+        // Validate against supported languages
+        if (_localizationOptions.SupportedLanguages != null &&
+            _localizationOptions.SupportedLanguages.Length > 0)
+        {
+            var isSupported = _localizationOptions.SupportedLanguages
+                .Any(lang => string.Equals(lang, normalized, StringComparison.OrdinalIgnoreCase));
+
+            if (isSupported)
+            {
+                return normalized;
+            }
+        }
+
+        // Fallback to default if not supported
+        return ResolveDefaultLanguage();
     }
 
     private static string? GetClaim(ClaimsPrincipal? principal, string claimType)

@@ -139,6 +139,24 @@ public sealed class InMemoryErrorCatalog : IErrorCatalog
         return new ErrorDefinition(normalizedCode, resolvedLanguage, defaultMessage);
     }
 
+    public bool TryGetExact(string code, string language, out ErrorDefinition? definition)
+    {
+        var normalizedCode = string.IsNullOrWhiteSpace(code) ? ErrorCode.UnhandledError : code.Trim();
+        var resolvedLanguage = ResolveLanguage(language);
+
+        // Check if exact translation exists for the requested code and language
+        if (Messages.TryGetValue(normalizedCode, out var localized)
+            && localized.TryGetValue(resolvedLanguage, out var message))
+        {
+            definition = new ErrorDefinition(normalizedCode, resolvedLanguage, message);
+            return true;
+        }
+
+        // No exact match - this would fall back to English or UnhandledError
+        definition = null;
+        return false;
+    }
+
     private string ResolveLanguage(string? language)
     {
         var normalized = NormalizeLanguage(language);
