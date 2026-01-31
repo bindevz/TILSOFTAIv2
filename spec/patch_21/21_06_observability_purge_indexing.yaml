@@ -1,0 +1,21 @@
+schema_version: "1.0"
+document: "PATCH 21.06 - Observability Purge Indexing"
+language: "en"
+
+problem_statement:
+  - "Conversation lacks an index on (TenantId, CreatedAtUtc) which purge relies on."
+
+goals:
+  - "Add IX_Conversation_Tenant_CreatedAtUtc index idempotently."
+  - "Verify other observability indexes."
+
+files_to_modify:
+  modify:
+    - path: "sql/01_core/004_tables_observability.sql"
+      diff_intent:
+        - "Add CREATE INDEX IX_Conversation_Tenant_CreatedAtUtc (TenantId, CreatedAtUtc) if missing."
+  acceptance_criteria:
+    - "Script is idempotent."
+
+checklist:
+  - "Ensure index name is consistent with others."

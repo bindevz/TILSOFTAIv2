@@ -17,3 +17,13 @@ This log tracks spec pack completion at a high level.
 - 2026-01-30: 18_05_config_secrets_hygiene.yaml (DONE)
 - 2026-01-30: 18_06_ops_healthchecks_and_limits.yaml (DONE)
 - 2026-01-30: 18_07_ci_matrix_and_quality_gates.yaml (DONE)
+
+## Patch 21
+- 2026-01-31: 21_01_health_ready_redis_disabled_safe.yaml (DONE)
+- 2026-01-31: 21_02_request_body_size_enforcement_v2.yaml (DONE)
+- 2026-01-31: 21_03_signalr_execution_context_hub_filter.yaml (DONE)
+- 2026-01-31: 21_04_cors_single_source_of_truth.yaml (DONE)
+- 2026-01-31: 21_05_readme_identity_and_security_model_sync.yaml (DONE)
+- 2026-01-31: 21_06_observability_purge_indexing.yaml (DONE)
+- 2026-01-31: 21_07_test_scaffolding_contract_suite.yaml (DONE)
+- 2026-01-31: 21_08_progress_audit_and_cleanup.yaml (DONE)

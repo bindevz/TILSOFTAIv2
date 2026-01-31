@@ -1,0 +1,36 @@
+schema_version: "1.0"
+document: "PATCH 21.04 - CORS Single Source of Truth (Bind CorsOptions and Use Consistently)"
+language: "en"
+
+problem_statement:
+  - "CORS configuration is split and may not be bound into IOptions<CorsOptions>."
+  - "This can cause config mismatch where CORS is enabled but not applied."
+
+goals:
+  - "Bind CorsOptions via options system and use it for both AddCors and UseCors."
+  - "Validate allowlist rules."
+
+hard_constraints:
+  - "CORS is opt-in and disabled by default."
+  - "No wildcard with credentials."
+
+files_to_modify_or_create:
+  modify:
+    - path: "src/TILSOFTAI.Domain/Configuration/CorsOptions.cs"
+      diff_intent:
+        - "Ensure properties: Enabled, AllowedOrigins, AllowCredentials, AllowedHeaders, AllowedMethods."
+  modify_di:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Bind options: services.AddOptions<CorsOptions>().Bind(Configuration.GetSection("Cors")).Validate(...)"
+        - "Configure AddCors using bound options via options monitor at startup."
+  modify_pipeline:
+    - path: "src/TILSOFTAI.Api/Program.cs"
+      diff_intent:
+        - "UseCors('Default') only when CorsOptions.Enabled is true."
+        - "Place UseCors before auth for preflight support."
+  acceptance_criteria:
+    - "CORS headers appear only when enabled and allowlisted."
+
+checklist:
+  - "Remove any duplicated direct config reads for CORS."

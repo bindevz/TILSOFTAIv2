@@ -1,3 +1,4 @@
+using System.Buffers;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Errors;
@@ -6,7 +7,7 @@ namespace TILSOFTAI.Api.Middlewares;
 
 /// <summary>
 /// Middleware to enforce maximum request body size for chat endpoints.
-/// Validates Content-Length header against Chat:MaxRequestBytes configuration.
+/// Validates Content-Length header and buffers chunked requests to prevent bypass.
 /// </summary>
 public sealed class RequestSizeLimitMiddleware
 {
@@ -38,6 +39,7 @@ public sealed class RequestSizeLimitMiddleware
         {
             var contentLength = context.Request.ContentLength;
 
+            // Fast path: Content-Length present and exceeds limit
             if (contentLength.HasValue && contentLength.Value > _chatOptions.MaxRequestBytes)
             {
                 _logger.LogWarning(
@@ -55,9 +57,61 @@ public sealed class RequestSizeLimitMiddleware
                         actualBytes = contentLength.Value
                     });
             }
+
+            // Slow path: Content-Length missing (chunked transfer or HTTP/1.0)
+            // Use bounded buffering to prevent unbounded reads
+            if (!contentLength.HasValue)
+            {
+                await EnforceChunkedRequestLimitAsync(context);
+            }
         }
 
         await _next(context);
+    }
+
+    private async Task EnforceChunkedRequestLimitAsync(HttpContext context)
+    {
+        // Enable buffering with limits to allow multiple reads
+        context.Request.EnableBuffering(
+            bufferThreshold: _chatOptions.MaxRequestBytes,
+            bufferLimit: _chatOptions.MaxRequestBytes + 1);
+
+        var buffer = ArrayPool<byte>.Shared.Rent(8192); // 8KB chunks
+        try
+        {
+            long totalBytesRead = 0;
+            int bytesRead;
+
+            while ((bytesRead = await context.Request.Body.ReadAsync(buffer, 0, buffer.Length, context.RequestAborted)) > 0)
+            {
+                totalBytesRead += bytesRead;
+
+                if (totalBytesRead > _chatOptions.MaxRequestBytes)
+                {
+                    _logger.LogWarning(
+                        "Chunked request to {Path} rejected: body size {TotalBytes} exceeds limit {MaxRequestBytes}",
+                        context.Request.Path,
+                        totalBytesRead,
+                        _chatOptions.MaxRequestBytes);
+
+                    throw new TilsoftApiException(
+                        ErrorCode.RequestTooLarge,
+                        StatusCodes.Status413RequestEntityTooLarge,
+                        detail: new
+                        {
+                            maxRequestBytes = _chatOptions.MaxRequestBytes,
+                            actualBytes = totalBytesRead
+                        });
+                }
+            }
+
+            // Reset stream position for downstream handlers
+            context.Request.Body.Position = 0;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     private static bool ShouldEnforceLimit(HttpContext context)

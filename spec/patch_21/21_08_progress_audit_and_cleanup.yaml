@@ -1,0 +1,21 @@
+schema_version: "1.0"
+document: "PATCH 21.08 - Progress Audit + Cleanup"
+language: "en"
+
+problem_statement:
+  - "Top-level spec/PROGRESS.md must reflect patch execution for enterprise audit."
+
+goals:
+  - "Update spec/PROGRESS.md with Patch 21 entries and outcomes."
+  - "Ensure verify-repo-clean covers new test artifacts if needed."
+
+files_to_modify:
+  modify:
+    - path: "spec/PROGRESS.md"
+      diff_intent:
+        - "Append Patch 21 entries (21.01..21.07) with date/status/notes."
+  acceptance_criteria:
+    - "spec/PROGRESS.md includes Patch 21 entries."
+
+checklist:
+  - "No tracked build artifacts."

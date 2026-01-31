@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using TILSOFTAI.Api.Contracts.Chat;
 using TILSOFTAI.Api.Streaming;
 using TILSOFTAI.Domain.Configuration;
+using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Sensitivity;
 using TILSOFTAI.Orchestration;
@@ -40,6 +41,15 @@ public sealed class ChatHub : Hub
     public async Task StartChat(ChatApiRequest request, CancellationToken cancellationToken = default)
     {
         var context = _contextAccessor.Current;
+        
+        if (context is null)
+        {
+            throw new TilsoftApiException(
+                ErrorCode.Unauthenticated,
+                StatusCodes.Status401Unauthorized,
+                detail: "Execution context not available");
+        }
+        
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, Context.ConnectionAborted);
         var linkedToken = linkedCts.Token;
 

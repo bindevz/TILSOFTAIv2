@@ -7,6 +7,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using TILSOFTAI.Api.Auth;
 using TILSOFTAI.Api.Health;
+using TILSOFTAI.Api.Hubs;
 using TILSOFTAI.Api.Middlewares;
 using TILSOFTAI.Api.Streaming;
 using TILSOFTAI.Api.Tools;
@@ -48,6 +49,7 @@ using TILSOFTAI.Infrastructure.Observability;
 using TILSOFTAI.Orchestration.Observability;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.SignalR;
 using System.Threading.RateLimiting;
 
 namespace TILSOFTAI.Api.Extensions;
@@ -188,23 +190,32 @@ public static class AddTilsoftAiExtensions
         });
 
         services.AddControllers();
+        
+        // SignalR with execution context filter for per-invocation context management
+        services.AddSingleton<ExecutionContextHubFilter>();
+        services.Configure<HubOptions>(options =>
+        {
+            options.AddFilter<ExecutionContextHubFilter>();
+        });
         services.AddSignalR();
-        services.AddHealthChecks()
-            .AddCheck<SqlHealthCheck>("sql", tags: new[] { "ready" })
-            .AddCheck<RedisHealthCheck>("redis", tags: new[] { "ready" });
+        
+        // Health checks - register Redis check only when enabled
+        var redisOptions = configuration.GetSection(ConfigurationSectionNames.Redis).Get<RedisOptions>() ?? new RedisOptions();
+        var healthChecksBuilder = services.AddHealthChecks()
+            .AddCheck<SqlHealthCheck>("sql", tags: new[] { "ready" });
+        
+        if (redisOptions.Enabled)
+        {
+            healthChecksBuilder.AddCheck<RedisHealthCheck>("redis", tags: new[] { "ready" });
+        }
 
-        // CORS configuration
-        var corsOptions = configuration.GetSection("Cors").Get<CorsOptions>() ?? new CorsOptions();
+        // CORS configuration - using bound and validated options
+        // Options were bound and validated in RegisterOptions
+        var sp = services.BuildServiceProvider();
+        var corsOptions = sp.GetRequiredService<IOptions<CorsOptions>>().Value;
+        
         if (corsOptions.Enabled)
         {
-            // Validate: no wildcard origins if AllowCredentials is true
-            if (corsOptions.AllowCredentials && corsOptions.AllowedOrigins.Any(o => o == "*"))
-            {
-                throw new InvalidOperationException(
-                    "CORS: AllowCredentials=true requires explicit origins, not wildcard '*'. " +
-                    "Update Cors:AllowedOrigins in configuration.");
-            }
-
             services.AddCors(corsConfig =>
             {
                 corsConfig.AddPolicy("TilsoftCorsPolicy", policy =>
@@ -267,6 +278,23 @@ public static class AddTilsoftAiExtensions
         services.AddOptions<LocalizationOptions>()
             .Bind(configuration.GetSection(ConfigurationSectionNames.Localization))
             .Validate(options => !string.IsNullOrWhiteSpace(options.DefaultLanguage), "Localization:DefaultLanguage is required.")
+            .ValidateOnStart();
+
+        // Bind and validate CorsOptions
+        services.AddOptions<CorsOptions>()
+            .Bind(configuration.GetSection("Cors"))
+            .Validate(options =>
+            {
+                if (!options.Enabled) return true;
+                
+                // Validate: no wildcard origins if AllowCredentials is true
+                if (options.AllowCredentials && options.AllowedOrigins.Any(o => o == "*"))
+                {
+                    return false;
+                }
+                
+                return true;
+            }, "CORS: AllowCredentials=true requires explicit origins, not wildcard '*'. Update Cors:AllowedOrigins in configuration.")
             .ValidateOnStart();
 
         services.AddOptions<GovernanceOptions>()
@@ -356,6 +384,9 @@ public static class AddTilsoftAiExtensions
         }
         else
         {
+            // Register in-memory distributed cache as fallback
+            // This ensures IDistributedCache is always available for DI resolution
+            services.AddDistributedMemoryCache();
             services.AddSingleton<IRedisCacheProvider, NullRedisCacheProvider>();
         }
     }

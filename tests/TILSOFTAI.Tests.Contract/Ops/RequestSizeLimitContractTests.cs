@@ -38,7 +38,7 @@ public sealed class RequestSizeLimitContractTests
             async () => await middleware.InvokeAsync(context));
 
         Assert.NotNull(exception);
-        Assert.Equal(ErrorCode.InvalidArgument, exception.Result.Code);
+        Assert.Equal(ErrorCode.RequestTooLarge, exception.Result.Code);
         Assert.Equal(StatusCodes.Status413RequestEntityTooLarge, exception.Result.HttpStatusCode);
     }
 
@@ -131,7 +131,97 @@ public sealed class RequestSizeLimitContractTests
             async () => await middleware.InvokeAsync(context));
 
         Assert.NotNull(exception);
-        Assert.Equal(ErrorCode.InvalidArgument, exception.Result.Code);
+        Assert.Equal(ErrorCode.RequestTooLarge, exception.Result.Code);
+    }
+
+    [Fact]
+    public async Task RequestSizeLimitMiddleware_EnforcesChunkedOversize()
+    {
+        // Arrange
+        var chatOptions = Options.Create(new ChatOptions
+        {
+            MaxRequestBytes = 1024 // 1KB limit
+        });
+
+        var context = new DefaultHttpContext();
+        context.Request.Method = "POST";
+        context.Request.Path = "/api/chat";
+        // No Content-Length set to simulate chunked transfer
+        context.Request.Body = new MemoryStream(new byte[2048]); // 2KB body
+
+        var middleware = new RequestSizeLimitMiddleware(
+            _ => Task.CompletedTask,
+            chatOptions,
+            new FakeLogger());
+
+        // Act & Assert
+        var exception = await Assert.ThrowsAsync<TilsoftApiException>(
+            async () => await middleware.InvokeAsync(context));
+
+        Assert.Equal(ErrorCode.RequestTooLarge, exception.Code);
+        Assert.Equal(StatusCodes.Status413RequestEntityTooLarge, exception.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task RequestSizeLimitMiddleware_AllowsChunkedWithinLimit()
+    {
+        // Arrange
+        var chatOptions = Options.Create(new ChatOptions
+        {
+            MaxRequestBytes = 2048 // 2KB limit
+        });
+
+        var context = new DefaultHttpContext();
+        context.Request.Method = "POST";
+        context.Request.Path = "/api/chat";
+        // No Content-Length set to simulate chunked transfer
+        context.Request.Body = new MemoryStream(new byte[1024]); // 1KB body, within limit
+
+        var called = false;
+        var middleware = new RequestSizeLimitMiddleware(
+            _ =>
+            {
+                called = true;
+                return Task.CompletedTask;
+            },
+            chatOptions,
+            new FakeLogger());
+
+        // Act
+        await middleware.InvokeAsync(context);
+
+        // Assert - Should pass through without error
+        Assert.True(called);
+        Assert.Equal(0, context.Request.Body.Position); // Stream reset to beginning
+    }
+
+    [Fact]
+    public async Task RequestSizeLimitMiddleware_ChunkedDoesNotCauseOOM()
+    {
+        // Arrange - simulate very large request
+        var chatOptions = Options.Create(new ChatOptions
+        {
+            MaxRequestBytes = 1024 // 1KB limit
+        });
+
+        var context = new DefaultHttpContext();
+        context.Request.Method = "POST";
+        context.Request.Path = "/api/chat";
+        // Simulate 10MB body that should be rejected early
+        context.Request.Body = new MemoryStream(new byte[10 * 1024 * 1024]);
+
+        var middleware = new RequestSizeLimitMiddleware(
+            _ => Task.CompletedTask,
+            chatOptions,
+            new FakeLogger());
+
+        // Act & Assert - Should reject early without reading entire 10MB
+        var exception = await Assert.ThrowsAsync<TilsoftApiException>(
+            async () => await middleware.InvokeAsync(context));
+
+        Assert.Equal(ErrorCode.RequestTooLarge, exception.Code);
+        // Should abort soon after exceeding limit, not after reading all 10MB
+        Assert.True(context.Request.Body.Position < 10 * 1024 * 1024);
     }
 
     private sealed class FakeLogger : ILogger<RequestSizeLimitMiddleware>

@@ -1,0 +1,37 @@
+schema_version: "1.0"
+document: "PATCH 21.02 - Health Ready Stable when Redis Disabled (DI-safe)"
+language: "en"
+
+problem_statement:
+  - "Redis can be disabled, which prevents IDistributedCache registration."
+  - "RedisHealthCheck depends on IDistributedCache; readiness can fail due to DI resolution or incorrect check when Redis is disabled."
+  - "Enterprise requires readiness probes to be stable and reflect configured dependencies."
+
+goals:
+  - "If Redis.Enabled=false, readiness must not attempt Redis check and must not fail due to missing services."
+  - "Preferred: register AddDistributedMemoryCache as fallback so IDistributedCache always exists."
+  - "Register Redis health check ONLY when Redis.Enabled=true."
+
+hard_constraints:
+  - "Do not require Redis packages when Redis disabled."
+  - "Readiness must still check SQL."
+
+files_to_modify_or_create:
+  modify_di:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "If Redis.Enabled=false -> services.AddDistributedMemoryCache(); register IRedisCacheProvider = NullRedisCacheProvider."
+        - "If Redis.Enabled=true -> services.AddStackExchangeRedisCache(...) + IRedisCacheProvider = RedisCacheProvider."
+        - "Register health checks conditionally: add Redis health check ONLY when Redis.Enabled=true."
+      acceptance_criteria:
+        - "With Redis.Enabled=false, app starts and /health/ready works."
+  tests:
+    - path: "tests/TILSOFTAI.Tests.Contract/Ops/HealthEndpointsContractTests.cs"
+      action: "modify_or_create"
+      diff_intent:
+        - "Run with configuration override Redis.Enabled=false; /health/ready should return 200 and not fail DI."
+      acceptance_criteria:
+        - "Health tests pass."
+
+checklist:
+  - "Search for IDistributedCache injection in health checks; ensure DI always resolves."

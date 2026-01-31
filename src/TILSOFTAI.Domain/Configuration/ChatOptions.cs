@@ -8,6 +8,7 @@ public sealed class ChatOptions
     public int MaxRecursiveDepth { get; set; } = 3;
     public int MaxInputChars { get; set; } = 8000;
     public int MaxRequestBytes { get; set; } = 262144; // 256KB
+    public int MaxMessages { get; set; } = 50;
     public Dictionary<string, int> CompactionLimits { get; set; } = new();
     public CompactionRules CompactionRules { get; set; } = new();
 }

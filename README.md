@@ -47,21 +47,32 @@ Client (Web / App / SDK)
 
 ---
 
-## Multi-tenant & Multi-language Execution Context
+## Authentication & Execution Context
 
-All requests derive a `TilsoftExecutionContext` from HTTP headers (or defaults):
+### JWT-First Identity Resolution
 
-Required headers
-- `X-Tenant-Id`
-- `X-User-Id`
+All API endpoints require JWT Bearer authentication. Identity is resolved **claims-first**:
 
-Optional headers
-- `X-Roles` (CSV or `;` separated)
-- `X-Correlation-Id` (generated if missing)
-- `X-Conversation-Id` (generated if missing; **stable per conversation**)
-- `X-Lang` (preferred language; overrides `Accept-Language`)
+**JWT Claims** (primary source):
+- **Tenant**: configured via `Auth:TenantClaimName` (e.g., `tid` or `http://schemas.company.com/tenant`)
+- **User**: configured via `Auth:UserIdClaimName` (e.g., `sub` or `uid`)  
+- **Roles**: configured via `Auth:RoleClaimName` (e.g., `roles`, supports CSV)
 
-Context fields
+**Header Fallback** (Development only):
+- `X-Tenant-Id` and `X-User-Id` headers are accepted ONLY in Development mode with `Auth:AllowHeaderFallback=true`
+- OR when request has trusted gateway claim (`Auth:TrustedGatewayClaimName`)
+- **Production**: Claims take precedence; mismatched headers trigger spoof detection
+
+**Standard Headers** (always accepted):
+- `X-Correlation-Id` (generated if missing, used for distributed tracing)
+- `X-Conversation-Id` (generated if missing; stable per conversation)
+- `X-Lang` (preferred language; overrides `Accept-Language`, defaults to `Localization:DefaultLanguage`)
+
+**SignalR Context Isolation**:
+- Hub invocations use per-invocation context from JWT claims via `IHubFilter`
+- No tenant/user bleed across concurrent SignalR calls
+
+**Context fields**:
 - `TenantId`, `UserId`, `Roles[]`
 - `CorrelationId`, `ConversationId`, `RequestId`, `TraceId`
 - `Language` (stabilizes answer language)
@@ -92,6 +103,38 @@ Context fields
 - Internally calls **ChatPipeline** (same orchestration as platform chat)
 - **Does not leak internal tool payloads** into OpenAI stream output by default.
 
+### 3) Health Endpoints
+
+**Liveness** (always returns 200 if process is running):
+- `GET /health/live`
+- No checks performed
+- Anonymous access allowed
+
+**Readiness** (checks dependencies):
+- `GET /health/ready`
+- Checks: SQL (always), Redis (only if `Redis:Enabled=true`)
+- Anonymous access allowed
+- Returns 200 if all checks pass, 503 otherwise
+
+Both endpoints are exempt from rate limiting.
+
+---
+
+## Request Size Limits & DoS Protection
+
+**Request body size enforcement**:
+- Limit: `Chat:MaxRequestBytes` (default: 256KB)
+- Enforced at:
+  1. Kestrel server level (`MaxRequestBodySize`)
+  2. Middleware level (Content-Length + chunked request support)
+- Routes protected: `/api/chat`, `/api/chat/stream`, `/v1/chat/completions`
+- Error response: `413 REQUEST_TOO_LARGE`
+
+**Additional limits**:
+- `Chat:MaxMessages` (default: 50)
+- `Chat:MaxInputChars`
+- `Chat:MaxToolCallsPerRequest`
+
 ---
 
 ## Streaming Design (Enterprise-hardening)
@@ -104,6 +147,24 @@ Streaming is implemented using a **bounded channel** pattern:
   - Never drop `final` or `error`
 
 This avoids thread pool starvation and eliminates `GetAwaiter().GetResult()` in streaming paths.
+
+**Streaming error envelope**:
+
+When an error occurs during streaming, an `error` event is sent:
+
+```json
+{
+  "type": "error",
+  "correlationId": "...",
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Localized error message",
+    "detail": { ... }
+  }
+}
+```
+
+SignalR errors follow the same envelope shape in `chat_event` with `type: "error"`.
 
 ---
 

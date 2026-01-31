@@ -1,0 +1,50 @@
+schema_version: "1.0"
+document: "PATCH 21.03 - SignalR Execution Context Hardening (Per-invocation Hub Filter)"
+language: "en"
+
+problem_statement:
+  - "ExecutionContextAccessor uses AsyncLocal set by HTTP middleware; SignalR hub invocations may not preserve this context reliably."
+  - "This can cause tenant/user bleed across hub invocations or missing context."
+  - "Enterprise requires deterministic context resolution per hub invocation."
+
+goals:
+  - "Implement IHubFilter to resolve identity and set ExecutionContextAccessor per hub invocation."
+  - "Clear/reset context after invocation (finally) to avoid leakage."
+  - "Fail closed if context cannot be resolved."
+
+hard_constraints:
+  - "Do not rely on HTTP middleware context for hub methods."
+  - "Hub invocations must honor claims-first identity and ignore header roles."
+
+files_to_modify_or_create:
+  create:
+    - path: "src/TILSOFTAI.Api/Hubs/ExecutionContextHubFilter.cs"
+      diff_intent:
+        - "Implement IHubFilter.InvokeMethodAsync."
+        - "Resolve identity from HubCallerContext.User (claims)."
+        - "Build ExecutionContext (tenantId, userId, roles, language, correlationId, traceId)."
+        - "Set via IExecutionContextAccessor; clear in finally."
+      acceptance_criteria:
+        - "Each hub invocation has correct context."
+  modify_di:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Register filter and add to SignalR: services.AddSignalR(options => ...).AddHubOptions<ChatHub>(o => o.AddFilter<ExecutionContextHubFilter>()) OR global AddFilter."
+      acceptance_criteria:
+        - "Filter is active."
+  modify_hub:
+    - path: "src/TILSOFTAI.Api/Hubs/ChatHub.cs"
+      diff_intent:
+        - "Require non-null context from accessor; otherwise throw TilsoftApiException(ErrorCode.UNAUTHENTICATED)."
+      acceptance_criteria:
+        - "Hub fails closed if context missing."
+  tests:
+    - path: "tests/TILSOFTAI.Tests.Contract/SignalR/SignalRContextIsolationTests.cs"
+      action: "create"
+      diff_intent:
+        - "Use SignalR client in tests with TestServer; simulate two tenants; ensure no context bleed."
+      acceptance_criteria:
+        - "Isolation test passes."
+
+checklist:
+  - "Ensure context is cleared after invocation."
