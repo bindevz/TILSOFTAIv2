@@ -1,0 +1,46 @@
+schema_version: "1.0"
+document: "PATCH 22.02 - Real SignalR Contract Tests (No Context Bleed + Fail-Closed Claims)"
+language: "en"
+
+problem_statement:
+  - "SignalR behavior is critical and currently untested. Patch 21 lacked real isolation tests."
+  - "Enterprise requires tests to prevent regressions in tenant isolation and claim enforcement."
+
+goals:
+  - "Add integration/contract tests that spin up the API with TestServer and connect SignalR clients."
+  - "Test 1: Missing tenant/user claims => hub invocation fails (UNAUTHENTICATED)."
+  - "Test 2: Two clients with different tenants => no context bleed; server records/tool logs are tenant-correct (or context accessor remains correct)."
+
+hard_constraints:
+  - "Tests must not require external services (no real SQL/Redis/LLM)."
+  - "Use TestAuth scheme to inject claims per connection."
+  - "If it is hard to observe tenant attribution, add a test-only echo hub method behind conditional compilation or internal friend assembly."
+
+files_to_modify_or_create:
+  create:
+    - path: "tests/TILSOFTAI.Tests.Contract/SignalR/SignalRContextIsolationTests.cs"
+      diff_intent:
+        - "Use Microsoft.AspNetCore.SignalR.Client with WebApplicationFactory server."
+        - "Create 2 connections with different claims. Invoke StartChat (or a minimal hub method)."
+        - "Assert: each invocation receives UNAUTHENTICATED when missing claims; and does not cross-tenant."
+      acceptance_criteria:
+        - "Tests fail on regression and pass after patch."
+  modify_factory:
+    - path: "tests/TILSOFTAI.Tests.Contract/Fixtures/TestWebApplicationFactory.cs"
+      diff_intent:
+        - "Add configuration to enable SignalR over in-memory TestServer."
+        - "Add TestAuth handler that supports per-client claim sets."
+        - "Replace ISqlExecutor and stores with in-memory fakes to avoid DB."
+      acceptance_criteria:
+        - "SignalR tests run in CI."
+  create_test_auth:
+    - path: "tests/TILSOFTAI.Tests.Contract/Fixtures/TestAuthHandler.cs"
+      diff_intent:
+        - "Implement AuthenticationHandler that reads tenant/user/roles from headers 'X-Test-Tenant', 'X-Test-User', 'X-Test-Roles' ONLY in tests."
+        - "This must exist only in tests; production must not accept these headers."
+      acceptance_criteria:
+        - "No production code references X-Test-* headers."
+
+checklist:
+  - "Ensure tests do not rely on real network ports; use TestServer base address."
+  - "Ensure the hub invocation returns deterministic errors."

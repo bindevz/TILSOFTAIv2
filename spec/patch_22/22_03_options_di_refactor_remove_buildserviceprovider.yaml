@@ -1,0 +1,45 @@
+schema_version: "1.0"
+document: "PATCH 22.03 - DI/Options P1 Fix: Remove BuildServiceProvider Anti-pattern and Consolidate Options Consumption"
+language: "en"
+
+problem_statement:
+  - "AddTilsoftAiExtensions uses services.BuildServiceProvider() during service registration to read CorsOptions."
+  - "This creates a second DI container and can produce double-singletons, inconsistent options values, and non-deterministic behavior."
+  - "Additionally, some components bind options via configuration.GetSection().Get<T>() even though options are already registered and validated, which breaks 'single source of truth'."
+
+goals:
+  - "Remove all usages of services.BuildServiceProvider() from src/."
+  - "Ensure Options are bound and validated once, then consumed via IOptions/IOptionsMonitor in runtime pipeline."
+  - "Make CORS policy build at runtime based on IOptions<CorsOptions> without needing container build during registration."
+
+hard_constraints:
+  - "No behavior regression: CORS remains opt-in."
+  - "No container build during service registration."
+
+files_to_modify_or_create:
+  modify_extensions:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Delete any 'services.BuildServiceProvider()' usage."
+        - "Keep services.AddCors() registration minimal; do not attempt to read options at registration time."
+        - "Bind + Validate CorsOptions via services.AddOptions<CorsOptions>().Bind(...).ValidateOnStart()."
+      acceptance_criteria:
+        - "No BuildServiceProvider remains in src/."
+  modify_program_pipeline:
+    - path: "src/TILSOFTAI.Api/Program.cs"
+      diff_intent:
+        - "At runtime (after app built), read corsOptions from app.Services.GetRequiredService<IOptions<CorsOptions>>().Value."
+        - "If corsOptions.Enabled -> app.UseCors(policyBuilder => configure from options); else do not call UseCors."
+        - "Place UseCors before auth/authorization to allow preflight."
+      acceptance_criteria:
+        - "CORS works based on options without DI anti-pattern."
+  modify_map_extensions:
+    - path: "src/TILSOFTAI.Api/Extensions/MapTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Remove any residual CORS policy name dependencies if now using inline UseCors(builder => ...)."
+      acceptance_criteria:
+        - "No duplicated CORS policy setup remains."
+
+checklist:
+  - "Run search: 'BuildServiceProvider(' must return zero hits in src/."
+  - "Run search: '.GetSection("Cors").Get<' should be removed from src/ (except tests)."

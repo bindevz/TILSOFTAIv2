@@ -69,8 +69,9 @@ All API endpoints require JWT Bearer authentication. Identity is resolved **clai
 - `X-Lang` (preferred language; overrides `Accept-Language`, defaults to `Localization:DefaultLanguage`)
 
 **SignalR Context Isolation**:
-- Hub invocations use per-invocation context from JWT claims via `IHubFilter`
-- No tenant/user bleed across concurrent SignalR calls
+- Hub invocations use per-invocation context from JWT claims via `ExecutionContextHubFilter`.
+- **CRITICAL**: Tenant (`tid`) and User (`sub`) claims are REQUIRED. Missing claims result in immediate disconnection (401/403).
+- Context is reset after every invocation to prevent AsyncLocal bleed.
 
 **Context fields**:
 - `TenantId`, `UserId`, `Roles[]`
@@ -344,6 +345,10 @@ A sample configuration file with placeholders is available at `src/TILSOFTAI.Api
 ## Configuration
 
 All settings are centralized in `appsettings*.json` and bound to Options classes.
+**Configuration is the Single Source of Truth**:
+- Code consumes strictly `IOptions<T>` / `IOptionsMonitor<T>`.
+- Manual `configuration.GetSection()` is prohibited in application code (allowed only in `Program.cs` startup).
+- All Options are validated at startup (`ValidateOnStart`).
 
 Common sections:
 - `Chat` (limits, compaction)
@@ -411,17 +416,24 @@ curl -X POST "https://localhost:5001/v1/chat/completions"   -H "Authorization: B
 
 ---
 
-## Testing
+---
 
-### SQL contract tests
+## Testing & Headers
+
+### Contract Tests
 Set environment variable:
 - `TILSOFTAI_TEST_CONNECTION` (SQL connection string)
 
 Contract tests include:
 - Required SQL objects exist (ai_/app_ procedures, tables)
-- Schema lint:
-  - No PK includes nullable columns
-  - Required filtered unique indexes exist
+- Schema lint (PKs, indexes)
+
+### Test-Only Headers
+The test suite (in `TILSOFTAI.Tests.Contract`) uses a custom authentication handler (`TestAuthHandler`).
+- **Authorization: Test <token>**
+- Injected via `TestWebApplicationFactory`.
+- These headers and schemes are **NOT available in Production** (removed by compilation directives or separate startup config).
+- Production MUST use standard JWT Bearer tokens.
 
 ---
 

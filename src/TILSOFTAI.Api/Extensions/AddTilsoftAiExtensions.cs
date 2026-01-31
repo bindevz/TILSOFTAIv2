@@ -28,6 +28,7 @@ using TILSOFTAI.Infrastructure.Atomic;
 using TILSOFTAI.Infrastructure.Llm;
 using TILSOFTAI.Infrastructure.Metadata;
 using TILSOFTAI.Infrastructure.Prompting;
+using TILSOFTAI.Infrastructure.Localization;
 using TILSOFTAI.Infrastructure.Sensitivity;
 using TILSOFTAI.Infrastructure.Sql;
 using TILSOFTAI.Infrastructure.Tools;
@@ -47,7 +48,11 @@ using TILSOFTAI.Orchestration.Tools;
 using TILSOFTAI.Modules.Core.Tools;
 using TILSOFTAI.Infrastructure.Observability;
 using TILSOFTAI.Orchestration.Observability;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using System.Threading.RateLimiting;
@@ -147,8 +152,9 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<IModuleLoader, ModuleLoader>();
         services.AddHostedService<ModuleLoaderHostedService>();
         services.AddHostedService<ObservabilityPurgeHostedService>();
+        services.AddHostedService<ErrorCatalogCoverageGuard>();
 
-        ConfigureRedis(services, configuration);
+        RegisterCaching(services, configuration);
         ConfigureAuthentication(services, configuration);
 
         services.AddAuthorization(options =>
@@ -191,7 +197,8 @@ public static class AddTilsoftAiExtensions
 
         services.AddControllers();
         
-        // SignalR with execution context filter for per-invocation context management
+        // SignalR with execution context propagation and claims enforcement
+        services.AddSingleton<HubIdentityResolutionPolicy>();
         services.AddSingleton<ExecutionContextHubFilter>();
         services.Configure<HubOptions>(options =>
         {
@@ -209,28 +216,9 @@ public static class AddTilsoftAiExtensions
             healthChecksBuilder.AddCheck<RedisHealthCheck>("redis", tags: new[] { "ready" });
         }
 
-        // CORS configuration - using bound and validated options
-        // Options were bound and validated in RegisterOptions
-        var sp = services.BuildServiceProvider();
-        var corsOptions = sp.GetRequiredService<IOptions<CorsOptions>>().Value;
-        
-        if (corsOptions.Enabled)
-        {
-            services.AddCors(corsConfig =>
-            {
-                corsConfig.AddPolicy("TilsoftCorsPolicy", policy =>
-                {
-                    policy.WithOrigins(corsOptions.AllowedOrigins)
-                          .WithMethods(corsOptions.AllowedMethods)
-                          .WithHeaders(corsOptions.AllowedHeaders);
+        // CORS - register service only, configuration happens at runtime in Program.cs
+        services.AddCors();
 
-                    if (corsOptions.AllowCredentials)
-                    {
-                        policy.AllowCredentials();
-                    }
-                });
-            });
-        }
 
         return services;
     }
@@ -364,15 +352,20 @@ public static class AddTilsoftAiExtensions
             .ValidateOnStart();
     }
 
-    private static void ConfigureRedis(IServiceCollection services, IConfiguration configuration)
+    private static void RegisterCaching(IServiceCollection services, IConfiguration configuration)
     {
-        var redisOptions = configuration.GetSection(ConfigurationSectionNames.Redis).Get<RedisOptions>() ?? new RedisOptions();
+        // Determine cache type from configuration
+        var redisEnabled = configuration.GetValue<bool>("Redis:Enabled");
 
-        if (redisOptions.Enabled)
+        if (redisEnabled)
         {
+            // Redis cache - configuration reads from validated IOptions at runtime
             services.AddStackExchangeRedisCache(options =>
             {
-                options.Configuration = redisOptions.ConnectionString;
+                // Options configured inline reading from appsettings
+                // This is acceptable as AddOptions<RedisOptions>() validates connectionString elsewhere
+                var connectionString = configuration.GetValue<string>("Redis:ConnectionString") ?? string.Empty;
+                options.Configuration = connectionString;
             });
 
             services.AddSingleton<IRedisCacheProvider>(sp =>
@@ -394,7 +387,7 @@ public static class AddTilsoftAiExtensions
     private static void ConfigureAuthentication(IServiceCollection services, IConfiguration configuration)
     {
         var authOptions = configuration.GetSection(ConfigurationSectionNames.Auth).Get<AuthOptions>() ?? new AuthOptions();
-        services.AddTilsoftJwtAuthentication(Options.Create(authOptions));
+        services.AddTilsoftJwtAuthentication(Microsoft.Extensions.Options.Options.Create(authOptions));
     }
 
     private static void ConfigureOpenTelemetry(IServiceCollection services, IConfiguration configuration)

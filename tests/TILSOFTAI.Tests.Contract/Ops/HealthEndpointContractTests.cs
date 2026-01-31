@@ -1,3 +1,5 @@
+using System.Net;
+using TILSOFTAI.Tests.Contract.Fixtures;
 using Xunit;
 
 namespace TILSOFTAI.Tests.Contract.Ops;
@@ -6,44 +8,47 @@ namespace TILSOFTAI.Tests.Contract.Ops;
 /// Contract tests for health check endpoints.
 /// Verifies that health endpoints are properly mapped and accessible.
 /// </summary>
-public sealed class HealthEndpointContractTests
+public sealed class HealthEndpointContractTests : IClassFixture<TestWebApplicationFactory>
 {
-    [Fact]
-    public void HealthLiveEndpointShouldExist()
+    private readonly TestWebApplicationFactory _factory;
+
+    public HealthEndpointContractTests(TestWebApplicationFactory factory)
     {
-        // This test verifies that /health/live endpoint is configured.
-        // Actual runtime testing would require running the application,
-        // but the contract test ensures the endpoint mapping is defined.
-        
-        // The MapTilsoftAiExtensions should map /health/live with AllowAnonymous
-        Assert.True(true, "Health live endpoint mapping verified in MapTilsoftAiExtensions.cs");
+        _factory = factory;
+    }
+
+    [Fact]
+    public async Task HealthLiveEndpointShouldReturn200()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/health/live");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Equal("Healthy", content);
     }
     
     [Fact]
-    public void HealthReadyEndpointShouldExist()
+    public async Task HealthReadyEndpointShouldReturn200()
     {
-        // This test verifies that /health/ready endpoint is configured.
-        // The endpoint should check dependencies tagged with 'ready' (SQL, Redis).
-        
-        // The MapTilsoftAiExtensions should map /health/ready with AllowAnonymous
-        Assert.True(true, "Health ready endpoint mapping verified in MapTilsoftAiExtensions.cs");
-    }
-    
-    [Fact]
-    public void HealthChecksShouldRegisterSqlCheck()
-    {
-        // This test verifies that SqlHealthCheck is registered.
-        // The AddTilsoftAiExtensions should register SqlHealthCheck with tag 'ready'.
-        
-        Assert.True(true, "SqlHealthCheck registration verified in AddTilsoftAiExtensions.cs");
-    }
-    
-    [Fact]
-    public void HealthChecksShouldRegisterRedisCheck()
-    {
-        // This test verifies that RedisHealthCheck is registered.
-        // The AddTilsoftAiExtensions should register RedisHealthCheck with tag 'ready'.
-        
-        Assert.True(true, "RedisHealthCheck registration verified in AddTilsoftAiExtensions.cs");
+        // Arrange
+        var client = _factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/health/ready");
+
+        // Assert
+        // Might be Healthy or Unhealthy depending on services, but endpoint must be reachable.
+        // In test environment (no real SQL/Redis), we might get Unhealthy if not mocked,
+        // but the goal is to verify endpoint existence and response type.
+        // Let's check status code is valid (200 or 503) to ensure endpoint exists.
+        Assert.True(
+            response.StatusCode == HttpStatusCode.OK || response.StatusCode == HttpStatusCode.ServiceUnavailable,
+            $"Expected 200 or 503, got {response.StatusCode}"
+        );
     }
 }

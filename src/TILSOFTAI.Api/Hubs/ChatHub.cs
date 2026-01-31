@@ -42,12 +42,15 @@ public sealed class ChatHub : Hub
     {
         var context = _contextAccessor.Current;
         
-        if (context is null)
+        // Fail-closed: Require valid execution context with tenant and user
+        if (context is null || 
+            string.IsNullOrWhiteSpace(context.TenantId) || 
+            string.IsNullOrWhiteSpace(context.UserId))
         {
             throw new TilsoftApiException(
                 ErrorCode.Unauthenticated,
                 StatusCodes.Status401Unauthorized,
-                detail: "Execution context not available");
+                detail: "Execution context not available or incomplete");
         }
         
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, Context.ConnectionAborted);

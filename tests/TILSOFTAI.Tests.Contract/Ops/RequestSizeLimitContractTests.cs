@@ -15,7 +15,7 @@ namespace TILSOFTAI.Tests.Contract.Ops;
 public sealed class RequestSizeLimitContractTests
 {
     [Fact]
-    public void RequestSizeLimitMiddleware_EnforcesLimit_OnChatEndpoint()
+    public async Task RequestSizeLimitMiddleware_EnforcesLimit_OnChatEndpoint()
     {
         // Arrange
         var chatOptions = Options.Create(new ChatOptions
@@ -34,16 +34,16 @@ public sealed class RequestSizeLimitContractTests
             new FakeLogger());
 
         // Act & Assert
-        var exception = Assert.ThrowsAsync<TilsoftApiException>(
+        var exception = await Assert.ThrowsAsync<TilsoftApiException>(
             async () => await middleware.InvokeAsync(context));
 
         Assert.NotNull(exception);
-        Assert.Equal(ErrorCode.RequestTooLarge, exception.Result.Code);
-        Assert.Equal(StatusCodes.Status413RequestEntityTooLarge, exception.Result.HttpStatusCode);
+        Assert.Equal(ErrorCode.RequestTooLarge, exception.Code);
+        Assert.Equal(StatusCodes.Status413RequestEntityTooLarge, exception.HttpStatusCode);
     }
 
     [Fact]
-    public void RequestSizeLimitMiddleware_AllowsRequest_BelowLimit()
+    public async Task RequestSizeLimitMiddleware_AllowsRequest_BelowLimit()
     {
         // Arrange
         var chatOptions = Options.Create(new ChatOptions
@@ -67,14 +67,14 @@ public sealed class RequestSizeLimitContractTests
             new FakeLogger());
 
         // Act
-        middleware.InvokeAsync(context).Wait();
+        await middleware.InvokeAsync(context);
 
         // Assert
         Assert.True(called);
     }
 
     [Fact]
-    public void RequestSizeLimitMiddleware_IgnoresNonChatEndpoints()
+    public async Task RequestSizeLimitMiddleware_IgnoresNonChatEndpoints()
     {
         // Arrange
         var chatOptions = Options.Create(new ChatOptions
@@ -98,7 +98,7 @@ public sealed class RequestSizeLimitContractTests
             new FakeLogger());
 
         // Act
-        middleware.InvokeAsync(context).Wait();
+        await middleware.InvokeAsync(context);
 
         // Assert - Should pass through without error
         Assert.True(called);
@@ -108,7 +108,7 @@ public sealed class RequestSizeLimitContractTests
     [InlineData("/api/chat")]
     [InlineData("/api/chat/stream")]
     [InlineData("/v1/chat/completions")]
-    public void RequestSizeLimitMiddleware_EnforcesOnAllChatRoutes(string path)
+    public async Task RequestSizeLimitMiddleware_EnforcesOnAllChatRoutes(string path)
     {
         // Arrange
         var chatOptions = Options.Create(new ChatOptions
@@ -127,11 +127,11 @@ public sealed class RequestSizeLimitContractTests
             new FakeLogger());
 
         // Act & Assert
-        var exception = Assert.ThrowsAsync<TilsoftApiException>(
+        var exception = await Assert.ThrowsAsync<TilsoftApiException>(
             async () => await middleware.InvokeAsync(context));
 
         Assert.NotNull(exception);
-        Assert.Equal(ErrorCode.RequestTooLarge, exception.Result.Code);
+        Assert.Equal(ErrorCode.RequestTooLarge, exception.Code);
     }
 
     [Fact]

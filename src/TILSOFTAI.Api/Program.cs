@@ -20,6 +20,7 @@ builder.Services.AddTilsoftAi(builder.Configuration);
 
 var app = builder.Build();
 
+
 // HTTPS redirection and HSTS in production only
 if (!app.Environment.IsDevelopment())
 {

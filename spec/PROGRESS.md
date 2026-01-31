@@ -27,3 +27,13 @@ This log tracks spec pack completion at a high level.
 - 2026-01-31: 21_06_observability_purge_indexing.yaml (DONE)
 - 2026-01-31: 21_07_test_scaffolding_contract_suite.yaml (DONE)
 - 2026-01-31: 21_08_progress_audit_and_cleanup.yaml (DONE)
+
+## Patch 22
+- 2026-01-31: 22_01_signalr_claims_enforcement_and_context_reset.yaml (DONE)
+- 2026-01-31: 22_02_signalr_contract_tests_real.yaml (DONE)
+- 2026-01-31: 22_03_options_di_refactor_remove_buildserviceprovider.yaml (DONE)
+- 2026-01-31: 22_04_options_di_refactor_redis_auth_cors_named_configurers.yaml (DONE)
+- 2026-01-31: 22_05_localization_error_catalog_coverage_and_guard.yaml (DONE)
+- 2026-01-31: 22_06_replace_fake_tests_health_cors_streaming.yaml (DONE)
+- 2026-01-31: 22_07_docs_readme_accuracy_and_no_overclaims.yaml (DONE)
+- 2026-01-31: 22_08_progress_audit_and_cleanup.yaml (DONE)

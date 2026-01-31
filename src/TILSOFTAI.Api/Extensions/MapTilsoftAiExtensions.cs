@@ -18,7 +18,17 @@ public static class MapTilsoftAiExtensions
         var corsOptions = app.Services.GetRequiredService<IOptions<CorsOptions>>().Value;
         if (corsOptions.Enabled)
         {
-            app.UseCors("TilsoftCorsPolicy");
+            app.UseCors(policy =>
+            {
+                policy.WithOrigins(corsOptions.AllowedOrigins)
+                      .WithMethods(corsOptions.AllowedMethods)
+                      .WithHeaders(corsOptions.AllowedHeaders);
+
+                if (corsOptions.AllowCredentials)
+                {
+                    policy.AllowCredentials();
+                }
+            });
         }
         
         app.UseMiddleware<RequestSizeLimitMiddleware>();

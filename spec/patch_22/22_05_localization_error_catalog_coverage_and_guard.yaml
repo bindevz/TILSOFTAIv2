@@ -1,0 +1,53 @@
+schema_version: "1.0"
+document: "PATCH 22.05 - Localization P1 Fix: Error Catalog Coverage + Guard for High-Impact Codes"
+language: "en"
+
+problem_statement:
+  - "InMemoryErrorCatalog does not include messages for all high-impact ErrorCodes (e.g., REQUEST_TOO_LARGE)."
+  - "This undermines the multi-language requirement and produces generic fallback messages."
+  - "Enterprise requires predictable localized messages for operationally critical errors."
+
+goals:
+  - "Add localized messages (en + vi) for all P0/P1 error codes used in code paths."
+  - "Add a startup guard to ensure the catalog contains required codes in all supported languages."
+  - "Ensure SupportedLanguages in LocalizationOptions controls which languages must be fully covered."
+
+hard_constraints:
+  - "No breaking changes to existing message keys."
+  - "Do not throw at startup for languages not enabled in SupportedLanguages."
+  - "Guard must fail-closed if enabled language lacks a required message key."
+
+files_to_modify_or_create:
+  modify_catalog:
+    - path: "src/TILSOFTAI.Infrastructure/Localization/InMemoryErrorCatalog.cs"
+      diff_intent:
+        - "Add entries for at least: REQUEST_TOO_LARGE, UNAUTHENTICATED, FORBIDDEN, INTERNAL_ERROR, TENANT_MISMATCH, TOOL_ARGS_INVALID."
+        - "Ensure Vietnamese text is proper (with diacritics) or at least consistent; avoid 'khong dau' if possible."
+        - "Use LocalizationOptions.SupportedLanguages to determine which languages must be present."
+      acceptance_criteria:
+        - "Catalog returns non-empty message for required codes in enabled languages."
+  create_guard:
+    - path: "src/TILSOFTAI.Infrastructure/Localization/ErrorCatalogCoverageGuard.cs"
+      diff_intent:
+        - "Implement IHostedService or IStartupFilter that validates coverage on startup."
+        - "Inputs: IErrorCatalog + IOptions<LocalizationOptions> + a list of RequiredErrorCodes (hardcoded in guard)."
+        - "If any required code missing in any enabled language -> throw InvalidOperationException with a clear message (no secrets)."
+      acceptance_criteria:
+        - "App fails at startup if catalog is incomplete for enabled languages."
+  modify_di:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Register ErrorCatalogCoverageGuard."
+        - "Ensure LocalizationOptions.SupportedLanguages includes 'en' and 'vi' in sample configs."
+      acceptance_criteria:
+        - "Guard runs on startup."
+  tests:
+    - path: "tests/TILSOFTAI.Tests.Unit/Localization/ErrorCatalogCoverageGuardTests.cs"
+      action: "create"
+      diff_intent:
+        - "Unit test coverage guard with enabled languages and a mock catalog."
+      acceptance_criteria:
+        - "Tests verify missing codes cause failure."
+
+checklist:
+  - "Verify RequiredErrorCodes list matches actual ErrorCode enum usage."

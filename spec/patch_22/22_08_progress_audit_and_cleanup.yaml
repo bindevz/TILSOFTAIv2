@@ -1,0 +1,35 @@
+schema_version: "1.0"
+document: "PATCH 22.08 - Progress Audit + Cleanup"
+language: "en"
+
+problem_statement:
+  - "Enterprise audit requires patch execution to be traceable in spec/PROGRESS.md."
+  - "After Patch 22, repo should have clean trace and no dead/duplicate code paths introduced by refactors."
+
+goals:
+  - "Update spec/PROGRESS.md with Patch 22 entries (22.01..22.07)."
+  - "Remove any dead code related to old CORS policy name or DI anti-pattern."
+  - "Ensure CI still enforces repo hygiene."
+
+hard_constraints:
+  - "Do not remove production-needed scripts."
+  - "All deletions must be safe."
+
+files_to_modify:
+  modify:
+    - path: "spec/PROGRESS.md"
+      diff_intent:
+        - "Append Patch 22 entries with date/status/notes."
+  optional_modify:
+    - path: ".github/workflows/ci.yml"
+      diff_intent:
+        - "Ensure dotnet test runs and fails on failing tests."
+  optional_cleanup:
+    - "Delete obsolete CORS policy name constants if no longer used."
+
+acceptance_criteria:
+  - "spec/PROGRESS.md includes Patch 22 entries."
+  - "CI passes and enforces tests + hygiene."
+
+checklist:
+  - "Search for unused constants/policy names introduced earlier."

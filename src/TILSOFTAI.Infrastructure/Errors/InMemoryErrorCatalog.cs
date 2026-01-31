@@ -30,6 +30,11 @@ public sealed class InMemoryErrorCatalog : IErrorCatalog
                 ["en"] = "Authentication is required.",
                 ["vi"] = "Can xac thuc truoc khi truy cap."
             },
+            [ErrorCode.RequestTooLarge] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Request body too large.",
+                ["vi"] = "Kich thuoc yeu cau qua lon."
+            },
             [ErrorCode.Forbidden] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["en"] = "You do not have permission to perform this action.",

@@ -1,0 +1,56 @@
+schema_version: "1.0"
+document: "PATCH 22.04 - Options SSoT P1 Fix: Replace Options Rebind with Named Configurers (Redis/Auth/JWT/OIDC)"
+language: "en"
+
+problem_statement:
+  - "Some services are configured by re-binding config sections (configuration.Get<T>()) instead of consuming validated IOptions."
+  - "This can cause drift between validated options and actual behavior."
+  - "Enterprise requires options to be the single source of truth and supports dependency injection for configuring framework options."
+
+goals:
+  - "Configure Redis cache and JWT bearer using DI-based configurers that read IOptions<...> (already validated)."
+  - "Remove all direct config rebinds for Redis/Auth options in src/."
+  - "Ensure ValidateOnStart is meaningful (behavior uses the validated options)."
+
+hard_constraints:
+  - "Do not introduce startup network calls."
+  - "Do not break existing config keys."
+
+files_to_modify_or_create:
+  create_configurers:
+    - path: "src/TILSOFTAI.Api/Options/ConfigureRedisCacheOptions.cs"
+      diff_intent:
+        - "Implement IConfigureOptions<Microsoft.Extensions.Caching.StackExchangeRedis.RedisCacheOptions> (or IConfigureNamedOptions)."
+        - "Inject IOptions<RedisOptions> and map ConnectionString/InstanceName."
+        - "If Redis disabled, do nothing (or configure memory cache path elsewhere)."
+      acceptance_criteria:
+        - "RedisCacheOptions are configured from IOptions<RedisOptions> only."
+    - path: "src/TILSOFTAI.Api/Options/ConfigureJwtBearerOptions.cs"
+      diff_intent:
+        - "Implement IConfigureNamedOptions<JwtBearerOptions>."
+        - "Inject IOptions<AuthOptions>, IOptions<OidcOptions>, OidcKeyProvider, IWebHostEnvironment."
+        - "Set TokenValidationParameters using AuthOptions claim names and issuer/audience."
+        - "Do not perform network calls."
+      acceptance_criteria:
+        - "JwtBearerOptions use validated options and provider."
+  modify_auth_setup:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Register the configurers above as singletons."
+        - "Call services.AddStackExchangeRedisCache(); (no inline action)"
+        - "Call services.AddAuthentication().AddJwtBearer(); (no inline action beyond scheme selection)"
+        - "Ensure memory cache is registered when Redis disabled (AddDistributedMemoryCache)."
+      acceptance_criteria:
+        - "No configuration.Get<T>() used for Redis/Auth setup in src/."
+  modify_redis_provider:
+    - path: "src/TILSOFTAI.Infrastructure/Caching/RedisCacheProvider.cs"
+      diff_intent:
+        - "If it assumes Redis always enabled, make it depend on IRedisCacheProvider abstraction; ensure Null provider used when disabled."
+      acceptance_criteria:
+        - "Redis disabled path is safe."
+  tests_optional:
+    - "Unit test: ConfigureJwtBearerOptions uses cached keys and does not block."
+
+checklist:
+  - "Search in src/: 'GetSection("Auth").Get<' and 'GetSection("Redis").Get<' should be zero."
+  - "Ensure AddTilsoftAiExtensions does not create service provider."
