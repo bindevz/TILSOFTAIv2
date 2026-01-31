@@ -13,3 +13,7 @@ This log tracks spec pack completion at a high level.
 - 2026-01-30: 18_01_security_role_trust_boundary.yaml (DONE)
 - 2026-01-30: 18_02_security_jwks_resilience.yaml (DONE)
 - 2026-01-30: 18_03_error_taxonomy_and_schema_validation_details.yaml (DONE)
+- 2026-01-30: 18_04_observability_retention_purge.yaml (DONE)
+- 2026-01-30: 18_05_config_secrets_hygiene.yaml (DONE)
+- 2026-01-30: 18_06_ops_healthchecks_and_limits.yaml (DONE)
+- 2026-01-30: 18_07_ci_matrix_and_quality_gates.yaml (DONE)

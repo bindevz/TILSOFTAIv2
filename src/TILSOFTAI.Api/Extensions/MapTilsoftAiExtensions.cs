@@ -8,6 +8,7 @@ public static class MapTilsoftAiExtensions
     public static WebApplication MapTilsoftAi(this WebApplication app)
     {
         app.UseRouting();
+        app.UseMiddleware<RequestSizeLimitMiddleware>();
         app.UseMiddleware<ExceptionHandlingMiddleware>();
         app.UseAuthentication();
         app.UseAuthorization();

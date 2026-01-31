@@ -46,6 +46,7 @@ using TILSOFTAI.Orchestration.Tools;
 using TILSOFTAI.Modules.Core.Tools;
 using TILSOFTAI.Infrastructure.Observability;
 using TILSOFTAI.Orchestration.Observability;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 
@@ -148,7 +149,12 @@ public static class AddTilsoftAiExtensions
         ConfigureRedis(services, configuration);
         ConfigureAuthentication(services, configuration);
 
-        services.AddAuthorization();
+        services.AddAuthorization(options =>
+        {
+            options.FallbackPolicy = new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .Build();
+        });
         
         services.AddRateLimiter(options =>
         {

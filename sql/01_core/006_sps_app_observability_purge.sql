@@ -10,6 +10,11 @@ GO
 --   @RetentionDays: Number of days to retain (default: 30)
 --   @BatchSize: Number of records to delete per batch (default: 5000)
 --   @TenantId: Optional tenant filter (NULL = all tenants)
+--
+-- SAFETY NOTE: This is the CANONICAL definition of dbo.app_observability_purge.
+-- Consumers: ObservabilityPurgeHostedService (TILSOFTAI.Orchestration.Observability)
+-- Signature: @RetentionDays int, @BatchSize int, @TenantId nvarchar(50)
+-- Do NOT create duplicate definitions with different signatures.
 -- =============================================
 CREATE OR ALTER PROCEDURE dbo.app_observability_purge
     @RetentionDays int = 30,

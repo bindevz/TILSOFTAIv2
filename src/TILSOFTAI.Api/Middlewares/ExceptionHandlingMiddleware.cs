@@ -162,14 +162,17 @@ public sealed class ExceptionHandlingMiddleware
 
     private object? BuildClientDetail(string code, object? rawDetail, IdentityResolutionResult identity)
     {
-        if (!IsDetailAllowed(identity))
-        {
-            return null;
-        }
-
+        // Always return validation details for validation codes, regardless of detail policy
+        // This ensures structured error paths are actionable in production
         if (IsValidationCode(code))
         {
             return BuildValidationDetails(code, rawDetail);
+        }
+
+        // Apply detail policy for other error codes
+        if (!IsDetailAllowed(identity))
+        {
+            return null;
         }
 
         if (rawDetail is null)

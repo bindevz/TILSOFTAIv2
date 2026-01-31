@@ -112,6 +112,62 @@ public sealed class ToolArgsInvalidContractTests
         Assert.Equal(ErrorCode.ToolArgsInvalid, first.GetProperty("messageKey").GetString());
     }
 
+    [Fact]
+    public async Task Middleware_ReturnsToolArgsInvalidDetail_EvenWhenDetailPolicyDisabled()
+    {
+        // Arrange - Production-like settings with error detail disabled
+        var identityPolicy = new IdentityResolutionPolicy(Options.Create(new LocalizationOptions
+        {
+            DefaultLanguage = "en"
+        }));
+
+        var middleware = new ExceptionHandlingMiddleware(
+            _ => throw new TilsoftApiException(
+                ErrorCode.ToolArgsInvalid,
+                StatusCodes.Status400BadRequest,
+                detail: new[] { "/parameter: invalid type" }),
+            new TILSOFTAI.Infrastructure.Errors.InMemoryErrorCatalog(Options.Create(new LocalizationOptions
+            {
+                DefaultLanguage = "en"
+            })),
+            new NullSqlErrorLogWriter(),
+            Options.Create(new AuthOptions
+            {
+                TenantClaimName = "tid",
+                UserIdClaimName = "sub",
+                TrustedGatewayClaimName = "gateway_trusted"
+            }),
+            Options.Create(new ObservabilityOptions { EnableSqlErrorLog = false }),
+            Options.Create(new ErrorHandlingOptions
+            {
+                ExposeErrorDetail = false, // Disabled - production mode
+                ExposeErrorDetailInDevelopment = false,
+                ExposeErrorDetailRoles = Array.Empty<string>()
+            }),
+            identityPolicy,
+            new TestEnvironment { EnvironmentName = "Production" },
+            new BasicLogRedactor(),
+            NullLogger<ExceptionHandlingMiddleware>.Instance);
+
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        context.User = BuildPrincipal(); // Regular user without special roles
+
+        // Act
+        await middleware.InvokeAsync(context);
+
+        // Assert - Validation details should still be returned
+        context.Response.Body.Position = 0;
+        using var doc = await JsonDocument.ParseAsync(context.Response.Body);
+        var error = doc.RootElement.GetProperty("error");
+        var detail = error.GetProperty("detail");
+
+        Assert.Equal(JsonValueKind.Array, detail.ValueKind);
+        var first = detail[0];
+        Assert.Equal("/parameter", first.GetProperty("path").GetString());
+        Assert.Equal(ErrorCode.ToolArgsInvalid, first.GetProperty("messageKey").GetString());
+    }
+
     private static ClaimsPrincipal BuildPrincipal()
     {
         var identity = new ClaimsIdentity("Test");
