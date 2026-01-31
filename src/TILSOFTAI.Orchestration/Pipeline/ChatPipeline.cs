@@ -243,7 +243,13 @@ public sealed class ChatPipeline
                 case "error":
                     if (!string.IsNullOrEmpty(evt.Error))
                     {
-                        chatRequest.StreamObserver?.Report(ChatStreamEvent.Error(evt.Error));
+                        // Wrap LLM errors in ErrorEnvelope to prevent leaking internal details
+                        var errorEnvelope = new ErrorEnvelope
+                        {
+                            Code = ErrorCode.ChatFailed,
+                            Detail = null // Never expose raw LLM error messages
+                        };
+                        chatRequest.StreamObserver?.Report(ChatStreamEvent.Error(errorEnvelope));
                     }
                     break;
             }
@@ -253,9 +259,15 @@ public sealed class ChatPipeline
         return response;
     }
 
-    private ChatResult Fail(ChatRequest request, string error, string? code = null, object? detail = null)
+    private ChatResult Fail(ChatRequest request, string errorMessage, string? code = null, object? detail = null)
     {
-        request.StreamObserver?.Report(ChatStreamEvent.Error(error));
-        return ChatResult.Fail(error, code, detail);
+        // Emit structured ErrorEnvelope to stream, never raw error strings
+        var errorEnvelope = new ErrorEnvelope
+        {
+            Code = code ?? ErrorCode.ChatFailed,
+            Detail = detail // Pass structured detail only, not raw message
+        };
+        request.StreamObserver?.Report(ChatStreamEvent.Error(errorEnvelope));
+        return ChatResult.Fail(errorMessage, code, detail);
     }
 }

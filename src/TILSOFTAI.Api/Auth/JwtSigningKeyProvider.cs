@@ -46,7 +46,14 @@ public sealed class JwtSigningKeyProvider : IJwtSigningKeyProvider
         }
     }
 
-    public IReadOnlyCollection<SecurityKey> GetKeys() => _keys;
+    public IReadOnlyCollection<SecurityKey> GetKeys()
+    {
+        if (_keys.Count == 0 && !string.IsNullOrWhiteSpace(_lastError))
+        {
+            _logger.LogDebug("GetKeys called but no keys available. Last error: {Error}", _lastError);
+        }
+        return _keys;
+    }
 
     public async Task<bool> RefreshAsync(CancellationToken ct)
     {

@@ -26,4 +26,5 @@ public static class ErrorCode
     public const string SqlError = "SQL_ERROR";
     public const string ChatFailed = "CHAT_FAILED";
     public const string UnhandledError = "UNHANDLED_ERROR";
+    public const string RequestTooLarge = "REQUEST_TOO_LARGE";
 }

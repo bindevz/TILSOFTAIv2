@@ -47,7 +47,7 @@ public sealed class RequestSizeLimitMiddleware
                     _chatOptions.MaxRequestBytes);
 
                 throw new TilsoftApiException(
-                    ErrorCode.InvalidArgument,
+                    ErrorCode.RequestTooLarge,
                     StatusCodes.Status413RequestEntityTooLarge,
                     detail: new
                     {

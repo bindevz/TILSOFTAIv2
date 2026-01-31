@@ -23,7 +23,10 @@ public sealed class NamedToolHandlerRegistry : INamedToolHandlerRegistry
 
         if (_handlers.ContainsKey(toolName))
         {
-            throw new InvalidOperationException($"Tool handler for '{toolName}' is already registered.");
+            var existingType = _handlers[toolName].FullName ?? _handlers[toolName].Name;
+            throw new InvalidOperationException(
+                $"TOOL_DUPLICATE_REGISTRATION: Tool '{toolName}' is already registered " +
+                $"with handler '{existingType}'. Cannot register '{handlerType.FullName ?? handlerType.Name}'.");
         }
 
         _handlers[toolName] = handlerType;

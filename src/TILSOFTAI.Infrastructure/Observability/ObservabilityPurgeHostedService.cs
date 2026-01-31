@@ -8,16 +8,16 @@ using TILSOFTAI.Domain.Configuration;
 namespace TILSOFTAI.Infrastructure.Observability;
 
 /// <summary>
-/// Background hosted service that purges old observability data daily.
+/// Background hosted service that purges old observability data periodically.
 /// Calls dbo.app_observability_purge based on ObservabilityOptions.RetentionDays.
 /// Only runs if ObservabilityOptions.PurgeEnabled is true.
+/// Uses PeriodicTimer for clean cancellation and configurable intervals.
 /// </summary>
-public sealed class ObservabilityPurgeHostedService : IHostedService, IDisposable
+public sealed class ObservabilityPurgeHostedService : BackgroundService
 {
     private readonly IOptions<ObservabilityOptions> _observabilityOptions;
     private readonly IOptions<SqlOptions> _sqlOptions;
     private readonly ILogger<ObservabilityPurgeHostedService> _logger;
-    private Timer? _timer;
 
     public ObservabilityPurgeHostedService(
         IOptions<ObservabilityOptions> observabilityOptions,
@@ -29,44 +29,44 @@ public sealed class ObservabilityPurgeHostedService : IHostedService, IDisposabl
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var purgeEnabled = _observabilityOptions.Value.PurgeEnabled;
-        
-        if (!purgeEnabled)
+        if (!_observabilityOptions.Value.PurgeEnabled)
         {
             _logger.LogInformation("Observability purge service disabled. Set Observability:PurgeEnabled=true to enable.");
-            return Task.CompletedTask;
+            return;
         }
 
-        var purgeHour = _observabilityOptions.Value.PurgeRunHourUtc;
+        var intervalMinutes = _observabilityOptions.Value.PurgeIntervalMinutes;
+        var interval = TimeSpan.FromMinutes(intervalMinutes);
+
         _logger.LogInformation(
-            "Observability purge service starting. Purge will run daily at {PurgeHour}:00 UTC.",
-            purgeHour);
-        
-        // Calculate time until next purge
-        var now = DateTime.UtcNow;
-        var nextRun = new DateTime(now.Year, now.Month, now.Day, purgeHour, 0, 0, DateTimeKind.Utc);
-        
-        if (nextRun <= now)
+            "Observability purge service starting. Interval: {IntervalMinutes} minutes",
+            intervalMinutes);
+
+        using var timer = new PeriodicTimer(interval);
+
+        try
         {
-            // If the time has already passed today, schedule for tomorrow
-            nextRun = nextRun.AddDays(1);
+            // Execute purge immediately on startup, then at intervals
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await ExecutePurgeAsync(stoppingToken);
+                
+                // Wait for next tick or cancellation
+                if (!await timer.WaitForNextTickAsync(stoppingToken))
+                {
+                    break;
+                }
+            }
         }
-        
-        var initialDelay = nextRun - now;
-        var period = TimeSpan.FromHours(24);
-        
-        _logger.LogInformation(
-            "First purge scheduled for {NextRun:yyyy-MM-dd HH:mm:ss} UTC (in {Hours}h {Minutes}m)",
-            nextRun, (int)initialDelay.TotalHours, initialDelay.Minutes);
-        
-        _timer = new Timer(ExecutePurge, null, initialDelay, period);
-        
-        return Task.CompletedTask;
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Observability purge service cancelled.");
+        }
     }
 
-    private async void ExecutePurge(object? state)
+    private async Task ExecutePurgeAsync(CancellationToken cancellationToken)
     {
         if (!_observabilityOptions.Value.PurgeEnabled)
         {
@@ -84,7 +84,7 @@ public sealed class ObservabilityPurgeHostedService : IHostedService, IDisposabl
         try
         {
             await using var connection = new SqlConnection(_sqlOptions.Value.ConnectionString);
-            await connection.OpenAsync();
+            await connection.OpenAsync(cancellationToken);
             
             await using var command = new SqlCommand("dbo.app_observability_purge", connection)
             {
@@ -96,9 +96,9 @@ public sealed class ObservabilityPurgeHostedService : IHostedService, IDisposabl
             command.Parameters.AddWithValue("@BatchSize", batchSize);
             command.Parameters.AddWithValue("@TenantId", DBNull.Value); // Purge all tenants
             
-            await using var reader = await command.ExecuteReaderAsync();
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             
-            if (await reader.ReadAsync())
+            if (await reader.ReadAsync(cancellationToken))
             {
                 var cutoffDate = reader.GetDateTime(reader.GetOrdinal("CutoffDate"));
                 var deletedMessages = reader.GetInt32(reader.GetOrdinal("DeletedMessages"));
@@ -117,21 +117,14 @@ public sealed class ObservabilityPurgeHostedService : IHostedService, IDisposabl
         {
             _logger.LogError(ex, "SQL error executing observability purge. Procedure may not exist or database unavailable.");
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("Purge operation cancelled.");
+            throw; // Re-throw to stop the service properly
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error executing observability purge");
         }
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("Observability purge service stopping.");
-        _timer?.Change(Timeout.Infinite, 0);
-        return Task.CompletedTask;
-    }
-
-    public void Dispose()
-    {
-        _timer?.Dispose();
     }
 }

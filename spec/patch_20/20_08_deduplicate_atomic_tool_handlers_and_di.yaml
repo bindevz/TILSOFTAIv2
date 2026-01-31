@@ -1,0 +1,39 @@
+schema_version: "1.0"
+document: "PATCH 20.08 - Deduplicate Atomic Tool Handlers + DI to Prevent Conflicts"
+language: "en"
+
+problem_statement:
+  - "There are duplicate tool handler implementations (e.g., AtomicExecutePlanToolHandler in API and Platform module)."
+  - "This can cause DI ambiguity or inconsistent behavior across transports."
+  - "Enterprise requires single source of truth for cross-cutting platform tools."
+
+goals:
+  - "Ensure platform tools (atomic_execute_plan, diagnostics_run, tool.list, action_request_write) are implemented in ONE module only."
+  - "Remove duplicate handlers and unify DI registration."
+  - "Add a startup guard: fail if duplicate tool names are registered."
+
+hard_constraints:
+  - "No behavior regression: tool contracts remain unchanged."
+  - "Startup must fail-closed if duplicates exist."
+
+files_to_modify:
+  modify:
+    - path: "src/TILSOFTAI.Api/Tools/AtomicExecutePlanToolHandler.cs"
+      changes:
+        - "If exists as duplicate, remove or mark internal and exclude from DI/registry."
+    - path: "src/TILSOFTAI.Modules.Platform/PlatformModule.cs"
+      changes:
+        - "Ensure it registers the canonical handlers."
+    - path: "src/TILSOFTAI.Orchestration/Tools/NamedToolHandlerRegistry.cs"
+      changes:
+        - "On registration, throw if tool name already exists (duplicate)."
+        - "Error code: TOOL_DUPLICATE_REGISTRATION."
+
+tests_to_add:
+  - path: "tests/TILSOFTAI.Tests.Unit/Tools/DuplicateToolRegistrationTests.cs"
+    requirements:
+      - "Register same tool name twice => throws."
+
+acceptance_criteria:
+  - "Only one AtomicExecutePlanToolHandler exists in the canonical module."
+  - "App fails startup if duplicate tool names are registered."

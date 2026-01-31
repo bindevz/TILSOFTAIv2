@@ -164,6 +164,13 @@ public static class AddTilsoftAiExtensions
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
             {
+                // Exempt health endpoints from rate limiting to prevent monitoring failures
+                var path = httpContext.Request.Path.Value ?? string.Empty;
+                if (path.StartsWith("/health", StringComparison.OrdinalIgnoreCase))
+                {
+                    return RateLimitPartition.GetNoLimiter("health");
+                }
+                
                 var factory = new FixedWindowRateLimiterOptions
                 {
                     AutoReplenishment = true,
@@ -185,6 +192,34 @@ public static class AddTilsoftAiExtensions
         services.AddHealthChecks()
             .AddCheck<SqlHealthCheck>("sql", tags: new[] { "ready" })
             .AddCheck<RedisHealthCheck>("redis", tags: new[] { "ready" });
+
+        // CORS configuration
+        var corsOptions = configuration.GetSection("Cors").Get<CorsOptions>() ?? new CorsOptions();
+        if (corsOptions.Enabled)
+        {
+            // Validate: no wildcard origins if AllowCredentials is true
+            if (corsOptions.AllowCredentials && corsOptions.AllowedOrigins.Any(o => o == "*"))
+            {
+                throw new InvalidOperationException(
+                    "CORS: AllowCredentials=true requires explicit origins, not wildcard '*'. " +
+                    "Update Cors:AllowedOrigins in configuration.");
+            }
+
+            services.AddCors(corsConfig =>
+            {
+                corsConfig.AddPolicy("TilsoftCorsPolicy", policy =>
+                {
+                    policy.WithOrigins(corsOptions.AllowedOrigins)
+                          .WithMethods(corsOptions.AllowedMethods)
+                          .WithHeaders(corsOptions.AllowedHeaders);
+
+                    if (corsOptions.AllowCredentials)
+                    {
+                        policy.AllowCredentials();
+                    }
+                });
+            });
+        }
 
         return services;
     }

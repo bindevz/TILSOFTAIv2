@@ -36,13 +36,29 @@ public static class JwtAuthConfigurator
             .Configure<IJwtSigningKeyProvider, ILoggerFactory>((jwtOptions, keyProvider, loggerFactory) =>
             {
                 jwtOptions.TokenValidationParameters ??= new TokenValidationParameters();
-                jwtOptions.TokenValidationParameters.IssuerSigningKeyResolver = (_, _, _, _) => keyProvider.GetKeys();
+                jwtOptions.TokenValidationParameters.IssuerSigningKeyResolver = (_, _, _, _) =>
+                {
+                    var keys = keyProvider.GetKeys();
+                    if (keys.Count == 0)
+                    {
+                        var logger = loggerFactory.CreateLogger("JwtAuthentication");
+                        logger.LogWarning("JWT signing key resolver returned empty key set. Token validation will fail.");
+                    }
+                    return keys;
+                };
 
                 jwtOptions.Events ??= new JwtBearerEvents();
                 jwtOptions.Events.OnAuthenticationFailed = context =>
                 {
                     var logger = loggerFactory.CreateLogger("JwtAuthentication");
-                    logger.LogWarning(context.Exception, "JWT authentication failed.");
+                    var correlationId = context.HttpContext.TraceIdentifier;
+                    
+                    logger.LogWarning(
+                        context.Exception,
+                        "JWT authentication failed. CorrelationId: {CorrelationId}, Failure: {FailureMessage}",
+                        correlationId,
+                        context.Exception?.Message ?? "Unknown");
+                    
                     return Task.CompletedTask;
                 };
             });

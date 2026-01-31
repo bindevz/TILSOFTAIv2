@@ -11,4 +11,5 @@ public sealed class ObservabilityOptions
     public bool PurgeEnabled { get; set; } = false;
     public int PurgeRunHourUtc { get; set; } = 2;
     public int PurgeBatchSize { get; set; } = 5000;
+    public int PurgeIntervalMinutes { get; set; } = 60;
 }

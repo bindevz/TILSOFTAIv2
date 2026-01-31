@@ -1,0 +1,44 @@
+schema_version: "1.0"
+document: "PATCH 20.05 - Health: /health/live + /health/ready with Dependency Checks + RateLimit/Auth Exempt"
+language: "en"
+
+problem_statement:
+  - "Only /health exists; no separation of liveness vs readiness."
+  - "Health endpoints may be affected by auth or rate limiting depending on middleware order."
+  - "Enterprise deployments require standardized liveness/readiness endpoints with tags."
+
+goals:
+  - "Expose /health/live (liveness) and /health/ready (readiness)."
+  - "Readiness must check SQL + Redis and basic LLM configuration presence."
+  - "Health endpoints must be AllowAnonymous and exempt from rate limiting."
+
+hard_constraints:
+  - "Liveness must be fast and should not check dependencies."
+  - "Readiness must fail if SQL is unreachable."
+  - "Health endpoints must bypass auth + rate-limits."
+
+files_to_modify_or_create:
+  modify:
+    - path: "src/TILSOFTAI.Api/Extensions/MapTilsoftAiExtensions.cs"
+      changes:
+        - "Map /health/live with HealthCheckOptions predicate tag 'live'. AllowAnonymous."
+        - "Map /health/ready with predicate tag 'ready'. AllowAnonymous."
+        - "Keep /health as legacy alias pointing to ready."
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      changes:
+        - "Register health checks with tags: live (always true), ready (sql, redis, llm config)."
+        - "Add a custom IHealthCheck for LLM config presence (no network call)."
+    - path: "src/TILSOFTAI.Api/Program.cs"
+      changes:
+        - "Ensure rate limiter middleware excludes /health/* paths."
+        - "If using endpoint conventions, map health endpoints before rate-limiter or add bypass predicate."
+
+tests_to_add:
+  - path: "tests/TILSOFTAI.Tests.Contract/Ops/HealthEndpointsContractTests.cs"
+    requirements:
+      - "GET /health/live returns 200 without auth."
+      - "GET /health/ready returns 200 when dependencies are available (can mock)."
+
+acceptance_criteria:
+  - "/health/live and /health/ready exist and are anonymous."
+  - "Health endpoints are not rate-limited."

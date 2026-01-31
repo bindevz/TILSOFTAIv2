@@ -1,0 +1,54 @@
+schema_version: "1.0"
+document: "PATCH 20.03 - Streaming Error Safety: Structured Error Envelope + ErrorHandlingOptions Parity"
+language: "en"
+
+problem_statement:
+  - "Streaming (SSE/SignalR/OpenAI SSE) may emit raw error strings from ChatPipeline (ChatStreamEvent.Error)."
+  - "This bypasses ErrorHandlingOptions and can leak internal details, and is not localized."
+  - "Enterprise requires streaming to match HTTP error envelope discipline."
+
+goals:
+  - "All streaming errors must be structured envelopes with code/messageKey/localizedMessage/correlationId/traceId, plus safe validation paths."
+  - "No raw exception messages or internal strings should be sent to clients."
+  - "Streaming should honor ErrorHandlingOptions and SensitiveDataOptions."
+
+hard_constraints:
+  - "No stream error event may contain raw exception messages."
+  - "Tool args validation paths are allowed to be returned even when error detail is otherwise suppressed."
+  - "Ensure consistent schema across REST and streaming transports."
+
+files_to_modify:
+  modify:
+    - path: "src/TILSOFTAI.Orchestration/Chat/ChatPipeline.cs"
+      changes:
+        - "Replace emitting ChatStreamEvent.Error(string) with ChatStreamEvent.Error(ErrorEnvelope) OR ChatStreamEvent.Error(ChatError) typed object."
+        - "Map errors to stable ErrorCodes; never pass raw messages."
+    - path: "src/TILSOFTAI.Domain/Chat/ChatStreamEvent.cs"
+      changes:
+        - "Add ErrorEnvelope payload variant; keep backward compatibility if required but do not use string variant."
+    - path: "src/TILSOFTAI.Api/Streaming/ChatStreamEnvelopeFactory.cs"
+      changes:
+        - "Ensure it consumes typed error envelope; for legacy string errors, map to INTERNAL_ERROR with no detail."
+        - "Always include correlationId/traceId."
+    - path: "src/TILSOFTAI.Api/Controllers/ChatController.cs"
+      changes:
+        - "SSE stream writes structured events only."
+    - path: "src/TILSOFTAI.Api/Hubs/ChatHub.cs"
+      changes:
+        - "SignalR stream sends structured error events only."
+    - path: "src/TILSOFTAI.Api/Controllers/OpenAiChatCompletionsController.cs"
+      changes:
+        - "OpenAI SSE translator uses structured error envelope; never emits raw error text."
+    - path: "src/TILSOFTAI.Api/Middlewares/ExceptionHandlingMiddleware.cs"
+      changes:
+        - "Export a shared helper/service to build ErrorEnvelope so streaming and HTTP share logic (DRY)."
+
+tests_to_add:
+  - path: "tests/TILSOFTAI.Tests.Contract/Streaming/StreamingErrorDisciplineTests.cs"
+    requirements:
+      - "Simulate a tool args invalid error and assert stream event contains code TOOL_ARGS_INVALID and includes paths."
+      - "Simulate an internal exception and assert stream error contains INTERNAL_ERROR with no raw message."
+
+acceptance_criteria:
+  - "No raw error strings are emitted over SSE/SignalR/OpenAI SSE."
+  - "Streaming honors ErrorHandlingOptions for detail gating, but still returns safe validation paths."

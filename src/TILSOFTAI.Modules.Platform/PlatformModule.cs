@@ -72,9 +72,10 @@ public sealed class PlatformModule : ITilsoftModule
             IsEnabled = true
         });
 
+
         // Register handlers
         handlerRegistry.Register("tool.list", typeof(ToolListToolHandler));
-        handlerRegistry.Register("atomic_execute_plan", typeof(AtomicExecutePlanToolHandler));
+        // atomic_execute_plan handler registered in AddTilsoftAiExtensions (canonical location)
         handlerRegistry.Register("diagnostics_run", typeof(DiagnosticsRunToolHandler));
         handlerRegistry.Register("action_request_write", typeof(ActionRequestWriteToolHandler));
     }

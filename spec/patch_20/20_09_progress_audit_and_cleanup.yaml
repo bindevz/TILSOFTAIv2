@@ -1,0 +1,31 @@
+schema_version: "1.0"
+document: "PATCH 20.09 - Progress Audit + Cleanup (Spec Traceability and Artifact Removal)"
+language: "en"
+
+problem_statement:
+  - "Progress traceability must be enterprise-grade: spec/PROGRESS.md must reflect patch execution."
+  - "Artifacts and dead code increase maintenance cost and risk."
+
+goals:
+  - "Update spec/PROGRESS.md with Patch 20 entries and clear status."
+  - "Remove dead/duplicate SQL scripts (e.g., duplicate purge definitions) and unused code paths."
+  - "Ensure repo zip contains no .vs/bin/obj and CI enforces it."
+
+hard_constraints:
+  - "Do not delete scripts that are required by deployment ordering; replace with wrappers if needed."
+  - "All deletions must be safe and referenced in PROGRESS.md."
+
+files_to_modify_or_create:
+  modify:
+    - path: "spec/PROGRESS.md"
+      changes:
+        - "Append Patch 20 summary for each yaml file with date, status, and notes."
+    - path: ".github/workflows/ci.yml"
+      changes:
+        - "Ensure verify-repo-clean runs on both Windows and Linux (matrix) if already supported."
+  delete_optional:
+    - "Any duplicate or unused SQL scripts identified in earlier patches (keep a single source of truth)."
+
+acceptance_criteria:
+  - "spec/PROGRESS.md includes Patch 20 entries."
+  - "CI fails if artifacts are tracked."
