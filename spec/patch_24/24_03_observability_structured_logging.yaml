@@ -1,0 +1,198 @@
+schema_version: "1.0"
+document: "PATCH 24.03 - P1: Observability - Structured Logging"
+language: "en"
+
+problem_statement:
+  - "Current logging uses basic ILogger without consistent structure."
+  - "Log messages are not easily searchable or aggregatable."
+  - "Missing correlation between related log entries."
+  - "No standardized log schema for production log aggregation (ELK, Splunk, Datadog)."
+
+goals:
+  - "Implement structured logging with consistent JSON schema."
+  - "Ensure all log entries include correlation context (TenantId, UserId, CorrelationId, TraceId)."
+  - "Support log enrichment with request/response metadata."
+  - "Enable efficient log querying and alerting in production."
+
+hard_constraints:
+  - "Must be backward compatible with existing ILogger usage."
+  - "Log serialization must not significantly impact performance."
+  - "Sensitive data must be automatically redacted."
+  - "Must support multiple output formats (JSON for prod, console for dev)."
+
+files_to_modify_or_create:
+  create:
+    - path: "src/TILSOFTAI.Domain/Logging/LogSchema.cs"
+      diff_intent:
+        - "Define standard log entry schema:"
+        - "  Timestamp: DateTimeOffset"
+        - "  Level: string (Debug, Information, Warning, Error, Critical)"
+        - "  Message: string"
+        - "  MessageTemplate: string"
+        - "  Exception: ExceptionInfo (optional)"
+        - "  Properties: Dictionary<string, object>"
+        - "  Context: LogContext (TenantId, UserId, CorrelationId, TraceId, SpanId)"
+        - "  Source: string (logger category name)"
+        - "  Application: string (TILSOFTAI)"
+        - "  Environment: string (Development, Staging, Production)"
+        - "  MachineName: string"
+      acceptance_criteria:
+        - "Schema covers all log context needs."
+
+    - path: "src/TILSOFTAI.Domain/Logging/LogContext.cs"
+      diff_intent:
+        - "Correlation context for logs:"
+        - "  TenantId: string"
+        - "  UserId: string"
+        - "  CorrelationId: string"
+        - "  ConversationId: string"
+        - "  RequestId: string"
+        - "  TraceId: string"
+        - "  SpanId: string"
+        - "Static Current property using AsyncLocal for ambient context."
+      acceptance_criteria:
+        - "Context flows through async operations."
+
+    - path: "src/TILSOFTAI.Domain/Configuration/LoggingOptions.cs"
+      diff_intent:
+        - "StructuredLoggingEnabled: bool (default true)"
+        - "OutputFormat: LogOutputFormat enum (Json, Console)"
+        - "IncludeScopes: bool (default true)"
+        - "RedactedFields: string[] (default: password, token, apikey, secret, connectionstring)"
+        - "MaxPropertyValueLength: int (default 1000)"
+        - "EnableRequestResponseLogging: bool (default false)"
+        - "SamplingRate: double (default 1.0, for high-volume scenarios)"
+      acceptance_criteria:
+        - "Logging fully configurable."
+
+    - path: "src/TILSOFTAI.Infrastructure/Logging/StructuredLoggerProvider.cs"
+      diff_intent:
+        - "Implement ILoggerProvider."
+        - "Create StructuredLogger instances."
+        - "Configure based on LoggingOptions."
+      acceptance_criteria:
+        - "Provider integrates with .NET logging."
+
+    - path: "src/TILSOFTAI.Infrastructure/Logging/StructuredLogger.cs"
+      diff_intent:
+        - "Implement ILogger."
+        - "Enrich all log entries with LogContext.Current."
+        - "Format as JSON when configured."
+        - "Apply redaction to sensitive fields."
+        - "Truncate oversized property values."
+      acceptance_criteria:
+        - "Logger produces structured output."
+
+    - path: "src/TILSOFTAI.Infrastructure/Logging/JsonLogFormatter.cs"
+      diff_intent:
+        - "Format LogEntry to JSON string."
+        - "Use System.Text.Json for performance."
+        - "Handle circular references gracefully."
+        - "Format exceptions with stack trace."
+      acceptance_criteria:
+        - "JSON output is valid and parseable."
+
+    - path: "src/TILSOFTAI.Infrastructure/Logging/LogRedactor.cs"
+      diff_intent:
+        - "Redact sensitive values in log properties."
+        - "Pattern-based detection (field name contains 'password', 'token', etc.)."
+        - "Value-based detection (looks like JWT, API key pattern)."
+        - "Replace with '[REDACTED]' placeholder."
+      acceptance_criteria:
+        - "Sensitive data never logged in plaintext."
+
+    - path: "src/TILSOFTAI.Infrastructure/Logging/LogEnricher.cs"
+      diff_intent:
+        - "Middleware to set LogContext.Current from ExecutionContext."
+        - "Enrich with additional request metadata."
+        - "Clear context after request."
+      acceptance_criteria:
+        - "Context enrichment automatic."
+
+    - path: "src/TILSOFTAI.Api/Middlewares/RequestLoggingMiddleware.cs"
+      diff_intent:
+        - "Log request start (method, path, query, headers subset)."
+        - "Log request end (status code, duration, response size)."
+        - "Skip logging for health endpoints (configurable)."
+        - "Sample high-frequency requests based on SamplingRate."
+      acceptance_criteria:
+        - "Request lifecycle logged."
+
+  modify:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Register LoggingOptions with ValidateOnStart."
+        - "Configure logging providers based on options."
+        - "Add StructuredLoggerProvider when enabled."
+        - "Configure Serilog or native JSON logging."
+      acceptance_criteria:
+        - "Structured logging configured at startup."
+
+    - path: "src/TILSOFTAI.Api/Extensions/MapTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Add LogEnricher middleware early in pipeline."
+        - "Add RequestLoggingMiddleware after enrichment."
+      acceptance_criteria:
+        - "Logging middleware in pipeline."
+
+    - path: "src/TILSOFTAI.Api/Middlewares/ExecutionContextMiddleware.cs"
+      diff_intent:
+        - "Set LogContext.Current when setting ExecutionContext."
+        - "Include TraceId from Activity.Current."
+      acceptance_criteria:
+        - "Log context synchronized with execution context."
+
+    - path: "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+      diff_intent:
+        - "Add structured logging for pipeline stages."
+        - "Log: PipelineStarted, LlmRequestSent, ToolExecuted, PipelineCompleted."
+        - "Include timing information."
+      acceptance_criteria:
+        - "Pipeline observability improved."
+
+    - path: "src/TILSOFTAI.Infrastructure/Llm/OpenAiCompatibleLlmClient.cs"
+      diff_intent:
+        - "Add structured logging for LLM calls."
+        - "Log: request (model, tokens), response (status, duration, tokens used)."
+        - "Redact actual prompt/response content (log only metadata)."
+      acceptance_criteria:
+        - "LLM interactions logged."
+
+tests_to_create:
+  - path: "tests/TILSOFTAI.Tests.Unit/Logging/StructuredLoggerTests.cs"
+    diff_intent:
+      - "Test JSON output format"
+      - "Test context enrichment"
+      - "Test redaction"
+      - "Test truncation"
+    acceptance_criteria:
+      - "Logger behavior verified."
+
+  - path: "tests/TILSOFTAI.Tests.Unit/Logging/LogRedactorTests.cs"
+    diff_intent:
+      - "Test field name-based redaction"
+      - "Test value pattern detection"
+      - "Test nested object redaction"
+    acceptance_criteria:
+      - "Redaction logic verified."
+
+  - path: "tests/TILSOFTAI.Tests.Integration/Logging/StructuredLoggingIntegrationTests.cs"
+    diff_intent:
+      - "Test log output contains expected fields"
+      - "Test correlation context flows through request"
+      - "Test logs are valid JSON"
+    acceptance_criteria:
+      - "End-to-end logging verified."
+
+verification_steps:
+  - "Set OutputFormat=Json, make request -> logs are valid JSON"
+  - "Make request -> logs contain TenantId, UserId, CorrelationId"
+  - "Log message with password field -> value is [REDACTED]"
+  - "Verify TraceId matches OpenTelemetry trace"
+  - "Parse logs with jq -> all fields accessible"
+
+checklist:
+  - "LoggingOptions documented in appsettings.Sample.json"
+  - "README updated with structured logging section"
+  - "Example queries for ELK/Splunk documented"
+  - "Log level guidance documented"

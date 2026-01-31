@@ -1,0 +1,246 @@
+schema_version: "1.0"
+document: "PATCH 24.02 - P0: Security - Audit Logging"
+language: "en"
+
+problem_statement:
+  - "No centralized audit trail for security-relevant events."
+  - "Authentication failures, authorization denials, sensitive data access not logged."
+  - "Cannot trace who did what and when for compliance (SOC2, GDPR, HIPAA)."
+  - "Existing error logging is operational, not security-focused."
+
+goals:
+  - "Implement immutable audit logging for all security-relevant events."
+  - "Support multiple audit sinks (SQL, file, external SIEM)."
+  - "Ensure audit logs cannot be tampered with (append-only, checksums)."
+  - "Provide queryable audit trail for compliance reporting."
+
+hard_constraints:
+  - "Audit logging must not block request processing (async write)."
+  - "Must capture: who, what, when, where, outcome."
+  - "Sensitive data in audit logs must be redacted or hashed."
+  - "Audit log writes must survive application crashes (durable)."
+  - "Must support log rotation and retention policies."
+
+files_to_modify_or_create:
+  create:
+    - path: "src/TILSOFTAI.Domain/Audit/IAuditLogger.cs"
+      diff_intent:
+        - "Define audit logging interface."
+        - "Methods:"
+        - "  LogAuthenticationEvent(AuthAuditEvent event)"
+        - "  LogAuthorizationEvent(AuthzAuditEvent event)"
+        - "  LogDataAccessEvent(DataAccessAuditEvent event)"
+        - "  LogAdminEvent(AdminAuditEvent event)"
+        - "  LogSecurityEvent(SecurityAuditEvent event)"
+        - "All methods are fire-and-forget (return void, async internally)."
+      acceptance_criteria:
+        - "Interface covers all security event categories."
+
+    - path: "src/TILSOFTAI.Domain/Audit/AuditEvent.cs"
+      diff_intent:
+        - "Base class for all audit events:"
+        - "  EventId: Guid (unique per event)"
+        - "  EventType: AuditEventType enum"
+        - "  Timestamp: DateTimeOffset (UTC)"
+        - "  TenantId: string"
+        - "  UserId: string"
+        - "  CorrelationId: string"
+        - "  IpAddress: string"
+        - "  UserAgent: string"
+        - "  Outcome: AuditOutcome (Success, Failure, Denied)"
+        - "  Details: JsonDocument (event-specific data)"
+        - "  Checksum: string (SHA256 of serialized event)"
+      acceptance_criteria:
+        - "Event captures full context."
+
+    - path: "src/TILSOFTAI.Domain/Audit/AuditEventType.cs"
+      diff_intent:
+        - "Enum values:"
+        - "  Authentication_Success, Authentication_Failure, Authentication_Logout"
+        - "  Authorization_Granted, Authorization_Denied"
+        - "  DataAccess_Read, DataAccess_Write, DataAccess_Delete"
+        - "  Admin_ConfigChange, Admin_UserManagement"
+        - "  Security_InputValidationFailure, Security_RateLimitExceeded"
+        - "  Security_SuspiciousActivity, Security_PromptInjectionDetected"
+      acceptance_criteria:
+        - "All security-relevant event types covered."
+
+    - path: "src/TILSOFTAI.Domain/Audit/AuthAuditEvent.cs"
+      diff_intent:
+        - "Extends AuditEvent for authentication events."
+        - "AuthMethod: string (JWT, ApiKey, etc.)"
+        - "FailureReason: string (if failed)"
+        - "TokenClaims: Dictionary<string, string> (redacted sensitive)"
+      acceptance_criteria:
+        - "Captures authentication specifics."
+
+    - path: "src/TILSOFTAI.Domain/Audit/AuthzAuditEvent.cs"
+      diff_intent:
+        - "Extends AuditEvent for authorization events."
+        - "Resource: string (endpoint, tool name)"
+        - "Action: string (read, write, execute)"
+        - "RequiredRoles: string[]"
+        - "UserRoles: string[]"
+        - "PolicyName: string"
+      acceptance_criteria:
+        - "Captures authorization decision context."
+
+    - path: "src/TILSOFTAI.Domain/Audit/DataAccessAuditEvent.cs"
+      diff_intent:
+        - "Extends AuditEvent for data access events."
+        - "EntityType: string (Conversation, ToolExecution, etc.)"
+        - "EntityId: string"
+        - "Operation: DataOperation enum (Read, Create, Update, Delete)"
+        - "AffectedFields: string[] (for updates)"
+        - "RecordCount: int (for bulk operations)"
+      acceptance_criteria:
+        - "Captures data access details."
+
+    - path: "src/TILSOFTAI.Domain/Configuration/AuditOptions.cs"
+      diff_intent:
+        - "Enabled: bool (default true)"
+        - "EnabledEventTypes: AuditEventType[] (default all)"
+        - "SqlEnabled: bool (default true)"
+        - "FileEnabled: bool (default false)"
+        - "FilePath: string (default 'logs/audit/')"
+        - "ExternalSinkEnabled: bool (default false)"
+        - "ExternalSinkUrl: string"
+        - "RetentionDays: int (default 365)"
+        - "IncludeRequestBody: bool (default false, for debugging)"
+        - "RedactFields: string[] (default: password, token, key, secret)"
+      acceptance_criteria:
+        - "All audit options configurable."
+
+    - path: "src/TILSOFTAI.Infrastructure/Audit/AuditLogger.cs"
+      diff_intent:
+        - "Implement IAuditLogger."
+        - "Use Channel<AuditEvent> for async buffering."
+        - "Background task writes to configured sinks."
+        - "Calculate checksum before persisting."
+        - "Apply field redaction based on config."
+        - "Retry failed writes with exponential backoff."
+      acceptance_criteria:
+        - "Non-blocking, durable audit logging."
+
+    - path: "src/TILSOFTAI.Infrastructure/Audit/SqlAuditSink.cs"
+      diff_intent:
+        - "Writes audit events to SQL Server."
+        - "Table: dbo.AuditLog"
+        - "Batch writes for performance."
+        - "Index on TenantId, UserId, Timestamp, EventType."
+      acceptance_criteria:
+        - "SQL sink operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/Audit/FileAuditSink.cs"
+      diff_intent:
+        - "Writes audit events to JSON files."
+        - "File naming: audit-{date}.jsonl"
+        - "One event per line (JSON Lines format)."
+        - "Auto-rotation when file exceeds 100MB."
+      acceptance_criteria:
+        - "File sink operational with rotation."
+
+    - path: "src/TILSOFTAI.Infrastructure/Audit/AuditBackgroundService.cs"
+      diff_intent:
+        - "Hosted service that consumes audit channel."
+        - "Writes to all enabled sinks."
+        - "Handles sink failures gracefully (log, retry, continue)."
+        - "Flushes on shutdown."
+      acceptance_criteria:
+        - "Background processing reliable."
+
+    - path: "sql/01_core/060_tables_audit.sql"
+      diff_intent:
+        - "CREATE TABLE dbo.AuditLog with columns matching AuditEvent."
+        - "Clustered index on (TenantId, Timestamp)."
+        - "Non-clustered indexes on UserId, EventType, CorrelationId."
+        - "Partition by month for large-scale deployments (optional)."
+      acceptance_criteria:
+        - "Audit table optimized for queries."
+
+    - path: "sql/01_core/061_sps_app_audit.sql"
+      diff_intent:
+        - "dbo.app_auditlog_insert: batch insert procedure"
+        - "dbo.app_auditlog_query: query with filters (tenant, user, date range, event type)"
+        - "dbo.app_auditlog_purge: retention-based cleanup"
+      acceptance_criteria:
+        - "Audit SPs operational."
+
+  modify:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Register AuditOptions with ValidateOnStart."
+        - "Register IAuditLogger as singleton."
+        - "Register AuditBackgroundService as hosted service."
+      acceptance_criteria:
+        - "Audit services registered."
+
+    - path: "src/TILSOFTAI.Api/Auth/JwtAuthConfigurator.cs"
+      diff_intent:
+        - "Inject IAuditLogger."
+        - "Log Authentication_Success on valid token."
+        - "Log Authentication_Failure on invalid/expired token."
+      acceptance_criteria:
+        - "Auth events audited."
+
+    - path: "src/TILSOFTAI.Api/Middlewares/ExecutionContextMiddleware.cs"
+      diff_intent:
+        - "Capture IpAddress, UserAgent for audit context."
+        - "Store in ExecutionContext for downstream use."
+      acceptance_criteria:
+        - "Request metadata captured."
+
+    - path: "src/TILSOFTAI.Orchestration/Tools/ToolRegistry.cs"
+      diff_intent:
+        - "Inject IAuditLogger."
+        - "Log DataAccess_Write for write tools."
+        - "Log Authorization_Denied when tool access denied."
+      acceptance_criteria:
+        - "Tool execution audited."
+
+    - path: "src/TILSOFTAI.Api/Options/ConfigureRateLimiterOptions.cs"
+      diff_intent:
+        - "Inject IAuditLogger."
+        - "Log Security_RateLimitExceeded on rejection."
+      acceptance_criteria:
+        - "Rate limit events audited."
+
+tests_to_create:
+  - path: "tests/TILSOFTAI.Tests.Unit/Audit/AuditLoggerTests.cs"
+    diff_intent:
+      - "Test event buffering (no blocking)"
+      - "Test checksum calculation"
+      - "Test field redaction"
+      - "Test multiple sink dispatch"
+    acceptance_criteria:
+      - "Core audit logic covered."
+
+  - path: "tests/TILSOFTAI.Tests.Integration/Audit/AuditEndToEndTests.cs"
+    diff_intent:
+      - "Test auth failure -> audit event created"
+      - "Test successful request -> audit event created"
+      - "Test audit query returns correct events"
+    acceptance_criteria:
+      - "End-to-end audit flow verified."
+
+  - path: "tests/TILSOFTAI.Tests.Contract/Sql/AuditTableContractTests.cs"
+    diff_intent:
+      - "Verify AuditLog table exists with correct schema"
+      - "Verify indexes exist"
+      - "Verify SPs exist and are callable"
+    acceptance_criteria:
+      - "SQL audit infrastructure verified."
+
+verification_steps:
+  - "Send request with invalid JWT -> AuditLog contains Authentication_Failure event"
+  - "Send valid request -> AuditLog contains Authentication_Success event"
+  - "Access denied tool -> AuditLog contains Authorization_Denied event"
+  - "Query /api/audit?tenant=T1&from=2026-01-01 -> returns filtered events"
+  - "Verify checksum: recalculate and compare"
+
+checklist:
+  - "AuditOptions documented in appsettings.Sample.json"
+  - "README updated with audit logging section"
+  - "SQL scripts added to deployment order"
+  - "Retention policy documented"
+  - "GDPR considerations documented (right to erasure vs audit requirements)"

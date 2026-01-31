@@ -1,0 +1,212 @@
+schema_version: "1.0"
+document: "PATCH 24.08 - P1: Resilience - Graceful Degradation"
+language: "en"
+
+problem_statement:
+  - "When dependencies fail, the entire request fails."
+  - "No fallback mechanisms for non-critical features."
+  - "NullRedisCacheProvider exists but degradation is not systematic."
+  - "Users experience complete outages instead of degraded service."
+
+goals:
+  - "Implement systematic graceful degradation for non-critical features."
+  - "Define criticality levels for each dependency."
+  - "Provide meaningful fallback responses when possible."
+  - "Communicate degraded state to clients."
+
+hard_constraints:
+  - "Core chat functionality (LLM) is critical and cannot degrade."
+  - "Degradation must not cause data inconsistency."
+  - "Degraded responses must be clearly marked."
+  - "Degradation state must be observable (health checks, metrics)."
+
+files_to_modify_or_create:
+  create:
+    - path: "src/TILSOFTAI.Domain/Resilience/DependencyCriticality.cs"
+      diff_intent:
+        - "Enum defining criticality levels:"
+        - "  Critical: failure = request failure (LLM for chat)"
+        - "  Important: fallback available but suboptimal (SQL persistence)"
+        - "  Optional: can be skipped entirely (Redis cache, semantic cache)"
+        - "  BestEffort: fire-and-forget (analytics, audit logging async)"
+      acceptance_criteria:
+        - "Criticality levels defined."
+
+    - path: "src/TILSOFTAI.Domain/Resilience/IDegradationService.cs"
+      diff_intent:
+        - "Methods:"
+        - "  IsDegraded(string dependency) -> bool"
+        - "  SetDegraded(string dependency, bool degraded)"
+        - "  GetDegradedDependencies() -> string[]"
+        - "  ExecuteWithFallback<T>(Func<Task<T>> primary, Func<Task<T>> fallback, string dependency)"
+      acceptance_criteria:
+        - "Degradation service interface defined."
+
+    - path: "src/TILSOFTAI.Domain/Resilience/DegradedResponse.cs"
+      diff_intent:
+        - "Wrapper for responses that may be degraded:"
+        - "  Value: T"
+        - "  IsDegraded: bool"
+        - "  DegradedFeatures: string[]"
+        - "  FallbackUsed: string (which fallback was used)"
+      acceptance_criteria:
+        - "Degraded response wrapper defined."
+
+    - path: "src/TILSOFTAI.Domain/Configuration/DegradationOptions.cs"
+      diff_intent:
+        - "EnableGracefulDegradation: bool (default true)"
+        - "DependencyCriticalities: Dictionary<string, DependencyCriticality>"
+        - "FallbackBehaviors: Dictionary<string, FallbackBehavior>"
+        - "  FallbackBehavior: Skip, UseDefault, UseCached, ReturnError"
+        - "NotifyClientOfDegradation: bool (default true)"
+        - "MaxDegradedDuration: TimeSpan (auto-escalate if degraded too long)"
+      acceptance_criteria:
+        - "Degradation options configurable."
+
+    - path: "src/TILSOFTAI.Infrastructure/Resilience/DegradationService.cs"
+      diff_intent:
+        - "Implement IDegradationService."
+        - "Track degradation state per dependency."
+        - "Integrate with circuit breaker state (open = degraded)."
+        - "Log degradation state changes."
+        - "Record metrics for degradation."
+      acceptance_criteria:
+        - "Degradation service operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/Resilience/FallbackStrategies/CacheFallbackStrategy.cs"
+      diff_intent:
+        - "When Redis fails, fall back to in-memory cache."
+        - "When semantic cache fails, skip caching."
+        - "Log fallback usage."
+      acceptance_criteria:
+        - "Cache fallback operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/Resilience/FallbackStrategies/ObservabilityFallbackStrategy.cs"
+      diff_intent:
+        - "When SQL observability write fails:"
+        - "  Log to file as backup"
+        - "  Queue for later retry"
+        - "  Don't fail the request"
+      acceptance_criteria:
+        - "Observability fallback operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/Resilience/FallbackStrategies/ToolExecutionFallbackStrategy.cs"
+      diff_intent:
+        - "When specific tool fails:"
+        - "  Return partial results if available"
+        - "  Skip tool if non-critical to answer"
+        - "  Mark response as potentially incomplete"
+      acceptance_criteria:
+        - "Tool fallback operational."
+
+    - path: "src/TILSOFTAI.Api/Middlewares/DegradationHeaderMiddleware.cs"
+      diff_intent:
+        - "Add X-Degraded-Features header to response."
+        - "List which features are currently degraded."
+        - "Allows clients to show warning to users."
+      acceptance_criteria:
+        - "Degradation communicated to clients."
+
+  modify:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Register DegradationOptions with ValidateOnStart."
+        - "Register IDegradationService as singleton."
+        - "Configure fallback strategies."
+      acceptance_criteria:
+        - "Degradation services registered."
+
+    - path: "src/TILSOFTAI.Api/Extensions/MapTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Add DegradationHeaderMiddleware to pipeline."
+      acceptance_criteria:
+        - "Degradation middleware added."
+
+    - path: "src/TILSOFTAI.Infrastructure/Caching/RedisCacheProvider.cs"
+      diff_intent:
+        - "On Redis failure with circuit open:"
+        - "  Mark Redis as degraded via IDegradationService"
+        - "  Fall back to in-memory cache"
+        - "  Return DegradedResponse"
+      acceptance_criteria:
+        - "Redis gracefully degrades."
+
+    - path: "src/TILSOFTAI.Infrastructure/Caching/SemanticCache.cs"
+      diff_intent:
+        - "On failure: skip semantic caching (don't fail request)."
+        - "Mark semantic cache as degraded."
+        - "Continue with LLM call."
+      acceptance_criteria:
+        - "Semantic cache gracefully degrades."
+
+    - path: "src/TILSOFTAI.Infrastructure/Conversations/SqlConversationStore.cs"
+      diff_intent:
+        - "On SQL failure for conversation persistence:"
+        - "  Log error, don't fail request"
+        - "  Queue for retry"
+        - "  Return success (conversation proceeded, just not persisted)"
+      acceptance_criteria:
+        - "Conversation persistence gracefully degrades."
+
+    - path: "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+      diff_intent:
+        - "Inject IDegradationService."
+        - "Check degradation state before optional features."
+        - "Include degradation info in response."
+      acceptance_criteria:
+        - "Pipeline aware of degradation."
+
+    - path: "src/TILSOFTAI.Api/Contracts/Chat/ChatApiResponse.cs"
+      diff_intent:
+        - "Add optional DegradationInfo field:"
+        - "  IsDegraded: bool"
+        - "  DegradedFeatures: string[]"
+        - "  Message: string (user-friendly explanation)"
+      acceptance_criteria:
+        - "Response includes degradation info."
+
+    - path: "src/TILSOFTAI.Api/Health/ReadinessHealthCheck.cs"
+      diff_intent:
+        - "Include degradation state in health check."
+        - "Degraded = HealthStatus.Degraded (not Unhealthy)."
+      acceptance_criteria:
+        - "Health check reflects degradation."
+
+tests_to_create:
+  - path: "tests/TILSOFTAI.Tests.Unit/Resilience/DegradationServiceTests.cs"
+    diff_intent:
+      - "Test: set degraded -> IsDegraded returns true"
+      - "Test: circuit open -> auto-degraded"
+      - "Test: fallback execution"
+    acceptance_criteria:
+      - "Degradation service verified."
+
+  - path: "tests/TILSOFTAI.Tests.Integration/Resilience/GracefulDegradationTests.cs"
+    diff_intent:
+      - "Test: Redis down -> request succeeds with memory cache"
+      - "Test: SQL persistence down -> request succeeds"
+      - "Test: response includes degradation info"
+      - "Test: health check shows degraded"
+    acceptance_criteria:
+      - "End-to-end degradation verified."
+
+  - path: "tests/TILSOFTAI.Tests.Contract/Resilience/DegradationContractTests.cs"
+    diff_intent:
+      - "Verify X-Degraded-Features header format"
+      - "Verify response schema with degradation info"
+    acceptance_criteria:
+      - "Degradation contract verified."
+
+verification_steps:
+  - "Stop Redis -> requests succeed, X-Degraded-Features: redis-cache"
+  - "Stop SQL (observability only) -> requests succeed, conversation not persisted"
+  - "GET /health/ready -> 200 with degraded: [redis]"
+  - "Response body contains degradationInfo when degraded"
+  - "Metrics: tilsoftai_degraded_dependencies{name='redis'} = 1"
+
+checklist:
+  - "DegradationOptions documented in appsettings.Sample.json"
+  - "README updated with graceful degradation section"
+  - "Criticality matrix documented (which dependencies are critical)"
+  - "Client handling guidance (how to interpret X-Degraded-Features)"
+  - "Escalation procedures documented (when to alert)"

@@ -1,0 +1,186 @@
+schema_version: "1.0"
+document: "PATCH 24.07 - P0: Resilience - Retry Policies"
+language: "en"
+
+problem_statement:
+  - "Transient failures (network glitches, brief SQL timeouts) cause immediate request failure."
+  - "No automatic retry mechanism for recoverable errors."
+  - "Users experience failures that would succeed on retry."
+  - "No distinction between transient and permanent failures."
+
+goals:
+  - "Implement retry policies with exponential backoff for transient failures."
+  - "Configure retries per dependency (LLM, SQL, Redis)."
+  - "Distinguish transient from permanent failures."
+  - "Integrate with circuit breaker (retry before circuit trips)."
+
+hard_constraints:
+  - "Retries must not cause duplicate operations for non-idempotent calls."
+  - "Total retry time must be bounded (timeout)."
+  - "Jitter must be applied to prevent thundering herd."
+  - "Retry attempts must be logged and metriced."
+
+files_to_modify_or_create:
+  create:
+    - path: "src/TILSOFTAI.Domain/Resilience/IRetryPolicy.cs"
+      diff_intent:
+        - "Abstraction for retry policy."
+        - "Methods:"
+        - "  ExecuteAsync<T>(Func<int, CancellationToken, Task<T>> action, CancellationToken ct)"
+        - "  int parameter = attempt number (0-based)"
+        - "  OnRetry: event for logging"
+      acceptance_criteria:
+        - "Interface supports async execution with attempt tracking."
+
+    - path: "src/TILSOFTAI.Domain/Resilience/RetryContext.cs"
+      diff_intent:
+        - "Context passed to retry callbacks:"
+        - "  AttemptNumber: int"
+        - "  TotalAttempts: int"
+        - "  LastException: Exception"
+        - "  ElapsedTime: TimeSpan"
+        - "  NextDelay: TimeSpan"
+      acceptance_criteria:
+        - "Retry context captures state."
+
+    - path: "src/TILSOFTAI.Domain/Configuration/RetryOptions.cs"
+      diff_intent:
+        - "MaxRetries: int (default 3)"
+        - "InitialDelay: TimeSpan (default 100ms)"
+        - "MaxDelay: TimeSpan (default 5s)"
+        - "BackoffMultiplier: double (default 2.0)"
+        - "JitterFactor: double (default 0.2, adds 0-20% random jitter)"
+        - "RetryableExceptions: Type[] (exceptions to retry)"
+        - "RetryableStatusCodes: int[] (HTTP status codes to retry)"
+        - "TotalTimeout: TimeSpan (default 30s, max total time including retries)"
+      acceptance_criteria:
+        - "Retry options fully configurable."
+
+    - path: "src/TILSOFTAI.Infrastructure/Resilience/PollyRetryPolicy.cs"
+      diff_intent:
+        - "Implement IRetryPolicy using Polly."
+        - "Configure WaitAndRetryAsync with exponential backoff."
+        - "Apply jitter using Polly's DecorrelatedJitter."
+        - "Log each retry attempt."
+        - "Record retry metrics."
+      acceptance_criteria:
+        - "Polly-based retry operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/Resilience/TransientExceptionClassifier.cs"
+      diff_intent:
+        - "Determine if exception is transient (retryable)."
+        - "HTTP: 408, 429, 500, 502, 503, 504"
+        - "SQL: timeout, connection failure, deadlock"
+        - "Redis: connection failure, timeout"
+        - "Not transient: 400, 401, 403, 404 (client errors)"
+        - "Method: IsTransient(Exception ex) -> bool"
+      acceptance_criteria:
+        - "Transient classification correct."
+
+    - path: "src/TILSOFTAI.Infrastructure/Resilience/RetryDelegatingHandler.cs"
+      diff_intent:
+        - "HttpClient delegating handler with retry."
+        - "Check response status for retryable codes."
+        - "Respect Retry-After header if present."
+        - "Log retry attempts."
+      acceptance_criteria:
+        - "HTTP retries handled."
+
+    - path: "src/TILSOFTAI.Infrastructure/Resilience/ResiliencePolicyBuilder.cs"
+      diff_intent:
+        - "Build combined policy: retry wrapped by circuit breaker."
+        - "Policy.WrapAsync(circuitBreaker, retry)"
+        - "Ensures retries happen before circuit trips."
+      acceptance_criteria:
+        - "Combined policy built correctly."
+
+  modify:
+    - path: "src/TILSOFTAI.Domain/Configuration/ResilienceOptions.cs"
+      diff_intent:
+        - "Add retry options:"
+        - "  LlmRetry: RetryOptions"
+        - "  SqlRetry: RetryOptions"
+        - "  RedisRetry: RetryOptions"
+      acceptance_criteria:
+        - "Retry options per dependency."
+
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Register retry policies."
+        - "Combine with circuit breakers."
+        - "Configure HttpClient with retry handler."
+      acceptance_criteria:
+        - "Retry policies registered."
+
+    - path: "src/TILSOFTAI.Infrastructure/Llm/OpenAiCompatibleLlmClient.cs"
+      diff_intent:
+        - "Apply combined policy (retry + circuit breaker)."
+        - "Handle 429 (rate limit) with Retry-After header."
+        - "Log retry attempts."
+      acceptance_criteria:
+        - "LLM client retries transient failures."
+
+    - path: "src/TILSOFTAI.Infrastructure/Sql/SqlExecutor.cs"
+      diff_intent:
+        - "Apply combined policy."
+        - "Classify SQL exceptions for transient detection."
+        - "Retry deadlocks, timeouts; don't retry constraint violations."
+      acceptance_criteria:
+        - "SQL executor retries transient failures."
+
+    - path: "src/TILSOFTAI.Infrastructure/Caching/RedisCacheProvider.cs"
+      diff_intent:
+        - "Apply combined policy."
+        - "Retry connection failures, timeouts."
+      acceptance_criteria:
+        - "Redis retries transient failures."
+
+    - path: "src/TILSOFTAI.Domain/Metrics/MetricNames.cs"
+      diff_intent:
+        - "Add: tilsoftai_retry_attempts_total (counter, labels: dependency, outcome)"
+        - "Add: tilsoftai_retry_exhausted_total (counter, all retries failed)"
+      acceptance_criteria:
+        - "Retry metrics defined."
+
+tests_to_create:
+  - path: "tests/TILSOFTAI.Tests.Unit/Resilience/RetryPolicyTests.cs"
+    diff_intent:
+      - "Test: transient failure retried up to max"
+      - "Test: success after retry -> no more retries"
+      - "Test: permanent failure -> no retry"
+      - "Test: exponential backoff timing"
+      - "Test: jitter applied"
+      - "Test: total timeout enforced"
+    acceptance_criteria:
+      - "Retry logic verified."
+
+  - path: "tests/TILSOFTAI.Tests.Unit/Resilience/TransientExceptionClassifierTests.cs"
+    diff_intent:
+      - "Test: HTTP 503 -> transient"
+      - "Test: HTTP 400 -> not transient"
+      - "Test: SQL timeout -> transient"
+      - "Test: SQL constraint violation -> not transient"
+    acceptance_criteria:
+      - "Exception classification verified."
+
+  - path: "tests/TILSOFTAI.Tests.Integration/Resilience/RetryIntegrationTests.cs"
+    diff_intent:
+      - "Test: mock LLM failure then success -> request succeeds"
+      - "Test: all retries fail -> error returned"
+      - "Test: metrics show retry attempts"
+    acceptance_criteria:
+      - "End-to-end retry verified."
+
+verification_steps:
+  - "Mock LLM to fail 2x then succeed -> request succeeds, metrics show 2 retries"
+  - "Mock LLM 429 with Retry-After: 2 -> wait respected"
+  - "Mock SQL timeout 3x -> retries exhausted, error returned"
+  - "Mock permanent failure (400) -> no retry, immediate failure"
+  - "Verify jitter: retry delays are not exactly exponential"
+
+checklist:
+  - "RetryOptions documented in appsettings.Sample.json"
+  - "README updated with retry behavior section"
+  - "Guidance on idempotency documented"
+  - "Retry-After header handling documented"
+  - "Polly nuget already added (from circuit breaker)"

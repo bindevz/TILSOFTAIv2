@@ -1,0 +1,197 @@
+schema_version: "1.0"
+document: "PATCH 24.06 - P0: Resilience - Circuit Breaker Pattern"
+language: "en"
+
+problem_statement:
+  - "External dependencies (LLM, SQL, Redis) have no circuit breaker protection."
+  - "Failing dependencies cause cascading failures and resource exhaustion."
+  - "No automatic recovery mechanism when dependencies become healthy."
+  - "Thread pool starvation possible when many requests wait on failing services."
+
+goals:
+  - "Implement circuit breaker pattern for all external dependencies."
+  - "Prevent cascade failures by failing fast when circuit is open."
+  - "Automatic recovery when dependencies become healthy."
+  - "Observable circuit state for monitoring and alerting."
+
+hard_constraints:
+  - "Circuit breaker must be configurable per dependency."
+  - "Must support both sync and async operations."
+  - "State changes must be logged and exposed as metrics."
+  - "Half-open state must allow limited traffic for probing."
+
+files_to_modify_or_create:
+  create:
+    - path: "src/TILSOFTAI.Domain/Resilience/ICircuitBreakerPolicy.cs"
+      diff_intent:
+        - "Abstraction for circuit breaker."
+        - "Methods:"
+        - "  ExecuteAsync<T>(Func<CancellationToken, Task<T>> action, CancellationToken ct)"
+        - "  State: CircuitState (Closed, Open, HalfOpen)"
+        - "  OnStateChange: event for monitoring"
+      acceptance_criteria:
+        - "Interface supports async execution."
+
+    - path: "src/TILSOFTAI.Domain/Resilience/CircuitState.cs"
+      diff_intent:
+        - "Enum: Closed, Open, HalfOpen"
+        - "Closed: normal operation"
+        - "Open: failing fast, not calling dependency"
+        - "HalfOpen: allowing limited traffic to probe recovery"
+      acceptance_criteria:
+        - "States defined."
+
+    - path: "src/TILSOFTAI.Domain/Resilience/CircuitBreakerException.cs"
+      diff_intent:
+        - "Exception thrown when circuit is open."
+        - "Properties: CircuitName, TimeUntilReset, FailureCount"
+        - "Mapped to ErrorCode.SERVICE_UNAVAILABLE"
+      acceptance_criteria:
+        - "Exception provides context."
+
+    - path: "src/TILSOFTAI.Domain/Configuration/CircuitBreakerOptions.cs"
+      diff_intent:
+        - "Base options:"
+        - "  FailureThreshold: int (default 5, failures before opening)"
+        - "  SamplingDuration: TimeSpan (default 30s, window for counting)"
+        - "  BreakDuration: TimeSpan (default 30s, time to stay open)"
+        - "  HalfOpenMaxAttempts: int (default 3, probes before closing)"
+        - "  ExceptionsToHandle: Type[] (which exceptions trip the breaker)"
+        - "  ExceptionsToIgnore: Type[] (which exceptions don't trip)"
+      acceptance_criteria:
+        - "All circuit breaker options configurable."
+
+    - path: "src/TILSOFTAI.Domain/Configuration/ResilienceOptions.cs"
+      diff_intent:
+        - "Container for all resilience settings:"
+        - "  LlmCircuitBreaker: CircuitBreakerOptions"
+        - "  SqlCircuitBreaker: CircuitBreakerOptions"
+        - "  RedisCircuitBreaker: CircuitBreakerOptions"
+        - "  GlobalEnabled: bool (default true)"
+      acceptance_criteria:
+        - "Per-dependency configuration."
+
+    - path: "src/TILSOFTAI.Infrastructure/Resilience/PollyCircuitBreakerPolicy.cs"
+      diff_intent:
+        - "Implement ICircuitBreakerPolicy using Polly."
+        - "Configure AdvancedCircuitBreakerAsync."
+        - "Wire up OnBreak, OnReset, OnHalfOpen for logging/metrics."
+        - "Record state changes to IMetricsService."
+      acceptance_criteria:
+        - "Polly-based circuit breaker operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/Resilience/CircuitBreakerRegistry.cs"
+      diff_intent:
+        - "Registry to manage named circuit breakers."
+        - "GetOrCreate(string name, CircuitBreakerOptions options)"
+        - "GetState(string name) -> CircuitState"
+        - "GetAllStates() -> Dictionary<string, CircuitState>"
+        - "Singleton lifecycle."
+      acceptance_criteria:
+        - "Centralized circuit management."
+
+    - path: "src/TILSOFTAI.Infrastructure/Resilience/CircuitBreakerDelegatingHandler.cs"
+      diff_intent:
+        - "HttpClient delegating handler with circuit breaker."
+        - "For LLM HTTP calls."
+        - "Wraps SendAsync with circuit breaker policy."
+      acceptance_criteria:
+        - "HTTP clients protected."
+
+    - path: "src/TILSOFTAI.Api/Endpoints/CircuitBreakerStatusEndpoint.cs"
+      diff_intent:
+        - "GET /health/circuits -> returns all circuit states"
+        - "Response: { circuits: [{ name, state, failureCount, lastFailure }] }"
+        - "Useful for dashboards and debugging."
+      acceptance_criteria:
+        - "Circuit status observable."
+
+  modify:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Register ResilienceOptions with ValidateOnStart."
+        - "Register CircuitBreakerRegistry as singleton."
+        - "Configure HttpClient with CircuitBreakerDelegatingHandler."
+      acceptance_criteria:
+        - "Circuit breakers registered."
+
+    - path: "src/TILSOFTAI.Infrastructure/Llm/OpenAiCompatibleLlmClient.cs"
+      diff_intent:
+        - "Inject ICircuitBreakerPolicy (named 'llm')."
+        - "Wrap HTTP calls with circuit breaker."
+        - "On CircuitBreakerException: return error response, not throw."
+        - "Log circuit state changes."
+      acceptance_criteria:
+        - "LLM client protected."
+
+    - path: "src/TILSOFTAI.Infrastructure/Sql/SqlExecutor.cs"
+      diff_intent:
+        - "Inject ICircuitBreakerPolicy (named 'sql')."
+        - "Wrap SQL executions with circuit breaker."
+        - "Handle SqlException types appropriately."
+      acceptance_criteria:
+        - "SQL executor protected."
+
+    - path: "src/TILSOFTAI.Infrastructure/Caching/RedisCacheProvider.cs"
+      diff_intent:
+        - "Inject ICircuitBreakerPolicy (named 'redis')."
+        - "Wrap Redis operations with circuit breaker."
+        - "On circuit open: fall back to memory cache (if configured)."
+      acceptance_criteria:
+        - "Redis protected with fallback."
+
+    - path: "src/TILSOFTAI.Domain/Errors/ErrorCode.cs"
+      diff_intent:
+        - "Add: SERVICE_UNAVAILABLE, DEPENDENCY_FAILURE, CIRCUIT_OPEN"
+      acceptance_criteria:
+        - "Circuit breaker error codes added."
+
+    - path: "src/TILSOFTAI.Api/Middlewares/ExceptionHandlingMiddleware.cs"
+      diff_intent:
+        - "Handle CircuitBreakerException -> 503 SERVICE_UNAVAILABLE"
+        - "Include Retry-After header when available."
+      acceptance_criteria:
+        - "Circuit exceptions handled."
+
+tests_to_create:
+  - path: "tests/TILSOFTAI.Tests.Unit/Resilience/CircuitBreakerPolicyTests.cs"
+    diff_intent:
+      - "Test: N failures -> circuit opens"
+      - "Test: circuit open -> immediate failure"
+      - "Test: break duration elapsed -> half-open"
+      - "Test: successful probe -> circuit closes"
+      - "Test: failed probe -> circuit re-opens"
+    acceptance_criteria:
+      - "Circuit breaker state machine verified."
+
+  - path: "tests/TILSOFTAI.Tests.Unit/Resilience/CircuitBreakerRegistryTests.cs"
+    diff_intent:
+      - "Test: GetOrCreate returns same instance"
+      - "Test: different names return different instances"
+      - "Test: GetAllStates returns all circuits"
+    acceptance_criteria:
+      - "Registry behavior verified."
+
+  - path: "tests/TILSOFTAI.Tests.Integration/Resilience/CircuitBreakerIntegrationTests.cs"
+    diff_intent:
+      - "Test: LLM failures trigger circuit"
+      - "Test: circuit open returns 503"
+      - "Test: /health/circuits shows correct state"
+      - "Test: circuit recovery on LLM recovery"
+    acceptance_criteria:
+      - "End-to-end circuit behavior verified."
+
+verification_steps:
+  - "Simulate LLM failures (5x) -> circuit opens"
+  - "GET /health/circuits -> llm circuit state = Open"
+  - "Send request while circuit open -> 503 with Retry-After"
+  - "Wait break duration -> circuit half-open"
+  - "Successful request -> circuit closes"
+  - "Metrics: tilsoftai_circuit_state{name='llm'} = 1 (open)"
+
+checklist:
+  - "ResilienceOptions documented in appsettings.Sample.json"
+  - "README updated with resilience section"
+  - "Circuit breaker state exposed in health endpoint"
+  - "Alerting guidance documented (alert on circuit open)"
+  - "Polly dependency added to csproj"

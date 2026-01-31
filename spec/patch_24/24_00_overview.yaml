@@ -1,0 +1,71 @@
+schema_version: "1.0"
+document: "PATCH 24 (EN) - Enterprise Production Readiness: Security Hardening, Observability, Resilience, Scalability, DevOps, Feature Flags"
+language: "en"
+
+purpose:
+  - "Address remaining enterprise gaps identified in TILSOFTAI analysis."
+  - "Implement production-grade security (input validation, audit logging)."
+  - "Complete observability stack (structured logging, OpenTelemetry, metrics)."
+  - "Add resilience patterns (circuit breaker, retry, graceful degradation)."
+  - "Enable horizontal scaling (connection pooling, SignalR backplane)."
+  - "Automate database migrations."
+  - "Implement feature flags system."
+
+non_negotiable_principles:
+  - "Security: All user input must be validated and sanitized before processing."
+  - "Audit: All security-relevant events must be logged with immutable audit trail."
+  - "Observability: Distributed tracing must propagate across all service boundaries."
+  - "Resilience: All external dependencies must have circuit breaker and retry policies."
+  - "Backward compatibility: No breaking changes to existing API contracts."
+  - "Configuration: All new features must be toggle-able via configuration."
+
+run_instructions:
+  - "Run EXACTLY ONE yaml file at a time, in the apply_order below."
+  - "After each yaml: dotnet build -c Release; dotnet test -c Release; update spec/PROGRESS.md."
+  - "Do NOT reorder - dependencies exist between patches."
+  - "All changes must be backward-compatible for API routes."
+  - "For infrastructure changes (Redis, SQL), ensure fallback paths work when disabled."
+
+apply_order:
+  - "spec/patch_24/24_01_security_input_validation_sanitization.yaml"
+  - "spec/patch_24/24_02_security_audit_logging.yaml"
+  - "spec/patch_24/24_03_observability_structured_logging.yaml"
+  - "spec/patch_24/24_04_observability_opentelemetry_integration.yaml"
+  - "spec/patch_24/24_05_observability_metrics_collection.yaml"
+  - "spec/patch_24/24_06_resilience_circuit_breaker_pattern.yaml"
+  - "spec/patch_24/24_07_resilience_retry_policies.yaml"
+  - "spec/patch_24/24_08_resilience_graceful_degradation.yaml"
+  - "spec/patch_24/24_09_scalability_connection_pooling.yaml"
+  - "spec/patch_24/24_10_scalability_signalr_backplane.yaml"
+  - "spec/patch_24/24_11_devops_database_migrations.yaml"
+  - "spec/patch_24/24_12_enterprise_feature_flags.yaml"
+  - "spec/patch_24/24_13_progress_audit_and_cleanup.yaml"
+
+deliverables:
+  - "13 patch yaml files under spec/patch_24/"
+  - "Production-ready code with comprehensive tests"
+  - "Updated documentation (README.md, docs/)"
+  - "spec/PROGRESS.md updated with completion status"
+
+global_acceptance_gate:
+  - "All user input validated before reaching business logic."
+  - "Security events logged to immutable audit trail (SQL + optional external sink)."
+  - "OpenTelemetry traces exported to configured collector."
+  - "Prometheus metrics exposed at /metrics endpoint."
+  - "LLM client, SQL, Redis wrapped with circuit breaker + retry."
+  - "SignalR supports Redis backplane when configured."
+  - "Database migrations run automatically on startup (when enabled)."
+  - "Feature flags control new feature rollout."
+  - "All new features have corresponding unit and integration tests."
+
+estimated_effort:
+  total_hours: "80-120"
+  breakdown:
+    security: "16-24h"
+    observability: "20-30h"
+    resilience: "16-24h"
+    scalability: "12-16h"
+    devops: "8-12h"
+    feature_flags: "8-12h"
+
+generated_on: "2026-01-31"

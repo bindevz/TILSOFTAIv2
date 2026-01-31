@@ -1,0 +1,176 @@
+schema_version: "1.0"
+document: "PATCH 24.01 - P0: Security - Input Validation & Sanitization"
+language: "en"
+
+problem_statement:
+  - "User input is passed to LLM and SQL procedures without comprehensive validation."
+  - "Potential injection attacks (prompt injection, SQL injection via JSON payloads)."
+  - "No centralized input sanitization layer."
+  - "Missing validation for special characters, unicode normalization, and size limits per field."
+
+goals:
+  - "Implement centralized input validation and sanitization service."
+  - "Validate all user-facing inputs (chat messages, tool arguments, headers)."
+  - "Sanitize inputs to prevent injection attacks while preserving legitimate content."
+  - "Provide clear, localized error messages for validation failures."
+
+hard_constraints:
+  - "Do not break legitimate Unicode input (multi-language support must work)."
+  - "Validation must be fast (< 1ms for typical inputs)."
+  - "Must support both synchronous (middleware) and asynchronous (pipeline) validation."
+  - "Sanitization must be reversible for audit purposes (log original + sanitized)."
+
+files_to_modify_or_create:
+  create:
+    - path: "src/TILSOFTAI.Domain/Validation/IInputValidator.cs"
+      diff_intent:
+        - "Define interface for input validation."
+        - "Methods: ValidateUserInput(string input, InputContext context) -> ValidationResult"
+        - "Methods: ValidateToolArguments(JsonElement args, ToolDefinition tool) -> ValidationResult"
+        - "ValidationResult contains: IsValid, Errors[], SanitizedValue"
+      acceptance_criteria:
+        - "Interface supports multiple validation contexts."
+
+    - path: "src/TILSOFTAI.Domain/Validation/InputContext.cs"
+      diff_intent:
+        - "Define context enum: ChatMessage, ToolArgument, Header, QueryParam"
+        - "Include MaxLength, AllowedCharacterSet, RequireUnicodeNormalization flags"
+      acceptance_criteria:
+        - "Context provides validation rules per input type."
+
+    - path: "src/TILSOFTAI.Domain/Validation/ValidationResult.cs"
+      diff_intent:
+        - "IsValid: bool"
+        - "Errors: ValidationError[] (Code, Field, Message, MessageKey)"
+        - "SanitizedValue: string (cleaned input)"
+        - "OriginalValue: string (for audit)"
+      acceptance_criteria:
+        - "Result captures both validation status and sanitized output."
+
+    - path: "src/TILSOFTAI.Domain/Configuration/ValidationOptions.cs"
+      diff_intent:
+        - "MaxInputLength: int (default 32000)"
+        - "MaxToolArgumentLength: int (default 8000)"
+        - "AllowedUnicodeCategories: string[] (Letter, Number, Punctuation, etc.)"
+        - "DenyPatterns: string[] (regex patterns to reject)"
+        - "SanitizeHtmlTags: bool (default true)"
+        - "NormalizeUnicode: bool (default true, NFC normalization)"
+        - "EnablePromptInjectionDetection: bool (default true)"
+      acceptance_criteria:
+        - "All validation rules configurable."
+
+    - path: "src/TILSOFTAI.Infrastructure/Validation/InputValidator.cs"
+      diff_intent:
+        - "Implement IInputValidator."
+        - "Step 1: Check length limits"
+        - "Step 2: Unicode normalization (NFC)"
+        - "Step 3: Remove/escape dangerous patterns (null bytes, control chars)"
+        - "Step 4: HTML tag sanitization (if enabled)"
+        - "Step 5: Prompt injection detection (check for known patterns)"
+        - "Step 6: Validate against deny patterns"
+        - "Log validation failures with redacted input sample."
+      acceptance_criteria:
+        - "All validation steps execute in order."
+        - "Performance < 1ms for 10KB input."
+
+    - path: "src/TILSOFTAI.Infrastructure/Validation/PromptInjectionDetector.cs"
+      diff_intent:
+        - "Detect common prompt injection patterns:"
+        - "  - 'Ignore previous instructions'"
+        - "  - 'You are now...'"
+        - "  - 'System prompt:'"
+        - "  - Excessive role-play indicators"
+        - "  - Base64 encoded instructions"
+        - "Return severity: None, Low, Medium, High"
+        - "Configurable: can warn or block"
+      acceptance_criteria:
+        - "Detects top 20 known injection patterns."
+        - "Severity levels allow graduated response."
+
+    - path: "src/TILSOFTAI.Api/Filters/InputValidationFilter.cs"
+      diff_intent:
+        - "Implement IEndpointFilter for minimal APIs or ActionFilterAttribute for controllers."
+        - "Validate request body before action execution."
+        - "Return 400 INVALID_INPUT with validation errors on failure."
+      acceptance_criteria:
+        - "Filter applies to all chat endpoints."
+
+  modify:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Register ValidationOptions with ValidateOnStart."
+        - "Register IInputValidator as singleton."
+        - "Add InputValidationFilter to MVC filters."
+      acceptance_criteria:
+        - "Validation services registered at startup."
+
+    - path: "src/TILSOFTAI.Api/Contracts/Chat/ChatApiRequest.cs"
+      diff_intent:
+        - "Add DataAnnotations: [MaxLength], [Required]"
+        - "Add custom [ValidateInput] attribute"
+      acceptance_criteria:
+        - "Request model has declarative validation."
+
+    - path: "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+      diff_intent:
+        - "Inject IInputValidator."
+        - "Validate user message at pipeline entry."
+        - "Log validation results for observability."
+      acceptance_criteria:
+        - "Pipeline validates before LLM call."
+
+    - path: "src/TILSOFTAI.Orchestration/Tools/ToolRegistry.cs"
+      diff_intent:
+        - "Validate tool arguments before execution."
+        - "Use IInputValidator.ValidateToolArguments()."
+      acceptance_criteria:
+        - "Tool arguments validated against schema + sanitization."
+
+    - path: "src/TILSOFTAI.Domain/Errors/ErrorCode.cs"
+      diff_intent:
+        - "Add: INVALID_INPUT, INPUT_TOO_LONG, FORBIDDEN_PATTERN, PROMPT_INJECTION_DETECTED"
+      acceptance_criteria:
+        - "New error codes for validation failures."
+
+tests_to_create:
+  - path: "tests/TILSOFTAI.Tests.Unit/Validation/InputValidatorTests.cs"
+    diff_intent:
+      - "Test length validation (too long -> error)"
+      - "Test Unicode normalization (NFD -> NFC)"
+      - "Test null byte removal"
+      - "Test HTML tag sanitization"
+      - "Test prompt injection detection"
+      - "Test deny pattern matching"
+      - "Test valid input passes through"
+      - "Test performance (< 1ms for 10KB)"
+    acceptance_criteria:
+      - "100% coverage of validation logic."
+
+  - path: "tests/TILSOFTAI.Tests.Unit/Validation/PromptInjectionDetectorTests.cs"
+    diff_intent:
+      - "Test detection of known injection patterns"
+      - "Test severity classification"
+      - "Test false positive rate (legitimate input not flagged)"
+    acceptance_criteria:
+      - "Known patterns detected with correct severity."
+
+  - path: "tests/TILSOFTAI.Tests.Contract/Validation/InputValidationContractTests.cs"
+    diff_intent:
+      - "Test API returns 400 for invalid input"
+      - "Test error envelope contains INVALID_INPUT code"
+      - "Test sanitized input reaches pipeline"
+    acceptance_criteria:
+      - "End-to-end validation contract verified."
+
+verification_steps:
+  - "POST /api/chat with input > MaxInputLength -> 400 INVALID_INPUT"
+  - "POST /api/chat with null bytes in input -> sanitized, proceeds"
+  - "POST /api/chat with 'ignore previous instructions' -> PROMPT_INJECTION_DETECTED (if blocking enabled)"
+  - "POST /api/chat with normal Unicode text -> 200 OK"
+  - "Benchmark: 10KB input validates in < 1ms"
+
+checklist:
+  - "ValidationOptions documented in appsettings.Sample.json"
+  - "README updated with input validation section"
+  - "Error catalog updated with new error codes (EN + VI)"
+  - "Logging includes validation metrics"

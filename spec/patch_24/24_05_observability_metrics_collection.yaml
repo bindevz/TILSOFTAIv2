@@ -1,0 +1,205 @@
+schema_version: "1.0"
+document: "PATCH 24.05 - P1: Observability - Metrics Collection"
+language: "en"
+
+problem_statement:
+  - "No application metrics exposed for monitoring."
+  - "Cannot track KPIs: request rate, latency percentiles, error rate, LLM token usage."
+  - "No Prometheus/metrics endpoint for scraping."
+  - "Unable to set up alerts based on application health."
+
+goals:
+  - "Expose Prometheus-compatible metrics endpoint (/metrics)."
+  - "Collect key application metrics (RED: Rate, Errors, Duration)."
+  - "Collect business metrics (conversations, tool calls, LLM tokens)."
+  - "Support dimensional metrics (by tenant, endpoint, tool)."
+
+hard_constraints:
+  - "Metrics collection must not significantly impact performance."
+  - "Cardinality must be controlled (no unbounded label values)."
+  - "/metrics endpoint must support authentication (optional)."
+  - "Must integrate with OpenTelemetry metrics when enabled."
+
+files_to_modify_or_create:
+  create:
+    - path: "src/TILSOFTAI.Domain/Metrics/IMetricsService.cs"
+      diff_intent:
+        - "Abstraction for metrics recording."
+        - "Methods:"
+        - "  IncrementCounter(string name, Dictionary<string, string> labels)"
+        - "  RecordHistogram(string name, double value, Dictionary<string, string> labels)"
+        - "  RecordGauge(string name, double value, Dictionary<string, string> labels)"
+        - "  CreateTimer(string name, Dictionary<string, string> labels) -> IDisposable"
+      acceptance_criteria:
+        - "Interface supports standard metric types."
+
+    - path: "src/TILSOFTAI.Domain/Metrics/MetricNames.cs"
+      diff_intent:
+        - "Define metric names following Prometheus conventions:"
+        - "  tilsoftai_http_requests_total (counter)"
+        - "  tilsoftai_http_request_duration_seconds (histogram)"
+        - "  tilsoftai_http_requests_in_progress (gauge)"
+        - "  tilsoftai_chat_pipeline_duration_seconds (histogram)"
+        - "  tilsoftai_tool_executions_total (counter)"
+        - "  tilsoftai_tool_execution_duration_seconds (histogram)"
+        - "  tilsoftai_llm_requests_total (counter)"
+        - "  tilsoftai_llm_request_duration_seconds (histogram)"
+        - "  tilsoftai_llm_tokens_total (counter, labels: type=prompt|completion)"
+        - "  tilsoftai_conversations_active (gauge)"
+        - "  tilsoftai_cache_hits_total (counter)"
+        - "  tilsoftai_cache_misses_total (counter)"
+        - "  tilsoftai_errors_total (counter, labels: code)"
+      acceptance_criteria:
+        - "Metric names follow conventions."
+
+    - path: "src/TILSOFTAI.Domain/Configuration/MetricsOptions.cs"
+      diff_intent:
+        - "Enabled: bool (default true)"
+        - "EndpointPath: string (default '/metrics')"
+        - "RequireAuthentication: bool (default false)"
+        - "AllowedRoles: string[] (default empty = all authenticated)"
+        - "IncludeTenantLabel: bool (default true)"
+        - "MaxLabelCardinality: int (default 100, drop high-cardinality)"
+        - "HistogramBuckets: double[] (default: .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10)"
+        - "EnableRuntimeMetrics: bool (default true, GC, thread pool)"
+      acceptance_criteria:
+        - "Metrics fully configurable."
+
+    - path: "src/TILSOFTAI.Infrastructure/Metrics/PrometheusMetricsService.cs"
+      diff_intent:
+        - "Implement IMetricsService using prometheus-net."
+        - "Create metrics lazily (on first use)."
+        - "Apply label cardinality limits."
+        - "Thread-safe metric updates."
+      acceptance_criteria:
+        - "Prometheus metrics operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/Metrics/OpenTelemetryMetricsService.cs"
+      diff_intent:
+        - "Alternative implementation using OpenTelemetry Metrics."
+        - "Use when OpenTelemetry is primary observability stack."
+        - "Same interface, different backend."
+      acceptance_criteria:
+        - "OTel metrics optional."
+
+    - path: "src/TILSOFTAI.Api/Endpoints/MetricsEndpoint.cs"
+      diff_intent:
+        - "Map GET /metrics endpoint."
+        - "Return Prometheus text format."
+        - "Apply authentication if configured."
+        - "Exempt from rate limiting."
+      acceptance_criteria:
+        - "Metrics endpoint operational."
+
+    - path: "src/TILSOFTAI.Api/Middlewares/MetricsMiddleware.cs"
+      diff_intent:
+        - "Record HTTP request metrics."
+        - "Increment tilsoftai_http_requests_total on request start."
+        - "Observe tilsoftai_http_request_duration_seconds on completion."
+        - "Track tilsoftai_http_requests_in_progress gauge."
+        - "Labels: method, endpoint (normalized), status_code, tenant_id."
+      acceptance_criteria:
+        - "HTTP metrics collected."
+
+    - path: "src/TILSOFTAI.Infrastructure/Metrics/RuntimeMetricsCollector.cs"
+      diff_intent:
+        - "Collect .NET runtime metrics:"
+        - "  process_cpu_seconds_total"
+        - "  process_working_set_bytes"
+        - "  dotnet_gc_collections_total"
+        - "  dotnet_gc_heap_size_bytes"
+        - "  dotnet_threadpool_threads_count"
+        - "  dotnet_threadpool_queue_length"
+        - "Use EventListener or built-in prometheus-net collectors."
+      acceptance_criteria:
+        - "Runtime metrics available."
+
+  modify:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Register MetricsOptions with ValidateOnStart."
+        - "Register IMetricsService based on configuration."
+        - "Add prometheus-net UseHttpMetrics if enabled."
+      acceptance_criteria:
+        - "Metrics services registered."
+
+    - path: "src/TILSOFTAI.Api/Extensions/MapTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Add MetricsMiddleware to pipeline."
+        - "Map /metrics endpoint."
+        - "Exempt /metrics from rate limiting."
+      acceptance_criteria:
+        - "Metrics endpoint mapped."
+
+    - path: "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+      diff_intent:
+        - "Inject IMetricsService."
+        - "Record tilsoftai_chat_pipeline_duration_seconds."
+        - "Record tilsoftai_tool_executions_total per tool call."
+      acceptance_criteria:
+        - "Pipeline metrics recorded."
+
+    - path: "src/TILSOFTAI.Infrastructure/Llm/OpenAiCompatibleLlmClient.cs"
+      diff_intent:
+        - "Inject IMetricsService."
+        - "Record tilsoftai_llm_requests_total."
+        - "Record tilsoftai_llm_request_duration_seconds."
+        - "Record tilsoftai_llm_tokens_total (prompt + completion)."
+      acceptance_criteria:
+        - "LLM metrics recorded."
+
+    - path: "src/TILSOFTAI.Infrastructure/Caching/RedisCacheProvider.cs"
+      diff_intent:
+        - "Inject IMetricsService."
+        - "Record tilsoftai_cache_hits_total, tilsoftai_cache_misses_total."
+      acceptance_criteria:
+        - "Cache metrics recorded."
+
+    - path: "src/TILSOFTAI.Api/Middlewares/ExceptionHandlingMiddleware.cs"
+      diff_intent:
+        - "Inject IMetricsService."
+        - "Record tilsoftai_errors_total with error code label."
+      acceptance_criteria:
+        - "Error metrics recorded."
+
+tests_to_create:
+  - path: "tests/TILSOFTAI.Tests.Unit/Metrics/MetricsServiceTests.cs"
+    diff_intent:
+      - "Test counter increment"
+      - "Test histogram observation"
+      - "Test gauge set"
+      - "Test label cardinality limiting"
+    acceptance_criteria:
+      - "Metrics service logic verified."
+
+  - path: "tests/TILSOFTAI.Tests.Integration/Metrics/MetricsEndpointTests.cs"
+    diff_intent:
+      - "Test GET /metrics returns 200"
+      - "Test response contains expected metric names"
+      - "Test Prometheus format is valid"
+      - "Test authentication when enabled"
+    acceptance_criteria:
+      - "Metrics endpoint verified."
+
+  - path: "tests/TILSOFTAI.Tests.Contract/Metrics/MetricsContractTests.cs"
+    diff_intent:
+      - "Verify required metrics exist after request"
+      - "Verify label values are correct"
+      - "Verify histogram buckets are present"
+    acceptance_criteria:
+      - "Metrics contract verified."
+
+verification_steps:
+  - "GET /metrics -> returns Prometheus format text"
+  - "Parse /metrics with promtool check metrics -> valid"
+  - "Send requests -> tilsoftai_http_requests_total increases"
+  - "Send request with tool call -> tilsoftai_tool_executions_total increases"
+  - "Configure authentication -> unauthenticated /metrics returns 401"
+  - "Verify no unbounded label values (e.g., user_id is NOT a label)"
+
+checklist:
+  - "MetricsOptions documented in appsettings.Sample.json"
+  - "README updated with metrics section"
+  - "Grafana dashboard JSON provided"
+  - "Alert rules examples provided (Prometheus alerting rules)"
+  - "Performance impact documented (< 1% overhead)"

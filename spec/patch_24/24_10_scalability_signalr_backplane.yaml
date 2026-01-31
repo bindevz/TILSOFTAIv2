@@ -1,0 +1,164 @@
+schema_version: "1.0"
+document: "PATCH 24.10 - P1: Scalability - SignalR Redis Backplane for Horizontal Scaling"
+language: "en"
+
+problem_statement:
+  - "SignalR connections are sticky to single server instance."
+  - "Horizontal scaling breaks SignalR when load balancer routes to different instances."
+  - "No message distribution across multiple API instances."
+  - "WebSocket connections fail on scale-out scenarios."
+
+goals:
+  - "Implement Redis backplane for SignalR to support horizontal scaling."
+  - "Enable seamless load balancing with sticky sessions not required."
+  - "Maintain message ordering guarantees within conversation."
+  - "Support graceful degradation when Redis unavailable."
+
+hard_constraints:
+  - "Must be optional (single-instance deployments should work without Redis)."
+  - "Must integrate with existing Redis configuration."
+  - "Connection state must survive instance failover."
+  - "Latency impact must be minimal (under 10ms per message)."
+
+files_to_modify_or_create:
+  create:
+    - path: "src/TILSOFTAI.Domain/Configuration/SignalROptions.cs"
+      diff_intent:
+        - "EnableRedisBackplane: bool (default false)"
+        - "RedisConfiguration: string (use Redis:ConnectionString if empty)"
+        - "ChannelPrefix: string (default 'tilsoftai')"
+        - "EnableMessagePack: bool (default false, for performance)"
+        - "KeepAliveInterval: TimeSpan (default 15s)"
+        - "ClientTimeoutInterval: TimeSpan (default 30s)"
+        - "HandshakeTimeout: TimeSpan (default 15s)"
+        - "MaximumReceiveMessageSize: long (default 32KB)"
+        - "StreamBufferCapacity: int (default 10)"
+      acceptance_criteria:
+        - "SignalR options configurable."
+
+    - path: "src/TILSOFTAI.Infrastructure/SignalR/SignalRBackplaneConfigurator.cs"
+      diff_intent:
+        - "Configure SignalR Redis backplane when enabled."
+        - "Use StackExchange.Redis as backplane provider."
+        - "Configure channel prefix for multi-tenant isolation."
+        - "Handle Redis connection failures gracefully."
+      acceptance_criteria:
+        - "Backplane configuration operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/SignalR/SignalRHealthCheck.cs"
+      diff_intent:
+        - "Implement IHealthCheck for SignalR."
+        - "Check: Hub is accepting connections"
+        - "Check: Redis backplane connected (if enabled)"
+        - "Return connection count and backplane status."
+      acceptance_criteria:
+        - "SignalR health check operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/SignalR/ConnectionTracker.cs"
+      diff_intent:
+        - "Track active SignalR connections per instance."
+        - "Methods: OnConnected, OnDisconnected, GetConnectionCount"
+        - "Store connection metadata (tenant, user, connected time)."
+        - "Expose metrics for connection count."
+      acceptance_criteria:
+        - "Connection tracking operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/SignalR/MessagePackHubProtocol.cs"
+      diff_intent:
+        - "Optional MessagePack protocol for performance."
+        - "Smaller message size than JSON."
+        - "Faster serialization/deserialization."
+        - "Must be enabled on both client and server."
+      acceptance_criteria:
+        - "MessagePack optional protocol available."
+
+  modify:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Register SignalROptions with ValidateOnStart."
+        - "Configure SignalR with options."
+        - "Add Redis backplane when EnableRedisBackplane=true."
+        - "Add MessagePack protocol when enabled."
+        - "Configure timeouts from options."
+      acceptance_criteria:
+        - "SignalR configured from options."
+
+    - path: "src/TILSOFTAI.Api/Hubs/ChatHub.cs"
+      diff_intent:
+        - "Inject ConnectionTracker."
+        - "Track connections on OnConnectedAsync."
+        - "Remove connections on OnDisconnectedAsync."
+        - "Handle backplane failures gracefully."
+      acceptance_criteria:
+        - "Hub tracks connections."
+
+    - path: "src/TILSOFTAI.Api/Extensions/MapTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Add SignalR health check to health checks."
+        - "Configure SignalR hub options from SignalROptions."
+      acceptance_criteria:
+        - "SignalR health check added."
+
+    - path: "src/TILSOFTAI.Domain/Metrics/MetricNames.cs"
+      diff_intent:
+        - "Add SignalR metrics:"
+        - "  tilsoftai_signalr_connections_active (gauge)"
+        - "  tilsoftai_signalr_connections_total (counter)"
+        - "  tilsoftai_signalr_messages_sent_total (counter)"
+        - "  tilsoftai_signalr_backplane_messages_total (counter)"
+      acceptance_criteria:
+        - "SignalR metrics defined."
+
+    - path: "src/TILSOFTAI.Domain/Configuration/RedisOptions.cs"
+      diff_intent:
+        - "Add SignalRBackplaneEnabled: bool to indicate Redis used for SignalR."
+        - "Validate: if SignalR backplane enabled, Redis must be enabled."
+      acceptance_criteria:
+        - "Redis options include SignalR backplane flag."
+
+tests_to_create:
+  - path: "tests/TILSOFTAI.Tests.Unit/SignalR/SignalRBackplaneConfiguratorTests.cs"
+    diff_intent:
+      - "Test: backplane configured when enabled"
+      - "Test: backplane not configured when disabled"
+      - "Test: channel prefix applied"
+    acceptance_criteria:
+      - "Backplane configuration verified."
+
+  - path: "tests/TILSOFTAI.Tests.Unit/SignalR/ConnectionTrackerTests.cs"
+    diff_intent:
+      - "Test: connection count increments on connect"
+      - "Test: connection count decrements on disconnect"
+      - "Test: metadata stored correctly"
+    acceptance_criteria:
+      - "Connection tracking verified."
+
+  - path: "tests/TILSOFTAI.Tests.Integration/SignalR/SignalRBackplaneIntegrationTests.cs"
+    diff_intent:
+      - "Test: message sent from instance A received by client on instance B"
+      - "Test: Redis failure does not crash SignalR"
+      - "Test: health check shows backplane status"
+    acceptance_criteria:
+      - "End-to-end backplane verified."
+
+  - path: "tests/TILSOFTAI.Tests.Contract/SignalR/SignalRScaleOutContractTests.cs"
+    diff_intent:
+      - "Verify message delivery across instances (simulated)"
+      - "Verify connection handoff works"
+    acceptance_criteria:
+      - "Scale-out behavior verified."
+
+verification_steps:
+  - "Enable Redis backplane, start 2 instances behind LB"
+  - "Connect client to instance A"
+  - "Send message from instance B -> client receives"
+  - "GET /health/ready shows SignalR backplane connected"
+  - "Stop Redis -> SignalR degrades but does not crash"
+  - "Restart Redis -> backplane reconnects automatically"
+
+checklist:
+  - "SignalROptions documented in appsettings.Sample.json"
+  - "README updated with horizontal scaling section"
+  - "Load balancer configuration guidance documented"
+  - "Client reconnection handling documented"
+  - "Performance benchmark with backplane documented"

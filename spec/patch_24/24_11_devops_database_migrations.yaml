@@ -1,0 +1,232 @@
+schema_version: "1.0"
+document: "PATCH 24.11 - P1: DevOps - Automated Database Migrations"
+language: "en"
+
+problem_statement:
+  - "SQL scripts are run manually without version tracking."
+  - "No way to know which migrations have been applied to a database."
+  - "Risk of applying migrations out of order or missing migrations."
+  - "Rollback procedures are manual and error-prone."
+  - "Cannot deploy database changes as part of CI/CD pipeline."
+
+goals:
+  - "Implement automated database migration system."
+  - "Track applied migrations in database."
+  - "Support migration ordering and dependencies."
+  - "Enable rollback for failed migrations."
+  - "Integrate with CI/CD for automated deployments."
+
+hard_constraints:
+  - "Must support existing SQL scripts (no rewrite required)."
+  - "Must be idempotent (safe to run multiple times)."
+  - "Must support both automatic (on startup) and manual (CLI) execution."
+  - "Must handle multi-tenant schema isolation if needed."
+  - "Must not lock database for extended periods."
+
+files_to_modify_or_create:
+  create:
+    - path: "src/TILSOFTAI.Domain/Migrations/IMigrationRunner.cs"
+      diff_intent:
+        - "Interface for migration execution."
+        - "Methods:"
+        - "  MigrateAsync(string targetVersion) -> MigrationResult"
+        - "  GetAppliedMigrationsAsync() -> MigrationRecord[]"
+        - "  GetPendingMigrationsAsync() -> MigrationInfo[]"
+        - "  RollbackAsync(string targetVersion) -> MigrationResult"
+      acceptance_criteria:
+        - "Migration interface defined."
+
+    - path: "src/TILSOFTAI.Domain/Migrations/MigrationInfo.cs"
+      diff_intent:
+        - "Version: string (semver or sequential)"
+        - "Name: string"
+        - "Description: string"
+        - "ScriptPath: string"
+        - "Checksum: string (SHA256 of script)"
+        - "Dependencies: string[] (versions that must be applied first)"
+      acceptance_criteria:
+        - "Migration metadata defined."
+
+    - path: "src/TILSOFTAI.Domain/Migrations/MigrationRecord.cs"
+      diff_intent:
+        - "Version: string"
+        - "Name: string"
+        - "AppliedAtUtc: DateTimeOffset"
+        - "AppliedBy: string"
+        - "ExecutionTimeMs: long"
+        - "Checksum: string"
+        - "Success: bool"
+        - "ErrorMessage: string (if failed)"
+      acceptance_criteria:
+        - "Migration record defined."
+
+    - path: "src/TILSOFTAI.Domain/Migrations/MigrationResult.cs"
+      diff_intent:
+        - "Success: bool"
+        - "MigrationsApplied: MigrationRecord[]"
+        - "MigrationsFailed: MigrationRecord[]"
+        - "CurrentVersion: string"
+        - "Errors: string[]"
+      acceptance_criteria:
+        - "Migration result defined."
+
+    - path: "src/TILSOFTAI.Domain/Configuration/MigrationOptions.cs"
+      diff_intent:
+        - "Enabled: bool (default false for safety)"
+        - "RunOnStartup: bool (default false)"
+        - "ScriptsPath: string (default 'sql/')"
+        - "HistoryTableName: string (default '__MigrationHistory')"
+        - "HistorySchemaName: string (default 'dbo')"
+        - "CommandTimeoutSeconds: int (default 300)"
+        - "TransactionMode: TransactionMode enum (PerMigration, AllOrNothing)"
+        - "AllowOutOfOrder: bool (default false)"
+        - "ValidateChecksums: bool (default true)"
+      acceptance_criteria:
+        - "Migration options configurable."
+
+    - path: "src/TILSOFTAI.Infrastructure/Migrations/SqlMigrationRunner.cs"
+      diff_intent:
+        - "Implement IMigrationRunner."
+        - "Discover migrations from ScriptsPath."
+        - "Parse version from filename (e.g., V001__description.sql)."
+        - "Execute migrations in order."
+        - "Record results in history table."
+        - "Support transactions per migration."
+      acceptance_criteria:
+        - "SQL migration runner operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/Migrations/MigrationDiscovery.cs"
+      diff_intent:
+        - "Scan ScriptsPath for SQL files."
+        - "Parse filename pattern: V{version}__{name}.sql"
+        - "Support subdirectories for organization."
+        - "Calculate checksums for change detection."
+        - "Order by version number."
+      acceptance_criteria:
+        - "Migration discovery operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/Migrations/MigrationHistoryRepository.cs"
+      diff_intent:
+        - "Manage __MigrationHistory table."
+        - "Methods: CreateTableIfNotExists, GetApplied, RecordMigration"
+        - "Table schema: Version, Name, AppliedAtUtc, Checksum, ExecutionTimeMs, Success"
+      acceptance_criteria:
+        - "History repository operational."
+
+    - path: "src/TILSOFTAI.Infrastructure/Migrations/MigrationHostedService.cs"
+      diff_intent:
+        - "Run migrations on application startup (when enabled)."
+        - "Block startup until migrations complete."
+        - "Fail fast if migrations fail (application does not start)."
+        - "Log migration progress."
+      acceptance_criteria:
+        - "Startup migration operational."
+
+    - path: "src/TILSOFTAI.Api/Endpoints/MigrationEndpoints.cs"
+      diff_intent:
+        - "GET /admin/migrations -> list applied and pending"
+        - "POST /admin/migrations/apply -> apply pending migrations"
+        - "POST /admin/migrations/rollback -> rollback to version"
+        - "Require admin role."
+      acceptance_criteria:
+        - "Migration admin endpoints operational."
+
+    - path: "sql/00_migrations/001_create_migration_history.sql"
+      diff_intent:
+        - "CREATE TABLE IF NOT EXISTS __MigrationHistory"
+        - "Columns as defined in MigrationRecord"
+        - "Primary key on Version"
+        - "Index on AppliedAtUtc"
+      acceptance_criteria:
+        - "Migration history table script."
+
+    - path: "tools/migrate.ps1"
+      diff_intent:
+        - "PowerShell script for CLI migration."
+        - "Commands: status, apply, rollback, validate"
+        - "Can be run from CI/CD pipeline."
+        - "Uses API endpoints or direct SQL connection."
+      acceptance_criteria:
+        - "CLI migration tool."
+
+    - path: "tools/migrate.sh"
+      diff_intent:
+        - "Bash version of migration CLI."
+        - "Same functionality as PowerShell version."
+      acceptance_criteria:
+        - "Linux CLI migration tool."
+
+  modify:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Register MigrationOptions with ValidateOnStart."
+        - "Register IMigrationRunner."
+        - "Register MigrationHostedService when RunOnStartup=true."
+      acceptance_criteria:
+        - "Migration services registered."
+
+    - path: "src/TILSOFTAI.Api/Extensions/MapTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Map migration admin endpoints."
+        - "Require admin authorization."
+      acceptance_criteria:
+        - "Migration endpoints mapped."
+
+    - path: ".github/workflows/ci.yml"
+      diff_intent:
+        - "Add migration validation step."
+        - "Verify all SQL scripts parse correctly."
+        - "Verify version ordering is correct."
+        - "Verify no duplicate versions."
+      acceptance_criteria:
+        - "CI validates migrations."
+
+tests_to_create:
+  - path: "tests/TILSOFTAI.Tests.Unit/Migrations/MigrationDiscoveryTests.cs"
+    diff_intent:
+      - "Test: discovers SQL files from path"
+      - "Test: parses version from filename"
+      - "Test: calculates checksum"
+      - "Test: orders by version"
+    acceptance_criteria:
+      - "Discovery logic verified."
+
+  - path: "tests/TILSOFTAI.Tests.Unit/Migrations/MigrationRunnerTests.cs"
+    diff_intent:
+      - "Test: applies migrations in order"
+      - "Test: skips already applied"
+      - "Test: records in history"
+      - "Test: rollback works"
+    acceptance_criteria:
+      - "Runner logic verified."
+
+  - path: "tests/TILSOFTAI.Tests.Integration/Migrations/MigrationIntegrationTests.cs"
+    diff_intent:
+      - "Test: end-to-end migration apply"
+      - "Test: checksum validation fails on modified script"
+      - "Test: transaction rollback on failure"
+    acceptance_criteria:
+      - "End-to-end migration verified."
+
+  - path: "tests/TILSOFTAI.Tests.Contract/Migrations/MigrationEndpointContractTests.cs"
+    diff_intent:
+      - "Verify GET /admin/migrations returns correct schema"
+      - "Verify admin auth required"
+    acceptance_criteria:
+      - "Migration endpoints verified."
+
+verification_steps:
+  - "Add new V999__test.sql migration"
+  - "Start application with RunOnStartup=true -> migration applied"
+  - "Restart application -> migration not re-applied"
+  - "GET /admin/migrations -> shows V999 as applied"
+  - "Modify V999 script -> startup fails (checksum mismatch)"
+  - "Run migrate.ps1 status -> shows applied migrations"
+
+checklist:
+  - "MigrationOptions documented in appsettings.Sample.json"
+  - "README updated with migration section"
+  - "Migration naming convention documented"
+  - "Rollback procedures documented"
+  - "CI/CD integration documented"
+  - "Existing SQL scripts renamed to follow convention"
