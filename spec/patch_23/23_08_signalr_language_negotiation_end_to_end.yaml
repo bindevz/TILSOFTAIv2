@@ -1,0 +1,26 @@
+schema_version: "1.0"
+document: "PATCH 23.08 - P1: SignalR Language Negotiation End-to-End"
+language: "en"
+
+problem_statement:
+  - "SignalR lacks robust language negotiation; multi-language requirement isn't end-to-end for hubs."
+
+goals:
+  - "Support language negotiation via querystring 'lang' and/or StartChat preferredLanguage."
+  - "Validate language against SupportedLanguages; fallback safely."
+
+files_to_modify_or_create:
+  modify:
+    - path: "src/TILSOFTAI.Domain/Security/HubIdentityResolutionPolicy.cs"
+      diff_intent:
+        - "Read querystring lang; normalize; validate."
+  modify:
+    - path: "src/TILSOFTAI.Api/Hubs/ChatHub.cs"
+      diff_intent:
+        - "Accept preferredLanguage in StartChat request; validate and set in ExecutionContext."
+  tests:
+    - path: "tests/TILSOFTAI.Tests.Contract/SignalR/SignalRLanguageNegotiationTests.cs"
+      action: "create"
+
+acceptance_criteria:
+  - "SignalR returns localized messages based on negotiated language."

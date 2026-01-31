@@ -1,0 +1,40 @@
+schema_version: "1.0"
+document: "PATCH 23.06 - P1: Strict Localization Guard and SupportedLanguages Validation"
+language: "en"
+
+problem_statement:
+  - "Localization guard does not reliably detect missing translations and may pass trivially."
+
+goals:
+  - "Modify error catalog API to indicate fallback."
+  - "Update guard to fail when required translations are missing for enabled languages."
+  - "Validate SupportedLanguages is non-empty and includes 'en' in Production."
+
+hard_constraints:
+  - "Do not fail for languages not enabled."
+
+files_to_modify_or_create:
+  modify:
+    - path: "src/TILSOFTAI.Domain/Localization/IErrorCatalog.cs"
+      diff_intent:
+        - "Add TryGetExact (or TryGet with IsFallback) to detect missing."
+  modify:
+    - path: "src/TILSOFTAI.Infrastructure/Localization/InMemoryErrorCatalog.cs"
+      diff_intent:
+        - "Implement fallback signaling."
+  modify:
+    - path: "src/TILSOFTAI.Infrastructure/Localization/ErrorCatalogCoverageGuard.cs"
+      diff_intent:
+        - "Use new API to detect missing translations; fail startup if missing."
+        - "Fail if SupportedLanguages empty in Production."
+  modify:
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Validate LocalizationOptions: non-empty, contains en in Production."
+  tests:
+    - path: "tests/TILSOFTAI.Tests.Unit/Localization/ErrorCatalogCoverageGuardTests.cs"
+      diff_intent:
+        - "Update tests for strict behavior."
+
+acceptance_criteria:
+  - "Guard fails when translation missing."

@@ -1,0 +1,44 @@
+schema_version: "1.0"
+document: "PATCH 23 (EN) - Enterprise End-to-End Closeout v4 (Middleware order P0, Options SSoT P1, Real SignalR/Streaming tests P1, Localization guard P1, CORS validation P1, SignalR language negotiation P1)"
+language: "en"
+
+purpose:
+  - "Eliminate remaining P0/P1 issues found after Patch 22 on TILSOFTAIv5.zip."
+  - "Deliver enterprise release readiness: consistent error envelope, deterministic options behavior, real contract tests, reliable localization coverage, strict CORS validation, and end-to-end language support across HTTP + SignalR."
+
+non_negotiable_principles:
+  - "Exception handling must be outermost; all errors must be envelope-shaped across REST and streaming."
+  - "Options are the single source of truth: bind+validate once; consume via IOptions/IOptionsMonitor; no rebind via configuration.Get<T>."
+  - "Tests must assert behavior (no placeholders)."
+  - "SignalR must support language negotiation without trusting roles headers."
+
+run_instructions:
+  - "Run EXACTLY ONE yaml file at a time, in the apply_order below."
+  - "After each yaml: dotnet build -c Release; dotnet test -c Release; update spec/PROGRESS.md."
+  - "Do NOT reorder."
+  - "All changes must be backward-compatible for API routes."
+
+apply_order:
+  - "spec/patch_23/23_01_pipeline_order_exception_outermost.yaml"
+  - "spec/patch_23/23_02_options_ssot_remove_rebind_auth_redis_ratelimit.yaml"
+  - "spec/patch_23/23_03_test_infra_real_auth_and_signalr_connection_claims.yaml"
+  - "spec/patch_23/23_04_signalr_contract_tests_enforcement_and_isolation.yaml"
+  - "spec/patch_23/23_05_streaming_error_envelope_contract_tests.yaml"
+  - "spec/patch_23/23_06_localization_guard_strict_coverage_and_supported_languages.yaml"
+  - "spec/patch_23/23_07_cors_validation_strict_enabled_requires_origins.yaml"
+  - "spec/patch_23/23_08_signalr_language_negotiation_end_to_end.yaml"
+  - "spec/patch_23/23_09_progress_audit_and_cleanup.yaml"
+
+deliverables:
+  - "9 patch yaml files under spec/patch_23/"
+  - "Code and tests"
+  - "spec/PROGRESS.md updated"
+
+global_acceptance_gate:
+  - "Oversize request -> 413 with ErrorCode.REQUEST_TOO_LARGE envelope (HTTP and streaming where applicable)."
+  - "No direct configuration.GetSection().Get<T>() usage remains for Auth/Redis/RateLimit/Cors in src/ (except host builder initial configuration)."
+  - "SignalR tests assert missing claims -> UNAUTHENTICATED, and cross-tenant isolation."
+  - "Localization guard fails startup if required codes missing for enabled languages."
+  - "CORS Enabled requires at least 1 AllowedOrigin and passes validation."
+  - "SignalR supports per-connection language, used in responses."
+generated_on: "2026-01-31"

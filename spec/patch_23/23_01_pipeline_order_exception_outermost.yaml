@@ -1,0 +1,50 @@
+schema_version: "1.0"
+document: "PATCH 23.01 - P0: Ensure ExceptionHandlingMiddleware is Outermost (Consistent Error Envelope)"
+language: "en"
+
+problem_statement:
+  - "RequestSizeLimitMiddleware is currently placed outside ExceptionHandlingMiddleware, so exceptions thrown by it bypass the envelope handler."
+  - "This breaks enterprise error contract consistency (especially for 413 REQUEST_TOO_LARGE)."
+
+goals:
+  - "Make ExceptionHandlingMiddleware the outermost middleware in the app pipeline for API routes."
+  - "Guarantee: any exception thrown by downstream middlewares (including RequestSizeLimitMiddleware) is caught and converted to ErrorEnvelope."
+
+hard_constraints:
+  - "Do not change public routes."
+  - "Health endpoints must remain minimal and should not be wrapped if you intentionally want plain text, but enterprise usually still allows envelope; keep current behavior if already established."
+
+files_to_modify:
+  modify:
+    - path: "src/TILSOFTAI.Api/Extensions/MapTilsoftAiExtensions.cs"
+      diff_intent:
+        - "Move app.UseMiddleware<ExceptionHandlingMiddleware>() ABOVE RequestSizeLimitMiddleware and ABOVE auth/authorization if currently below."
+        - "Recommended order for API routes:"
+        - "  1) Security headers"
+        - "  2) ExceptionHandlingMiddleware (outermost)"
+        - "  3) Routing"
+        - "  4) CORS (if enabled)"
+        - "  5) Authentication"
+        - "  6) Authorization"
+        - "  7) RequestSizeLimitMiddleware (route-scoped) OR placed after routing with endpoint filtering"
+        - "  8) Controllers/Hubs mapping"
+      acceptance_criteria:
+        - "Oversize request triggers 413 with envelope."
+  modify:
+    - path: "src/TILSOFTAI.Api/Middlewares/RequestSizeLimitMiddleware.cs"
+      diff_intent:
+        - "Ensure it throws TilsoftApiException(ErrorCode.REQUEST_TOO_LARGE, httpStatus: 413) rather than writing response itself, so the global exception handler formats it."
+      acceptance_criteria:
+        - "ExceptionHandlingMiddleware formats the response."
+
+tests_to_update:
+  - path: "tests/TILSOFTAI.Tests.Contract/Ops/RequestSizeLimitContractTests.cs"
+    diff_intent:
+      - "Assert response body is an envelope and contains code REQUEST_TOO_LARGE."
+      - "Ensure test fails if middleware order breaks envelope."
+    acceptance_criteria:
+      - "Test passes only when order is correct."
+
+checklist:
+  - "Verify ExceptionHandlingMiddleware is registered once (no duplicates)."
+  - "Verify that health endpoints still function and are not rate-limited."

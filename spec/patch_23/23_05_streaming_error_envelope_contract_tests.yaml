@@ -1,0 +1,31 @@
+schema_version: "1.0"
+document: "PATCH 23.05 - P1: Streaming Error Envelope Contract Tests"
+language: "en"
+
+problem_statement:
+  - "Streaming error contract is not enforced by tests."
+
+goals:
+  - "Add SSE tests that parse events and assert error envelope presence and no raw internals."
+
+hard_constraints:
+  - "No external dependencies."
+
+files_to_modify_or_create:
+  create:
+    - path: "tests/TILSOFTAI.Tests.Contract/Streaming/SseErrorEnvelopeTests.cs"
+      diff_intent:
+        - "Call /api/chat/stream; trigger deterministic TilsoftApiException in Testing env."
+        - "Parse SSE; assert error contains code/messageKey/correlationId/traceId."
+        - "Assert no 'System.' or stack traces appear."
+      acceptance_criteria:
+        - "Test catches raw error leaks."
+  modify_optional:
+    - path: "src/TILSOFTAI.Api/Controllers/ChatController.cs"
+      diff_intent:
+        - "Add Testing-only hook to trigger a specific error for contract tests."
+      acceptance_criteria:
+        - "Hook disabled outside Testing."
+
+checklist:
+  - "Guard test-only hook by env.IsEnvironment("Testing")."
