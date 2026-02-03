@@ -27,4 +27,24 @@ public static class ErrorCode
     public const string ChatFailed = "CHAT_FAILED";
     public const string UnhandledError = "UNHANDLED_ERROR";
     public const string RequestTooLarge = "REQUEST_TOO_LARGE";
+
+    // Input validation errors
+    public const string InvalidInput = "INVALID_INPUT";
+    public const string InputTooLong = "INPUT_TOO_LONG";
+    public const string ForbiddenPattern = "FORBIDDEN_PATTERN";
+    public const string PromptInjectionDetected = "PROMPT_INJECTION_DETECTED";
+    /// <summary>
+    /// The external service is unavailable (e.g. circuit breaker open).
+    /// </summary>
+    public const string ServiceUnavailable = "SERVICE_UNAVAILABLE";
+
+    /// <summary>
+    /// An external dependency failed.
+    /// </summary>
+    public const string DependencyFailure = "DEPENDENCY_FAILURE";
+
+    /// <summary>
+    /// The circuit breaker is open.
+    /// </summary>
+    public const string CircuitOpen = "CIRCUIT_OPEN";
 }

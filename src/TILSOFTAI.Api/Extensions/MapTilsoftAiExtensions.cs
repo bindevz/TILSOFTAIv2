@@ -1,7 +1,10 @@
 using TILSOFTAI.Api.Hubs;
 using TILSOFTAI.Api.Middlewares;
 using TILSOFTAI.Domain.Configuration;
+using TILSOFTAI.Infrastructure.Logging;
 using Microsoft.Extensions.Options;
+using TILSOFTAI.Api.Endpoints; // For MetricsEndpoint
+using TILSOFTAI.Domain.Metrics; // For options usage if needed
 
 namespace TILSOFTAI.Api.Extensions;
 
@@ -14,6 +17,9 @@ public static class MapTilsoftAiExtensions
         // Security headers for all responses
         app.UseMiddleware<SecurityHeadersMiddleware>();
         
+        // Metrics middleware - Outermost (after security headers) to measure full pipeline including error handling
+        app.UseMiddleware<MetricsMiddleware>();
+
         // Exception handling must be outermost to ensure all errors are envelope-shaped
         app.UseMiddleware<ExceptionHandlingMiddleware>();
         
@@ -40,8 +46,22 @@ public static class MapTilsoftAiExtensions
         app.UseRateLimiter();
         app.UseMiddleware<ExecutionContextMiddleware>();
 
+        // Structured logging middleware - enriches log context from execution context
+        app.UseMiddleware<LogEnricher>();
+        app.UseMiddleware<RequestLoggingMiddleware>();
+
         app.MapControllers().RequireAuthorization();
         app.MapHub<ChatHub>("/hubs/chat");
+
+        // Metrics endpoint
+        // Resolve options to get path
+        var metricsOptions = app.Services.GetRequiredService<IOptions<MetricsOptions>>().Value;
+        app.MapGet(metricsOptions.EndpointPath, async (HttpContext context, IOptions<MetricsOptions> options) => 
+        {
+            await TILSOFTAI.Api.Endpoints.MetricsEndpoint.HandleAsync(context, options);
+        })
+        .AllowAnonymous() // Auth handled inside endpoint if configured
+        .DisableRateLimiting();
         
         // Health endpoints for operational readiness
         app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions

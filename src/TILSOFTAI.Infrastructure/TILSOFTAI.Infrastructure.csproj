@@ -18,6 +18,17 @@
     <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.0" />
     <PackageReference Include="Azure.Identity" Version="1.17.1" />
     <PackageReference Include="Microsoft.Identity.Client" Version="4.81.0" />
+    <PackageReference Include="OpenTelemetry" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.11.0-beta.1" />
+    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
+    <PackageReference Include="Polly.Contrib.WaitAndRetry" Version="1.1.1" />
+    <PackageReference Include="prometheus-net" Version="8.2.1" />
+    <PackageReference Include="Polly" Version="8.4.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,6 +37,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TILSOFTAI.Tests.Integration" />
+    <InternalsVisibleTo Include="TILSOFTAI.Tests.Unit" />
   </ItemGroup>
 
 </Project>

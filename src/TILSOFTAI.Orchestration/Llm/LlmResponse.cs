@@ -4,4 +4,5 @@ public sealed class LlmResponse
 {
     public string? Content { get; set; }
     public List<LlmToolCall> ToolCalls { get; set; } = new();
+    public LlmUsage? Usage { get; set; }
 }

@@ -67,6 +67,26 @@ internal static class OpenAiResponseParser
             }
         }
 
+        if (root.TryGetProperty("usage", out var usageElement) && usageElement.ValueKind == JsonValueKind.Object)
+        {
+            response.Usage = new LlmUsage();
+            
+            if (usageElement.TryGetProperty("prompt_tokens", out var promptTokens))
+            {
+                response.Usage.InputTokens = promptTokens.GetInt32();
+            }
+            
+            if (usageElement.TryGetProperty("completion_tokens", out var completionTokens))
+            {
+                response.Usage.OutputTokens = completionTokens.GetInt32();
+            }
+            
+            if (usageElement.TryGetProperty("total_tokens", out var totalTokens))
+            {
+                response.Usage.TotalTokens = totalTokens.GetInt32();
+            }
+        }
+
         return response;
     }
 

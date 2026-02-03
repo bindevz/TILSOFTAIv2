@@ -10,4 +10,14 @@ public sealed class TilsoftExecutionContext
     public string RequestId { get; set; } = string.Empty;
     public string TraceId { get; set; } = string.Empty;
     public string Language { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Client IP address for audit logging.
+    /// </summary>
+    public string IpAddress { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Client User-Agent for audit logging.
+    /// </summary>
+    public string UserAgent { get; set; } = string.Empty;
 }

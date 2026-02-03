@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Configuration;
 using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Resources;
@@ -17,6 +19,12 @@ using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Sensitivity;
 using TILSOFTAI.Domain.Security;
+using TILSOFTAI.Domain.Validation;
+using TILSOFTAI.Domain.Audit;
+using TILSOFTAI.Infrastructure.Validation;
+using TILSOFTAI.Infrastructure.Audit;
+using TILSOFTAI.Infrastructure.Logging;
+using TILSOFTAI.Api.Filters;
 using TILSOFTAI.Infrastructure.Actions;
 using TILSOFTAI.Infrastructure.Caching;
 using TILSOFTAI.Infrastructure.ExecutionContext;
@@ -48,6 +56,12 @@ using TILSOFTAI.Orchestration.Tools;
 using TILSOFTAI.Modules.Core.Tools;
 using TILSOFTAI.Infrastructure.Observability;
 using TILSOFTAI.Orchestration.Observability;
+using TILSOFTAI.Domain.Telemetry;
+using TILSOFTAI.Infrastructure.Telemetry;
+using TILSOFTAI.Domain.Metrics;
+using TILSOFTAI.Infrastructure.Metrics;
+using TILSOFTAI.Infrastructure.Resilience;
+using TILSOFTAI.Domain.Resilience;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -73,8 +87,47 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<IExecutionContextAccessor>(sp => sp.GetRequiredService<ExecutionContextAccessor>());
         services.AddTransient<ExecutionContextMiddleware>();
         services.AddSingleton<IdentityResolutionPolicy>();
+
+        // Input validation services
+        services.AddSingleton<PromptInjectionDetector>();
+        services.AddSingleton<IInputValidator, InputValidator>();
+        services.AddScoped<InputValidationFilter>();
+
+        // Audit logging services
+        services.AddSingleton<AuditLogger>();
+        services.AddSingleton<IAuditLogger>(sp => sp.GetRequiredService<AuditLogger>());
+        services.AddSingleton<IAuditSink, SqlAuditSink>();
+        services.AddSingleton<IAuditSink, FileAuditSink>();
+        services.AddHostedService<AuditBackgroundService>();
         services.AddSingleton<IErrorCatalog, InMemoryErrorCatalog>();
-        services.AddSingleton<ILogRedactor, BasicLogRedactor>();
+        services.AddSingleton<Orchestration.Observability.ILogRedactor, BasicLogRedactor>();
+
+        // Metrics services
+        services.AddSingleton<IMetricsService, PrometheusMetricsService>();
+        services.AddSingleton<RuntimeMetricsCollector>(); // Optional if we want custom collector
+
+
+        // Resilience services
+        services.AddSingleton<TILSOFTAI.Infrastructure.Resilience.CircuitBreakerRegistry>();
+        services.AddSingleton<TILSOFTAI.Infrastructure.Resilience.RetryPolicyRegistry>();
+
+        // Register core telemetry services - always needed even if OTel SDK is not enabled
+        services.AddSingleton<ITelemetryService, TelemetryService>();
+        services.AddSingleton<ChatPipelineInstrumentation>();
+        services.AddSingleton<LlmInstrumentation>();
+        services.AddSingleton<ToolExecutionInstrumentation>();
+
+        // Structured logging services
+        services.AddSingleton<Infrastructure.Logging.LogRedactor>();
+        services.AddSingleton<Infrastructure.Logging.ILogRedactor>(sp => sp.GetRequiredService<Infrastructure.Logging.LogRedactor>());
+        services.AddSingleton<StructuredLoggerProvider>();
+        services.AddLogging(builder =>
+        {
+            builder.ClearProviders();
+            builder.AddConfiguration(configuration.GetSection("Logging"));
+            builder.Services.AddSingleton<ILoggerProvider>(sp => sp.GetRequiredService<StructuredLoggerProvider>());
+        });
+
         services.AddSingleton<ISensitivityClassifier, BasicSensitivityClassifier>();
         services.AddSingleton<ISqlErrorLogWriter, SqlErrorLogWriter>();
         services.AddSingleton<ChatStreamEnvelopeFactory>();
@@ -139,7 +192,10 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<ContextPackBudgeter>();
         services.AddSingleton<RecursionPolicy>();
         services.AddSingleton<PromptBuilder>();
-        services.AddHttpClient<OpenAiCompatibleLlmClient>();
+        services.AddHttpClient<OpenAiCompatibleLlmClient>()
+            .AddHttpMessageHandler<CircuitBreakerDelegatingHandler>()
+            .AddHttpMessageHandler<RetryDelegatingHandler>();
+
         services.AddSingleton<ILlmClient>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<LlmOptions>>().Value;
@@ -197,6 +253,20 @@ public static class AddTilsoftAiExtensions
         // CORS - register service only, configuration happens at runtime in Program.cs
         services.AddCors();
 
+        // Typed client handlers
+        services.AddTransient<CircuitBreakerDelegatingHandler>(sp =>
+        {
+            var registry = sp.GetRequiredService<TILSOFTAI.Infrastructure.Resilience.CircuitBreakerRegistry>();
+            var policy = registry.GetOrCreate("llm");
+            return new CircuitBreakerDelegatingHandler(policy);
+        });
+
+        services.AddTransient<RetryDelegatingHandler>(sp =>
+        {
+            var registry = sp.GetRequiredService<TILSOFTAI.Infrastructure.Resilience.RetryPolicyRegistry>();
+            var policy = registry.GetOrCreate("llm");
+            return new RetryDelegatingHandler(policy);
+        });
 
         return services;
     }
@@ -340,6 +410,32 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.WindowSeconds > 0, "RateLimit:WindowSeconds must be > 0.")
             .Validate(options => options.QueueLimit >= 0, "RateLimit:QueueLimit must be >= 0.")
             .ValidateOnStart();
+
+        services.AddOptions<ValidationOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Validation))
+            .Validate(options => options.MaxInputLength > 0, "Validation:MaxInputLength must be > 0.")
+            .Validate(options => options.MaxToolArgumentLength > 0, "Validation:MaxToolArgumentLength must be > 0.")
+            .ValidateOnStart();
+
+        services.AddOptions<AuditOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Audit))
+            .Validate(options => options.RetentionDays > 0, "Audit:RetentionDays must be > 0.")
+            .Validate(options => options.BufferSize > 0, "Audit:BufferSize must be > 0.")
+            .ValidateOnStart();
+
+        services.AddOptions<LoggingOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.StructuredLogging))
+            .Validate(options => options.MaxPropertyValueLength > 0, "StructuredLogging:MaxPropertyValueLength must be > 0.")
+            .Validate(options => options.SamplingRate >= 0 && options.SamplingRate <= 1, "StructuredLogging:SamplingRate must be between 0 and 1.")
+            .ValidateOnStart();
+
+        services.AddOptions<MetricsOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Metrics))
+            .ValidateOnStart();
+
+        services.AddOptions<ResilienceOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Resilience))
+            .ValidateOnStart();
     }
 
     private static void RegisterCaching(IServiceCollection services, IConfiguration configuration)
@@ -357,7 +453,10 @@ public static class AddTilsoftAiExtensions
             {
                 var options = sp.GetRequiredService<IOptions<RedisOptions>>().Value;
                 var cache = sp.GetRequiredService<IDistributedCache>();
-                return new RedisCacheProvider(cache, TimeSpan.FromMinutes(options.DefaultTtlMinutes));
+                var metrics = sp.GetRequiredService<IMetricsService>();
+                var circuitry = sp.GetRequiredService<TILSOFTAI.Infrastructure.Resilience.CircuitBreakerRegistry>();
+                var retries = sp.GetRequiredService<TILSOFTAI.Infrastructure.Resilience.RetryPolicyRegistry>();
+                return new RedisCacheProvider(cache, TimeSpan.FromMinutes(options.DefaultTtlMinutes), metrics, circuitry, retries);
             });
         }
         else
@@ -380,7 +479,7 @@ public static class AddTilsoftAiExtensions
         
         // Configure signing key resolver (existing pattern from JwtAuthConfigurator)
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-            .Configure<IJwtSigningKeyProvider, ILoggerFactory>((jwtOptions, keyProvider, loggerFactory) =>
+            .Configure<IJwtSigningKeyProvider, ILoggerFactory, IAuditLogger, IOptions<AuthOptions>>((jwtOptions, keyProvider, loggerFactory, auditLogger, authOptions) =>
             {
                 jwtOptions.TokenValidationParameters ??= new TokenValidationParameters();
                 jwtOptions.TokenValidationParameters.IssuerSigningKeyResolver = (_, _, _, _) =>
@@ -395,17 +494,57 @@ public static class AddTilsoftAiExtensions
                 };
 
                 jwtOptions.Events ??= new JwtBearerEvents();
+
                 jwtOptions.Events.OnAuthenticationFailed = context =>
                 {
                     var logger = loggerFactory.CreateLogger("JwtAuthentication");
                     var correlationId = context.HttpContext.TraceIdentifier;
-                    
+
                     logger.LogWarning(
                         context.Exception,
                         "JWT authentication failed. CorrelationId: {CorrelationId}, Failure: {FailureMessage}",
                         correlationId,
                         context.Exception?.Message ?? "Unknown");
-                    
+
+                    // Audit log authentication failure
+                    var ipAddress = context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
+                    var userAgent = context.HttpContext.Request.Headers.UserAgent.FirstOrDefault() ?? string.Empty;
+                    auditLogger.LogAuthenticationEvent(AuthAuditEvent.Failure(
+                        correlationId,
+                        ipAddress,
+                        userAgent.Length > 500 ? userAgent[..500] : userAgent,
+                        context.Exception?.Message ?? "Unknown"));
+
+                    return Task.CompletedTask;
+                };
+
+                jwtOptions.Events.OnTokenValidated = context =>
+                {
+                    // Audit log authentication success
+                    var correlationId = context.HttpContext.TraceIdentifier;
+                    var ipAddress = context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
+                    var userAgent = context.HttpContext.Request.Headers.UserAgent.FirstOrDefault() ?? string.Empty;
+
+                    var tenantClaim = context.Principal?.FindFirst(authOptions.Value.TenantClaimName)?.Value ?? string.Empty;
+                    var userIdClaim = context.Principal?.FindFirst(authOptions.Value.UserIdClaimName)?.Value ?? string.Empty;
+
+                    var claims = new Dictionary<string, string>();
+                    if (context.Principal?.Claims != null)
+                    {
+                        foreach (var claim in context.Principal.Claims.Take(20)) // Limit claims logged
+                        {
+                            claims[claim.Type] = claim.Value.Length > 100 ? claim.Value[..100] + "..." : claim.Value;
+                        }
+                    }
+
+                    auditLogger.LogAuthenticationEvent(AuthAuditEvent.Success(
+                        tenantClaim,
+                        userIdClaim,
+                        correlationId,
+                        ipAddress,
+                        userAgent.Length > 500 ? userAgent[..500] : userAgent,
+                        claims));
+
                     return Task.CompletedTask;
                 };
             });
@@ -413,57 +552,23 @@ public static class AddTilsoftAiExtensions
 
     private static void ConfigureOpenTelemetry(IServiceCollection services, IConfiguration configuration)
     {
-        // Read configuration directly for conditional registration (acceptable pattern)
         var telemetryEnabled = configuration.GetValue<bool>("OpenTelemetry:Enabled");
-
         if (!telemetryEnabled)
         {
             return;
         }
 
-        // For the actual configuration values, use IOptions at runtime
-        // This method configures services, not runtime behavior
-        var serviceName = configuration.GetValue<string>("OpenTelemetry:ServiceName") ?? "TilsoftAI";
-        var serviceVersion = configuration.GetValue<string>("OpenTelemetry:ServiceVersion") ?? "1.0.0";
-        var exporterType = (configuration.GetValue<string>("OpenTelemetry:ExporterType") ?? "console").Trim().ToLowerInvariant();
-        var otlpEndpoint = configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint");
-
-        Activity.DefaultIdFormat = ActivityIdFormat.W3C;
-        Activity.ForceDefaultIdFormat = true;
-        Sdk.SetDefaultTextMapPropagator(new TraceContextPropagator());
-
-        services.AddOpenTelemetry()
-            .WithTracing(builder =>
-            {
-                var resourceBuilder = ResourceBuilder.CreateDefault()
-                    .AddService(
-                        serviceName,
-                        serviceVersion: serviceVersion);
-
-                builder.SetResourceBuilder(resourceBuilder)
-                    .AddAspNetCoreInstrumentation()
-                    .AddSqlClientInstrumentation();
-
-                switch (exporterType)
-                {
-                    case "otlp":
-                        builder.AddOtlpExporter(options =>
-                        {
-                            if (!string.IsNullOrWhiteSpace(otlpEndpoint))
-                            {
-                                options.Endpoint = new Uri(otlpEndpoint);
-                            }
-                        });
-                        break;
-                    case "console":
-                        builder.AddConsoleExporter();
-                        break;
-                    case "none":
-                        break;
-                    default:
-                        builder.AddConsoleExporter();
-                        break;
-                }
-            });
+        // Configure OTel SDK
+        var builder = services.AddOpenTelemetry();
+        
+        // We need to resolve options to configure the builder, but the builder is configured at service registration time.
+        // We can use the IOptions pattern inside the configurator if we were using a different overload, 
+        // but here we are using the builder directly. 
+        // Best practice: Bind options and then use valid values.
+        var otelOptions = new OpenTelemetryOptions();
+        configuration.GetSection(ConfigurationSectionNames.OpenTelemetry).Bind(otelOptions);
+        
+        // Use our configurator
+        OpenTelemetryConfigurator.Configure(builder, otelOptions);
     }
 }

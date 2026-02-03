@@ -12,6 +12,8 @@ using TILSOFTAI.Orchestration.Normalization;
 using TILSOFTAI.Orchestration.Policies;
 using TILSOFTAI.Orchestration.Prompting;
 using TILSOFTAI.Orchestration.Tools;
+using TILSOFTAI.Domain.Validation;
+using TILSOFTAI.Domain.Metrics;
 
 namespace TILSOFTAI.Orchestration.Pipeline;
 
@@ -27,6 +29,7 @@ public sealed class ChatPipeline
     private readonly ToolResultCompactor _toolResultCompactor;
     private readonly ISemanticCache _semanticCache;
     private readonly RecursionPolicy _recursionPolicy;
+    private readonly IInputValidator _inputValidator;
     private readonly ChatOptions _chatOptions;
     private readonly ILogger<ChatPipeline> _logger;
 
@@ -41,8 +44,11 @@ public sealed class ChatPipeline
         ToolResultCompactor toolResultCompactor,
         ISemanticCache semanticCache,
         RecursionPolicy recursionPolicy,
+        IInputValidator inputValidator,
         IOptions<ChatOptions> chatOptions,
-        ILogger<ChatPipeline> logger)
+        ILogger<ChatPipeline> logger,
+        Observability.ChatPipelineInstrumentation instrumentation,
+        IMetricsService metrics)
     {
         _normalizationService = normalizationService ?? throw new ArgumentNullException(nameof(normalizationService));
         _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
@@ -54,9 +60,15 @@ public sealed class ChatPipeline
         _toolResultCompactor = toolResultCompactor ?? throw new ArgumentNullException(nameof(toolResultCompactor));
         _semanticCache = semanticCache ?? throw new ArgumentNullException(nameof(semanticCache));
         _recursionPolicy = recursionPolicy ?? throw new ArgumentNullException(nameof(recursionPolicy));
+        _inputValidator = inputValidator ?? throw new ArgumentNullException(nameof(inputValidator));
         _chatOptions = chatOptions?.Value ?? throw new ArgumentNullException(nameof(chatOptions));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _instrumentation = instrumentation ?? throw new ArgumentNullException(nameof(instrumentation));
+        _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
     }
+
+    private readonly Observability.ChatPipelineInstrumentation _instrumentation;
+    private readonly IMetricsService _metrics;
 
     public async Task<ChatResult> RunAsync(ChatRequest request, TilsoftExecutionContext ctx, CancellationToken ct)
     {
@@ -65,8 +77,38 @@ public sealed class ChatPipeline
             throw new ArgumentNullException(nameof(request));
         }
 
+        var pipelineStopwatch = Stopwatch.StartNew();
+        using var activity = _instrumentation.StartPipeline(ctx.ConversationId, ctx.TenantId);
+        using var timer = _metrics.CreateTimer(MetricNames.ChatPipelineDurationSeconds); // Labels added if needed (e.g. tenant)
+
+        _logger.LogInformation(
+            "PipelineStarted | ConversationId: {ConversationId} | TenantId: {TenantId} | UserId: {UserId}",
+            ctx.ConversationId, ctx.TenantId, ctx.UserId);
+
         _recursionPolicy.Reset();
-        var normalized = await _normalizationService.NormalizeAsync(request.Input, ctx, ct);
+
+        // Validate user input at pipeline entry
+        var validationResult = _inputValidator.ValidateUserInput(request.Input, InputContext.ForChatMessage());
+        if (!validationResult.IsValid)
+        {
+            var firstError = validationResult.Errors.FirstOrDefault();
+            _logger.LogWarning(
+                "Pipeline input validation failed. Code: {Code}, Field: {Field}",
+                firstError?.Code, firstError?.Field);
+            return Fail(request, firstError?.Message ?? "Input validation failed.", firstError?.Code);
+        }
+
+        // Log validation metrics
+        if (validationResult.InjectionSeverity != PromptInjectionSeverity.None)
+        {
+            _logger.LogWarning(
+                "Prompt injection detected in pipeline. Severity: {Severity}",
+                validationResult.InjectionSeverity);
+        }
+
+        // Use sanitized input
+        var sanitizedInput = validationResult.SanitizedValue ?? request.Input;
+        var normalized = await _normalizationService.NormalizeAsync(sanitizedInput, ctx, ct);
         if (string.IsNullOrWhiteSpace(normalized))
         {
             return Fail(request, "Input is empty.");
@@ -112,9 +154,19 @@ public sealed class ChatPipeline
             var llmRequest = await _promptBuilder.BuildAsync(messages, tools, ctx, ct);
             llmRequest.Stream = request.Stream;
 
+            var llmStopwatch = Stopwatch.StartNew();
+            _logger.LogDebug(
+                "LlmRequestSent | Step: {Step} | MessageCount: {MessageCount} | ToolCount: {ToolCount}",
+                step, messages.Count, tools.Count);
+
             var response = request.Stream
                 ? await CompleteViaStreamAsync(llmRequest, request, ct)
                 : await _llmClient.CompleteAsync(llmRequest, ct);
+
+            llmStopwatch.Stop();
+            _logger.LogInformation(
+                "LlmRequestCompleted | Step: {Step} | Duration: {DurationMs}ms | HasToolCalls: {HasToolCalls} | ToolCallCount: {ToolCallCount}",
+                step, llmStopwatch.ElapsedMilliseconds, response.ToolCalls.Count > 0, response.ToolCalls.Count);
 
             if (response.ToolCalls.Count == 0)
             {
@@ -135,6 +187,12 @@ public sealed class ChatPipeline
                         containsSensitive,
                         ct);
                 }
+
+                pipelineStopwatch.Stop();
+                _logger.LogInformation(
+                    "PipelineCompleted | ConversationId: {ConversationId} | Duration: {DurationMs}ms | Steps: {Steps} | Success: true",
+                    ctx.ConversationId, pipelineStopwatch.ElapsedMilliseconds, step + 1);
+
                 return ChatResult.Ok(content);
             }
 
@@ -171,21 +229,40 @@ public sealed class ChatPipeline
                 }
 
                 var tool = validation.Tool;
-                var stopwatch = Stopwatch.StartNew();
+                // Use sanitized arguments if available, otherwise fall back to original
+                var argumentsJson = validation.SanitizedArgumentsJson ?? call.ArgumentsJson;
+                var toolStopwatch = Stopwatch.StartNew();
                 string rawResult;
+
+                _logger.LogDebug(
+                    "ToolExecutionStarting | ToolName: {ToolName} | SpName: {SpName}",
+                    tool.Name, tool.SpName);
+
                 try
                 {
-                    rawResult = await _toolHandler.ExecuteAsync(tool, call.ArgumentsJson, ctx, ct);
+                    rawResult = await _toolHandler.ExecuteAsync(tool, argumentsJson, ctx, ct);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Tool execution failed for {ToolName}.", tool.Name);
+                    toolStopwatch.Stop();
+                    _logger.LogError(ex,
+                        "ToolExecutionFailed | ToolName: {ToolName} | Duration: {DurationMs}ms",
+                        tool.Name, toolStopwatch.ElapsedMilliseconds);
+                    
+                    _metrics.IncrementCounter(MetricNames.ToolExecutionsTotal, new Dictionary<string, string> { { "tool", tool.Name }, { "status", "failure" } });
+                    
                     return Fail(request, $"Tool '{tool.Name}' execution failed.");
                 }
                 finally
                 {
-                    stopwatch.Stop();
+                    toolStopwatch.Stop();
                 }
+
+                _logger.LogInformation(
+                    "ToolExecuted | ToolName: {ToolName} | Duration: {DurationMs}ms | ResultLength: {ResultLength}",
+                    tool.Name, toolStopwatch.ElapsedMilliseconds, rawResult?.Length ?? 0);
+
+                _metrics.IncrementCounter(MetricNames.ToolExecutionsTotal, new Dictionary<string, string> { { "tool", tool.Name }, { "status", "success" } });
 
                 var maxBytes = _chatOptions.CompactionLimits.TryGetValue("ToolResultMaxBytes", out var limit) && limit > 0
                     ? limit
@@ -195,11 +272,11 @@ public sealed class ChatPipeline
                 {
                     ToolName = tool.Name,
                     SpName = tool.SpName,
-                    ArgumentsJson = call.ArgumentsJson,
+                    ArgumentsJson = argumentsJson,
                     Result = rawResult,
                     CompactedResult = compacted,
                     Success = true,
-                    DurationMs = stopwatch.ElapsedMilliseconds
+                    DurationMs = toolStopwatch.ElapsedMilliseconds
                 };
 
                 await _conversationStore.SaveToolExecutionAsync(ctx, executionRecord, policy, ct);

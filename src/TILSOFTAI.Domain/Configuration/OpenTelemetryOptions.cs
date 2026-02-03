@@ -41,4 +41,19 @@ public sealed class OpenTelemetryOptions
     /// Default: false.
     /// </summary>
     public bool EnableAuthKeyRefreshTracing { get; set; } = false;
+
+    public bool EnableSqlInstrumentation { get; set; } = true;
+    public bool EnableRedisInstrumentation { get; set; } = true;
+    public bool EnableHttpClientInstrumentation { get; set; } = true;
+
+    public TraceSamplerType SamplerType { get; set; } = TraceSamplerType.AlwaysOn;
+    public double SamplingRatio { get; set; } = 1.0;
+}
+
+public enum TraceSamplerType
+{
+    AlwaysOn,
+    AlwaysOff,
+    Ratio,
+    ParentBased
 }

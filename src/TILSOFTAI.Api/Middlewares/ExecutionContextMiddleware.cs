@@ -76,11 +76,19 @@ public sealed class ExecutionContextMiddleware : IMiddleware
             ConversationId = identity.ConversationId,
             RequestId = identity.RequestId,
             TraceId = identity.TraceId,
-            Language = identity.Language
+            Language = identity.Language,
+            IpAddress = GetClientIpAddress(context),
+            UserAgent = GetUserAgent(context)
         };
 
         _accessor.Set(executionContext);
 
+        // Sync LogContext with ExecutionContext
+        var logContext = Domain.Logging.LogContext.Current;
+        logContext.TenantId = executionContext.TenantId;
+        logContext.UserId = executionContext.UserId;
+        logContext.ConversationId = executionContext.ConversationId;
+        
         await next(context);
     }
 
@@ -122,5 +130,32 @@ public sealed class ExecutionContextMiddleware : IMiddleware
         }
 
         return false;
+    }
+
+    private static string GetClientIpAddress(HttpContext context)
+    {
+        // Check X-Forwarded-For header first (for reverse proxy scenarios)
+        var forwardedFor = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(forwardedFor))
+        {
+            // Take the first IP (original client)
+            var firstIp = forwardedFor.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(firstIp))
+            {
+                return firstIp;
+            }
+        }
+
+        // Fall back to direct connection IP
+        return context.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
+    }
+
+    private static string GetUserAgent(HttpContext context)
+    {
+        var userAgent = context.Request.Headers.UserAgent.FirstOrDefault() ?? string.Empty;
+        // Truncate to reasonable length for storage
+        const int maxLength = 500;
+        return userAgent.Length > maxLength ? userAgent[..maxLength] : userAgent;
     }
 }

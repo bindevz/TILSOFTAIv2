@@ -6,6 +6,8 @@ using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Orchestration.Llm;
 using TILSOFTAI.Orchestration.Tools;
+using TILSOFTAI.Infrastructure.Telemetry;
+using TILSOFTAI.Domain.Metrics;
 
 namespace TILSOFTAI.Infrastructure.Llm;
 
@@ -19,12 +21,18 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
     private readonly HttpClient _httpClient;
     private readonly LlmOptions _options;
     private readonly ILogger<OpenAiCompatibleLlmClient> _logger;
+    private readonly LlmInstrumentation _instrumentation;
+    private readonly IMetricsService _metrics;
+    private readonly TILSOFTAI.Domain.Resilience.IRetryPolicy _retryPolicy;
 
-    public OpenAiCompatibleLlmClient(HttpClient httpClient, IOptions<LlmOptions> options, ILogger<OpenAiCompatibleLlmClient> logger)
+    public OpenAiCompatibleLlmClient(HttpClient httpClient, IOptions<LlmOptions> options, ILogger<OpenAiCompatibleLlmClient> logger, LlmInstrumentation instrumentation, IMetricsService metrics, TILSOFTAI.Infrastructure.Resilience.RetryPolicyRegistry retryRegistry)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _instrumentation = instrumentation ?? throw new ArgumentNullException(nameof(instrumentation));
+        _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
+        _retryPolicy = retryRegistry.GetOrCreate("llm");
 
         if (_options.TimeoutSeconds > 0)
         {
@@ -34,38 +42,62 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
     public async Task<LlmResponse> CompleteAsync(LlmRequest req, CancellationToken ct)
     {
+        using var activity = _instrumentation.StartRequest(_options.Model);
+        
         var requestPayload = BuildRequest(req, stream: false);
         using var httpRequest = BuildHttpRequest(requestPayload);
 
         var sw = Stopwatch.StartNew();
-        using var response = await _httpClient.SendAsync(httpRequest, ct);
-        sw.Stop();
+        using var timer = _metrics.CreateTimer(MetricNames.LlmRequestDurationSeconds, new Dictionary<string, string> { { "model", _options.Model }, { "streaming", "false" } });
+        
+        _metrics.IncrementCounter(MetricNames.LlmRequestsTotal, new Dictionary<string, string> { { "model", _options.Model }, { "streaming", "false" } });
 
-        LogResponse(response.StatusCode, sw.Elapsed);
+        using var response = await _retryPolicy.ExecuteAsync<HttpResponseMessage>(async ct0 => await _httpClient.SendAsync(httpRequest, ct0), ct);
+        sw.Stop();
 
         if (!response.IsSuccessStatusCode)
         {
+            _metrics.IncrementCounter(MetricNames.ErrorsTotal, new Dictionary<string, string> { { "code", "LlmError" }, { "status", ((int)response.StatusCode).ToString() } });
+            LogResponse(response.StatusCode, sw.Elapsed, req.Messages.Count, req.Tools.Count, isStreaming: false);
             var body = await ReadErrorBodyAsync(response, ct);
             throw new InvalidOperationException($"LLM request failed with status {(int)response.StatusCode}: {body}");
         }
 
         var json = await response.Content.ReadAsStringAsync(ct);
-        return OpenAiResponseParser.ParseCompletion(json);
+        var result = OpenAiResponseParser.ParseCompletion(json);
+
+        if (result.Usage != null)
+        {
+            _instrumentation.RecordUsage(result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.TotalTokens);
+            _metrics.IncrementCounter(MetricNames.LlmTokensTotal, new Dictionary<string, string> { { "model", _options.Model }, { "type", "prompt" } }, result.Usage.InputTokens);
+            _metrics.IncrementCounter(MetricNames.LlmTokensTotal, new Dictionary<string, string> { { "model", _options.Model }, { "type", "completion" } }, result.Usage.OutputTokens);
+        }
+
+        LogResponse(response.StatusCode, sw.Elapsed, req.Messages.Count, req.Tools.Count, isStreaming: false, result.Usage);
+
+        return result;
     }
 
     public async IAsyncEnumerable<LlmStreamEvent> StreamAsync(LlmRequest req, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
+        using var activity = _instrumentation.StartRequest(_options.Model);
+
         var requestPayload = BuildRequest(req, stream: true);
         using var httpRequest = BuildHttpRequest(requestPayload);
 
         var sw = Stopwatch.StartNew();
-        using var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, ct);
+        using var timer = _metrics.CreateTimer(MetricNames.LlmRequestDurationSeconds, new Dictionary<string, string> { { "model", _options.Model }, { "streaming", "true" } });
+        _metrics.IncrementCounter(MetricNames.LlmRequestsTotal, new Dictionary<string, string> { { "model", _options.Model }, { "streaming", "true" } });
+
+        using var response = await _retryPolicy.ExecuteAsync<HttpResponseMessage>(async ct0 => 
+            await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, ct0), ct);
         sw.Stop();
 
-        LogResponse(response.StatusCode, sw.Elapsed);
+        LogResponse(response.StatusCode, sw.Elapsed, req.Messages.Count, req.Tools.Count, isStreaming: true);
 
         if (!response.IsSuccessStatusCode)
         {
+            _metrics.IncrementCounter(MetricNames.ErrorsTotal, new Dictionary<string, string> { { "code", "LlmError" }, { "status", ((int)response.StatusCode).ToString() } });
             var body = await ReadErrorBodyAsync(response, ct);
             yield return LlmStreamEvent.ErrorEvent("LLM request failed.");
             throw new InvalidOperationException($"LLM request failed with status {(int)response.StatusCode}: {body}");
@@ -217,7 +249,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         return request;
     }
 
-    private void LogResponse(System.Net.HttpStatusCode statusCode, TimeSpan elapsed)
+    private void LogResponse(System.Net.HttpStatusCode statusCode, TimeSpan elapsed, int? messageCount = null, int? toolCount = null, bool isStreaming = false, LlmUsage? usage = null)
     {
         var host = string.Empty;
         if (Uri.TryCreate(_options.Endpoint, UriKind.Absolute, out var uri))
@@ -225,7 +257,18 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
             host = uri.Host;
         }
 
-        _logger.LogInformation("LLM request completed. Host={Host} Status={StatusCode} DurationMs={DurationMs}", host, (int)statusCode, elapsed.TotalMilliseconds);
+        if ((int)statusCode >= 400)
+        {
+            _logger.LogWarning(
+                "LLM request failed | Host: {Host} | Model: {Model} | Status: {StatusCode} | Duration: {DurationMs}ms | Streaming: {IsStreaming}",
+                host, _options.Model, (int)statusCode, elapsed.TotalMilliseconds, isStreaming);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "LLM request completed | Host: {Host} | Model: {Model} | Status: {StatusCode} | Duration: {DurationMs}ms | Streaming: {IsStreaming} | Messages: {MessageCount} | Tools: {ToolCount} | InputTokens: {InputTokens} | OutputTokens: {OutputTokens}",
+                host, _options.Model, (int)statusCode, elapsed.TotalMilliseconds, isStreaming, messageCount, toolCount, usage?.InputTokens, usage?.OutputTokens);
+        }
     }
 
     private static string BuildToolDescription(ToolDefinition tool)

@@ -11,6 +11,10 @@ using TILSOFTAI.Domain.Security;
 using TILSOFTAI.Infrastructure.Observability;
 using TILSOFTAI.Orchestration.Llm;
 using TILSOFTAI.Orchestration.Tools;
+using TILSOFTAI.Domain.Validation;
+using TILSOFTAI.Domain.Audit;
+using TILSOFTAI.Domain.Metrics;
+using Moq;
 using Xunit;
 
 namespace TILSOFTAI.Tests.Contract.Validation;
@@ -50,7 +54,7 @@ public sealed class ToolArgsInvalidContractTests
             Roles = Array.Empty<string>()
         };
 
-        var governance = new ToolGovernance(new BasicJsonSchemaValidator());
+        var governance = new ToolGovernance(new BasicJsonSchemaValidator(), new PassThroughInputValidator(), new NullAuditLogger());
         var result = governance.Validate(call, new Dictionary<string, ToolDefinition>
         {
             ["demo_tool"] = tool
@@ -94,7 +98,8 @@ public sealed class ToolArgsInvalidContractTests
             identityPolicy,
             new TestEnvironment(),
             new BasicLogRedactor(),
-            NullLogger<ExceptionHandlingMiddleware>.Instance);
+            NullLogger<ExceptionHandlingMiddleware>.Instance,
+            Mock.Of<IMetricsService>());
 
         var context = new DefaultHttpContext();
         context.Response.Body = new MemoryStream();
@@ -147,7 +152,8 @@ public sealed class ToolArgsInvalidContractTests
             identityPolicy,
             new TestEnvironment { EnvironmentName = "Production" },
             new BasicLogRedactor(),
-            NullLogger<ExceptionHandlingMiddleware>.Instance);
+            NullLogger<ExceptionHandlingMiddleware>.Instance,
+            Mock.Of<IMetricsService>());
 
         var context = new DefaultHttpContext();
         context.Response.Body = new MemoryStream();
@@ -192,5 +198,26 @@ public sealed class ToolArgsInvalidContractTests
         public string ContentRootPath { get; set; } = string.Empty;
         public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; }
             = new Microsoft.Extensions.FileProviders.NullFileProvider();
+    }
+
+    private sealed class PassThroughInputValidator : IInputValidator
+    {
+        public ValidationResult ValidateUserInput(string? input, InputContext context)
+            => ValidationResult.Success(input ?? string.Empty, input ?? string.Empty);
+
+        public ValidationResult ValidateToolArguments(string? argumentsJson, string toolName)
+            => ValidationResult.Success(argumentsJson ?? string.Empty, argumentsJson ?? string.Empty);
+
+        public ValidationResult ValidateToolArguments(JsonElement arguments, string toolName)
+            => ValidationResult.Success(arguments.GetRawText(), arguments.GetRawText());
+    }
+
+    private sealed class NullAuditLogger : IAuditLogger
+    {
+        public void LogAuthenticationEvent(AuthAuditEvent auditEvent) { }
+        public void LogAuthorizationEvent(AuthzAuditEvent auditEvent) { }
+        public void LogDataAccessEvent(DataAccessAuditEvent auditEvent) { }
+        public void LogSecurityEvent(SecurityAuditEvent auditEvent) { }
+        public void Log(AuditEvent auditEvent) { }
     }
 }

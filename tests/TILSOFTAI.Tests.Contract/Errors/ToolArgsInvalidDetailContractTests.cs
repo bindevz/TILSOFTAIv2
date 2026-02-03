@@ -12,6 +12,8 @@ using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Security;
 using TILSOFTAI.Infrastructure.Errors;
 using TILSOFTAI.Infrastructure.Observability;
+using TILSOFTAI.Domain.Metrics;
+using Moq;
 using Xunit;
 
 namespace TILSOFTAI.Tests.Contract.Errors;
@@ -55,7 +57,8 @@ public sealed class ToolArgsInvalidDetailContractTests
             identityPolicy,
             new ProductionEnvironment(),
             new BasicLogRedactor(),
-            NullLogger<ExceptionHandlingMiddleware>.Instance);
+            NullLogger<ExceptionHandlingMiddleware>.Instance,
+            Mock.Of<IMetricsService>());
 
         var context = new DefaultHttpContext();
         context.Response.Body = new MemoryStream();
@@ -163,7 +166,8 @@ public sealed class ToolArgsInvalidDetailContractTests
             identityPolicy,
             new ProductionEnvironment(),
             new BasicLogRedactor(),
-            NullLogger<ExceptionHandlingMiddleware>.Instance);
+            NullLogger<ExceptionHandlingMiddleware>.Instance,
+            Mock.Of<IMetricsService>());
 
         var context = new DefaultHttpContext();
         context.Response.Body = new MemoryStream();

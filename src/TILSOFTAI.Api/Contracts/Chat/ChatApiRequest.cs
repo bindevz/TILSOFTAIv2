@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -6,6 +7,8 @@ namespace TILSOFTAI.Api.Contracts.Chat;
 public sealed class ChatApiRequest
 {
     [JsonPropertyName("input")]
+    [Required(ErrorMessage = "Input is required.")]
+    [MaxLength(32000, ErrorMessage = "Input cannot exceed 32000 characters.")]
     public string Input { get; set; } = string.Empty;
 
     [JsonPropertyName("allowCache")]

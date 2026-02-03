@@ -50,7 +50,14 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 ["Localization:DefaultLanguage"] = "en",
                 ["Localization:SupportedLanguages:0"] = "en",
                 ["Localization:SupportedLanguages:1"] = "es",
-                ["Localization:SupportedLanguages:2"] = "fr"
+                ["Localization:SupportedLanguages:2"] = "fr",
+                ["Validation:MaxInputLength"] = "32000",
+                ["Validation:MaxToolArgumentLength"] = "8000",
+                ["Validation:EnablePromptInjectionDetection"] = "true",
+                ["Validation:BlockOnPromptInjection"] = "false",
+                ["Audit:Enabled"] = "false",
+                ["Audit:SqlEnabled"] = "false",
+                ["Audit:FileEnabled"] = "false"
             });
         });
 

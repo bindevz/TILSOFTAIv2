@@ -8,6 +8,8 @@ using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Security;
 using TILSOFTAI.Orchestration.Observability;
+using TILSOFTAI.Domain.Metrics;
+using TILSOFTAI.Domain.Resilience;
 
 namespace TILSOFTAI.Api.Middlewares;
 
@@ -23,6 +25,7 @@ public sealed class ExceptionHandlingMiddleware
     private readonly IWebHostEnvironment _hostEnvironment;
     private readonly ILogRedactor _logRedactor;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+    private readonly IMetricsService _metrics;
 
     public ExceptionHandlingMiddleware(
         RequestDelegate next,
@@ -34,7 +37,8 @@ public sealed class ExceptionHandlingMiddleware
         IdentityResolutionPolicy identityPolicy,
         IWebHostEnvironment hostEnvironment,
         ILogRedactor logRedactor,
-        ILogger<ExceptionHandlingMiddleware> logger)
+        ILogger<ExceptionHandlingMiddleware> logger,
+        IMetricsService metrics)
     {
         _next = next ?? throw new ArgumentNullException(nameof(next));
         _errorCatalog = errorCatalog ?? throw new ArgumentNullException(nameof(errorCatalog));
@@ -46,6 +50,7 @@ public sealed class ExceptionHandlingMiddleware
         _hostEnvironment = hostEnvironment ?? throw new ArgumentNullException(nameof(hostEnvironment));
         _logRedactor = logRedactor ?? throw new ArgumentNullException(nameof(logRedactor));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -76,6 +81,8 @@ public sealed class ExceptionHandlingMiddleware
 
             var definition = _errorCatalog.Get(code, resolvedContext.Language);
             resolvedContext.Language = definition.Language;
+
+            _metrics.IncrementCounter(MetricNames.ErrorsTotal, new Dictionary<string, string> { { "code", code } });
 
             var detail = BuildClientDetail(code, rawDetail, identity);
 
@@ -264,6 +271,7 @@ public sealed class ExceptionHandlingMiddleware
     {
         return ex switch
         {
+            CircuitBreakerException cbEx => (ErrorCode.ServiceUnavailable, StatusCodes.Status503ServiceUnavailable, new { message = "Service temporarily unavailable due to circuit breaker.", circuit = cbEx.CircuitName }),
             TilsoftApiException apiEx => (apiEx.Code, apiEx.HttpStatusCode, apiEx.Detail),
             ArgumentException or JsonException => (ErrorCode.InvalidArgument, StatusCodes.Status400BadRequest, null),
             UnauthorizedAccessException authEx when IsUnauthenticated(authEx)
@@ -271,6 +279,7 @@ public sealed class ExceptionHandlingMiddleware
             UnauthorizedAccessException => (ErrorCode.Unauthorized, StatusCodes.Status401Unauthorized, null),
             SqlException => (ErrorCode.SqlError, StatusCodes.Status500InternalServerError, null),
             InvalidOperationException => (ErrorCode.ChatFailed, StatusCodes.Status400BadRequest, null),
+
             _ => (ErrorCode.UnhandledError, StatusCodes.Status500InternalServerError, null)
         };
     }

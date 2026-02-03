@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -11,12 +12,15 @@ public class ErrorCatalogCoverageGuardTests
 {
     private readonly Mock<IErrorCatalog> _catalogMock;
     private readonly Mock<ILogger<ErrorCatalogCoverageGuard>> _loggerMock;
+    private readonly Mock<IHostEnvironment> _environmentMock;
     private readonly LocalizationOptions _options;
 
     public ErrorCatalogCoverageGuardTests()
     {
         _catalogMock = new Mock<IErrorCatalog>();
         _loggerMock = new Mock<ILogger<ErrorCatalogCoverageGuard>>();
+        _environmentMock = new Mock<IHostEnvironment>();
+        _environmentMock.Setup(e => e.EnvironmentName).Returns("Development");
         _options = new LocalizationOptions
         {
             DefaultLanguage = "en",
@@ -36,11 +40,12 @@ public class ErrorCatalogCoverageGuardTests
         var guard = new ErrorCatalogCoverageGuard(
             _catalogMock.Object,
             Options.Create(_options),
-            _loggerMock.Object);
+            _loggerMock.Object,
+            _environmentMock.Object);
 
         // Act & Assert
         await guard.StartAsync(CancellationToken.None);
-        
+
         // No exception thrown
     }
 
@@ -63,7 +68,8 @@ public class ErrorCatalogCoverageGuardTests
         var guard = new ErrorCatalogCoverageGuard(
             _catalogMock.Object,
             Options.Create(_options),
-            _loggerMock.Object);
+            _loggerMock.Object,
+            _environmentMock.Object);
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => guard.StartAsync(CancellationToken.None));
