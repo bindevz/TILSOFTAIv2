@@ -8,8 +8,4 @@
     <Project Path="src/TILSOFTAI.Modules.Platform/TILSOFTAI.Modules.Platform.csproj" />
     <Project Path="src/TILSOFTAI.Orchestration/TILSOFTAI.Orchestration.csproj" />
   </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/TILSOFTAI.Tests.Contract/TILSOFTAI.Tests.Contract.csproj" />
-    <Project Path="tests/TILSOFTAI.Tests.Integration/TILSOFTAI.Tests.Integration.csproj" />
-  </Folder>
 </Solution>

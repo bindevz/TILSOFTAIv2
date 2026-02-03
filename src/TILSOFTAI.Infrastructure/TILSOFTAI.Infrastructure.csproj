@@ -35,9 +35,4 @@
     <ProjectReference Include="..\TILSOFTAI.Orchestration\TILSOFTAI.Orchestration.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <InternalsVisibleTo Include="TILSOFTAI.Tests.Integration" />
-    <InternalsVisibleTo Include="TILSOFTAI.Tests.Unit" />
-  </ItemGroup>
-
 </Project>
