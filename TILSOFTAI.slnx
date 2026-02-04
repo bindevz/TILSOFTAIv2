@@ -3,6 +3,7 @@
     <Project Path="src/TILSOFTAI.Api/TILSOFTAI.Api.csproj" />
     <Project Path="src/TILSOFTAI.Domain/TILSOFTAI.Domain.csproj" />
     <Project Path="src/TILSOFTAI.Infrastructure/TILSOFTAI.Infrastructure.csproj" />
+    <Project Path="src/TILSOFTAI.Modules.Analytics/TILSOFTAI.Modules.Analytics.csproj" />
     <Project Path="src/TILSOFTAI.Modules.Core/TILSOFTAI.Modules.Core.csproj" />
     <Project Path="src/TILSOFTAI.Modules.Model/TILSOFTAI.Modules.Model.csproj" />
     <Project Path="src/TILSOFTAI.Modules.Platform/TILSOFTAI.Modules.Platform.csproj" />
