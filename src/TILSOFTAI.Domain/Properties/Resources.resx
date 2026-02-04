@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  
+  <!-- Validation Messages (Val_) -->
+  <data name="Val_ToolNameRequired" xml:space="preserve">
+    <value>Tool name is required.</value>
+  </data>
+  <data name="Val_HandlerTypeMustImplementIToolHandler" xml:space="preserve">
+    <value>Handler type must implement IToolHandler.</value>
+  </data>
+  <data name="Val_ToolDefinitionNameRequired" xml:space="preserve">
+    <value>ToolDefinition.Name is required.</value>
+  </data>
+  <data name="Val_ToolDefinitionInstructionRequired" xml:space="preserve">
+    <value>ToolDefinition.Instruction is required.</value>
+  </data>
+  <data name="Val_ToolDefinitionJsonSchemaRequired" xml:space="preserve">
+    <value>ToolDefinition.JsonSchema is required.</value>
+  </data>
+  <data name="Val_ToolDefinitionSpNameMustStartWithAi" xml:space="preserve">
+    <value>ToolDefinition.SpName must start with 'ai_'.</value>
+  </data>
+  <data name="Val_ArgumentsJsonRequired" xml:space="preserve">
+    <value>Arguments JSON is required.</value>
+  </data>
+  <data name="Val_MissingRequiredProperty" xml:space="preserve">
+    <value>Missing required property '{0}'.</value>
+  </data>
+  <data name="Val_PropertyMustBeIntegerGreaterThanOne" xml:space="preserve">
+    <value>Property '{0}' must be an integer &gt;= 1.</value>
+  </data>
+  <data name="Val_PropertyMustBeArray" xml:space="preserve">
+    <value>Property '{0}' must be an array.</value>
+  </data>
+  <data name="Val_PropertyMustContainIntegersGreaterThanOne" xml:space="preserve">
+    <value>Property '{0}' must contain integers &gt;= 1.</value>
+  </data>
+  <data name="Val_PropertyMustContainMinimumItems" xml:space="preserve">
+    <value>Property '{0}' must contain at least {1} items.</value>
+  </data>
+  <data name="Val_StoredProcedureRequired" xml:space="preserve">
+    <value>Stored procedure name is required.</value>
+  </data>
+  <data name="Val_ProposedSpNameRequired" xml:space="preserve">
+    <value>Proposed SP name is required.</value>
+  </data>
+  <data name="Val_SchemaValidationFailed" xml:space="preserve">
+    <value>Schema validation failed: {0}</value>
+  </data>
+  <data name="Val_ArgumentsMustBeValidJson" xml:space="preserve">
+    <value>Arguments must be valid JSON: {0}</value>
+  </data>
+  <data name="Val_SchemaValidationFailedAtExecutionTime" xml:space="preserve">
+    <value>Schema validation failed at execution time: {0}</value>
+  </data>
+  <data name="Val_QueryRequiredForCatalogSearch" xml:space="preserve">
+    <value>Query is required for catalog_search</value>
+  </data>
+  <data name="Val_DatasetKeyRequiredForCatalogGetDataset" xml:space="preserve">
+    <value>DatasetKey is required for catalog_get_dataset</value>
+  </data>
+  <data name="Val_PlanJsonRequiredForAnalyticsValidatePlan" xml:space="preserve">
+    <value>PlanJson is required for analytics_validate_plan</value>
+  </data>
+  <data name="Val_IdRequired" xml:space="preserve">
+    <value>id is required.</value>
+  </data>
+  <data name="Val_EventNameRequired" xml:space="preserve">
+    <value>Event name is required.</value>
+  </data>
+  <data name="Val_JwksAddressRequired" xml:space="preserve">
+    <value>JWKS address must be provided.</value>
+  </data>
+  <data name="Val_RequestBodyRequired" xml:space="preserve">
+    <value>Request body is required.</value>
+  </data>
+  <data name="Val_MessagesRequired" xml:space="preserve">
+    <value>messages is required.</value>
+  </data>
+  <data name="Val_LastMessageMustBeUserMessage" xml:space="preserve">
+    <value>The last message must be a user message.</value>
+  </data>
+  <data name="Val_AtLeastOneUserMessageRequired" xml:space="preserve">
+    <value>At least one user message is required.</value>
+  </data>
+  <data name="Val_ModuleArgumentRequired" xml:space="preserve">
+    <value>Missing required 'module' argument.</value>
+  </data>
+  <data name="Val_RuleKeyArgumentRequired" xml:space="preserve">
+    <value>Missing required 'ruleKey' argument.</value>
+  </data>
+  <data name="Val_ProposedToolNameArgumentRequired" xml:space="preserve">
+    <value>Missing required 'proposedToolName' argument.</value>
+  </data>
+  <data name="Val_ProposedSpNameArgumentRequired" xml:space="preserve">
+    <value>Missing required 'proposedSpName' argument.</value>
+  </data>
+  <data name="Val_ArgsJsonArgumentRequired" xml:space="preserve">
+    <value>Missing required 'argsJson' argument.</value>
+  </data>
+  <data name="Val_PlanJsonRequired" xml:space="preserve">
+    <value>atomic_execute_plan requires planJson.</value>
+  </data>
+  
+  <!-- Exception Messages (Ex_) -->
+  <data name="Ex_ToolAlreadyRegistered" xml:space="preserve">
+    <value>Tool '{0}' is already registered.</value>
+  </data>
+  <data name="Ex_ToolAlreadyRegisteredWithDifferentHandler" xml:space="preserve">
+    <value>Tool '{0}' is already registered with a different handler type: {1}.</value>
+  </data>
+  <data name="Ex_PlanValidationFailed" xml:space="preserve">
+    <value>Plan validation failed.</value>
+  </data>
+  <data name="Ex_WriteActionsMustNotExecuteAiStoredProcedures" xml:space="preserve">
+    <value>Write actions must not execute ai_ stored procedures directly.</value>
+  </data>
+  <data name="Ex_WriteActionNotAllowedOrNotFound" xml:space="preserve">
+    <value>Write action '{0}' is not allowed or not found in the WriteActionCatalog.</value>
+  </data>
+  <data name="Ex_WriteActionCurrentlyDisabled" xml:space="preserve">
+    <value>Write action '{0}' is currently disabled.</value>
+  </data>
+  <data name="Ex_ActionRequestNotFound" xml:space="preserve">
+    <value>Action request not found.</value>
+  </data>
+  <data name="Ex_ActionRequestMustBeApproved" xml:space="preserve">
+    <value>Action request must be approved before execution.</value>
+  </data>
+  <data name="Ex_WriteActionNoLongerAllowed" xml:space="preserve">
+    <value>Write action '{0}' is no longer allowed.</value>
+  </data>
+  <data name="Ex_WriteActionHasBeenDisabled" xml:space="preserve">
+    <value>Write action '{0}' has been disabled.</value>
+  </data>
+  <data name="Ex_ToolSpNameRequired" xml:space="preserve">
+    <value>Tool SP name is required.</value>
+  </data>
+  <data name="Ex_DiagnosticsToolHandlerCanOnlyExecuteAiDiagnosticsRun" xml:space="preserve">
+    <value>Diagnostics tool handler can only execute ai_diagnostics_run.</value>
+  </data>
+  <data name="Ex_DiagnosticsArgumentsFailedSchemaValidation" xml:space="preserve">
+    <value>Diagnostics arguments failed schema validation.</value>
+  </data>
+  <data name="Ex_DiagnosticsRequiresModuleAndRuleKey" xml:space="preserve">
+    <value>Diagnostics requires module and ruleKey.</value>
+  </data>
+  <data name="Ex_ExecutionContextTenantIdRequired" xml:space="preserve">
+    <value>Execution context TenantId is required.</value>
+  </data>
+  <data name="Ex_AtomicExecutePlanToolHandlerCanOnlyExecuteAiAtomicExecutePlan" xml:space="preserve">
+    <value>Atomic execute plan tool handler can only execute ai_atomic_execute_plan.</value>
+  </data>
+  <data name="Ex_AtomicExecutePlanArgumentsFailedSchemaValidation" xml:space="preserve">
+    <value>Atomic execute plan arguments failed schema validation.</value>
+  </data>
+  <data name="Ex_ExecutionContextTenantIdRequiredToResolveTools" xml:space="preserve">
+    <value>Execution context TenantId is required to resolve tools.</value>
+  </data>
+  <data name="Ex_ToolDoesNotSpecifySpName" xml:space="preserve">
+    <value>Tool '{0}' does not specify an SP name.</value>
+  </data>
+  <data name="Ex_ConnectionStringNotFoundForTenant" xml:space="preserve">
+    <value>Connection string not found for tenant '{0}'. Check configuration key 'ConnectionStrings:{0}'.</value>
+  </data>
+  <data name="Ex_ConnectionStringNotFoundForTenantInMetadata" xml:space="preserve">
+    <value>Connection string not found for tenant '{0}' in metadata store. Check configuration key 'ConnectionStrings:{0}'.</value>
+  </data>
+  <data name="Ex_AzureKeyVaultUriRequired" xml:space="preserve">
+    <value>AzureKeyVaultUri is required for AzureKeyVault provider</value>
+  </data>
+  <data name="Ex_SqlContractValidationFailed" xml:space="preserve">
+    <value>SQL contract validation failed:{0}{1}</value>
+  </data>
+  <data name="Ex_ErrorCatalogCoverageCheckFailed" xml:space="preserve">
+    <value>Error catalog coverage check failed.</value>
+  </data>
+  <data name="Ex_EmbeddingRequestFailed" xml:space="preserve">
+    <value>Embedding request failed: {0}</value>
+  </data>
+  <data name="Ex_EmbeddingResponseContainedNoData" xml:space="preserve">
+    <value>Embedding response contained no data.</value>
+  </data>
+  <data name="Ex_LlmRequestFailed" xml:space="preserve">
+    <value>LLM request failed with status {0}: {1}</value>
+  </data>
+  <data name="Ex_LlmEndpointRequired" xml:space="preserve">
+    <value>Llm:Endpoint is required for OpenAI-compatible provider.</value>
+  </data>
+  <data name="Ex_LlmApiKeyRequired" xml:space="preserve">
+    <value>Llm:ApiKey is required for OpenAI-compatible provider.</value>
+  </data>
+  <data name="Ex_LlmModelRequired" xml:space="preserve">
+    <value>Llm:Model is required for OpenAI-compatible provider.</value>
+  </data>
+  <data name="Ex_ExecutionContextConversationIdRequired" xml:space="preserve">
+    <value>Execution context ConversationId is required.</value>
+  </data>
+  <data name="Ex_ExecutionContextUserIdRequired" xml:space="preserve">
+    <value>Execution context UserId is required.</value>
+  </data>
+  <data name="Ex_TenantIdRequired" xml:space="preserve">
+    <value>TenantId is required</value>
+  </data>
+</root>

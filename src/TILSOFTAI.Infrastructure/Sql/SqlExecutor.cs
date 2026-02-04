@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
+using TILSOFTAI.Domain.Properties;
 using TILSOFTAI.Domain.Telemetry;
 using TILSOFTAI.Orchestration.Sql;
 
@@ -100,7 +101,7 @@ public sealed partial class SqlExecutor : ISqlExecutor
         if (!storedProcedure.StartsWith(ModelCallableSpPrefix, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"Security Violation: Tools must start with '{ModelCallableSpPrefix}'. Attempted: {storedProcedure}");
+                string.Format(Resources.Ex_ConnectionStringNotFoundForTenant, storedProcedure));
         }
     }
 
@@ -127,7 +128,7 @@ public sealed partial class SqlExecutor : ISqlExecutor
         if (exists == null || exists == DBNull.Value)
         {
             throw new InvalidOperationException(
-                $"Security Violation: '{storedProcedure}' is not a valid/enabled Write Action for tenant.");
+                string.Format(Resources.Ex_ConnectionStringNotFoundForTenantInMetadata, storedProcedure));
         }
     }
 
@@ -227,7 +228,7 @@ public sealed partial class SqlExecutor : ISqlExecutor
     {
         if (string.IsNullOrWhiteSpace(storedProcedure))
         {
-            throw new ArgumentException("Stored procedure is required.", nameof(storedProcedure));
+            throw new ArgumentException(Resources.Val_StoredProcedureRequired, nameof(storedProcedure));
         }
 
         return ExecuteWithResilienceAsync(
@@ -253,7 +254,7 @@ public sealed partial class SqlExecutor : ISqlExecutor
     {
         if (string.IsNullOrWhiteSpace(storedProcedure))
         {
-            throw new ArgumentException("Stored procedure is required.", nameof(storedProcedure));
+            throw new ArgumentException(Resources.Val_StoredProcedureRequired, nameof(storedProcedure));
         }
 
         return ExecuteWithResilienceAsync(

@@ -9,6 +9,7 @@ namespace TILSOFTAI.Orchestration.Analytics;
 
 /// <summary>
 /// Assembles query results into structured insight output.
+/// PATCH 28: Complete output contract with warnings/freshness in notes.
 /// </summary>
 public sealed class InsightAssemblyService : IInsightAssemblyService
 {
@@ -33,18 +34,21 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
         ArgumentNullException.ThrowIfNull(queryResults);
         ArgumentNullException.ThrowIfNull(context);
 
+        var warnings = CollectWarnings(queryResults);
+        var freshness = GetFreshness(queryResults);
+
         var insight = new InsightOutput
         {
             Headline = BuildHeadline(taskFrame, queryResults, context.Language),
             Tables = BuildTables(queryResults, context.Language),
-            Notes = BuildNotes(taskFrame, queryResults, context.Language),
-            Warnings = CollectWarnings(queryResults),
-            Freshness = GetFreshness(queryResults)
+            Notes = BuildNotes(taskFrame, queryResults, warnings, freshness, context.Language),
+            Warnings = warnings,
+            Freshness = freshness
         };
 
         _logger.LogInformation(
-            "InsightAssembled | Headline: {Headline} | Tables: {TableCount} | Notes: {NoteCount}",
-            insight.Headline.Text, insight.Tables.Count, insight.Notes.Count);
+            "InsightAssembled | Headline: {Headline} | Tables: {TableCount} | Notes: {NoteCount} | Warnings: {WarningCount}",
+            insight.Headline.Text, insight.Tables.Count, insight.Notes.Count, insight.Warnings.Count);
 
         return Task.FromResult(insight);
     }
@@ -80,9 +84,10 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
                     .Sum(r => Convert.ToDecimal(r[^1] ?? 0));
                 
                 var entity = taskFrame.Entity ?? "items";
+                var filterContext = BuildFilterContext(taskFrame, language);
                 headlineText = language == "vi"
-                    ? $"Tổng: {FormatNumber(sum)} {entity}"
-                    : $"Total: {FormatNumber(sum)} {entity}";
+                    ? $"{filterContext} có {FormatNumber(sum)} {entity}"
+                    : $"{filterContext} has {FormatNumber(sum)} {entity}";
             }
             else
             {
@@ -129,32 +134,78 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
             .ToList();
     }
 
+    /// <summary>
+    /// Builds complete notes including filter, limit, warnings, and data freshness.
+    /// PATCH 28: Now includes warnings and freshness as per enterprise output contract.
+    /// </summary>
     private static List<string> BuildNotes(
         TaskFrame taskFrame,
         IReadOnlyList<QueryResultSet> results,
+        List<string> warnings,
+        DataFreshness? freshness,
         string language)
     {
         var notes = new List<string>();
 
-        // Filter notes
-        foreach (var filter in taskFrame.Filters)
+        // 1. Filter notes
+        if (taskFrame.Filters.Count > 0)
         {
-            var filterText = language == "vi"
-                ? $"Bộ lọc: {filter.FieldHint} {filter.Op} {filter.Value}"
-                : $"Filter: {filter.FieldHint} {filter.Op} {filter.Value}";
-            notes.Add(filterText);
+            foreach (var filter in taskFrame.Filters)
+            {
+                var filterText = language == "vi"
+                    ? $"Bộ lọc: {filter.FieldHint} {filter.Op} {filter.Value}"
+                    : $"Filter: {filter.FieldHint} {filter.Op} {filter.Value}";
+                notes.Add(filterText);
+            }
+        }
+        else
+        {
+            notes.Add(language == "vi" ? "Bộ lọc: (không có)" : "Filter: (none)");
         }
 
-        // Limit notes
-        foreach (var result in results.Where(r => r.Type == QueryResultType.Breakdown))
+        // 2. Limit/truncation notes
+        var truncatedResults = results.Where(r => r.Type == QueryResultType.Breakdown && r.Truncated).ToList();
+        if (truncatedResults.Count > 0)
         {
-            if (result.Truncated)
+            foreach (var result in truncatedResults)
             {
                 var limitText = language == "vi"
                     ? $"Giới hạn: Top {result.RowCount} cho {result.Label}"
                     : $"Limit: Top {result.RowCount} for {result.Label}";
                 notes.Add(limitText);
             }
+        }
+        else
+        {
+            var maxRows = results.Where(r => r.Type == QueryResultType.Breakdown).MaxBy(r => r.RowCount)?.RowCount ?? 0;
+            if (maxRows > 0)
+            {
+                notes.Add(language == "vi" 
+                    ? $"Giới hạn: Hiển thị tối đa {maxRows} hàng" 
+                    : $"Limit: Showing up to {maxRows} rows");
+            }
+        }
+
+        // 3. Warnings notes
+        if (warnings.Count > 0)
+        {
+            var warningsText = language == "vi"
+                ? $"Cảnh báo: {string.Join("; ", warnings)}"
+                : $"Warnings: {string.Join("; ", warnings)}";
+            notes.Add(warningsText);
+        }
+        else
+        {
+            notes.Add(language == "vi" ? "Cảnh báo: (không có)" : "Warnings: (none)");
+        }
+
+        // 4. Data freshness notes
+        if (freshness != null)
+        {
+            var freshnessText = language == "vi"
+                ? $"Dữ liệu mới nhất: {freshness.AsOfUtc:yyyy-MM-dd HH:mm:ss} UTC, nguồn: {freshness.Source}"
+                : $"Data freshness: {freshness.AsOfUtc:yyyy-MM-dd HH:mm:ss} UTC, source: {freshness.Source}";
+            notes.Add(freshnessText);
         }
 
         return notes;

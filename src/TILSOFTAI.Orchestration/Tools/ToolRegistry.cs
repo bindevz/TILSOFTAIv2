@@ -1,3 +1,5 @@
+using TILSOFTAI.Domain.Properties;
+
 namespace TILSOFTAI.Orchestration.Tools;
 
 public sealed class ToolRegistry : IToolRegistry
@@ -13,27 +15,27 @@ public sealed class ToolRegistry : IToolRegistry
 
         if (string.IsNullOrWhiteSpace(def.Name))
         {
-            throw new ArgumentException("ToolDefinition.Name is required.", nameof(def));
+            throw new ArgumentException(Resources.Val_ToolDefinitionNameRequired, nameof(def));
         }
 
         if (string.IsNullOrWhiteSpace(def.Instruction))
         {
-            throw new ArgumentException("ToolDefinition.Instruction is required.", nameof(def));
+            throw new ArgumentException(Resources.Val_ToolDefinitionInstructionRequired, nameof(def));
         }
 
         if (string.IsNullOrWhiteSpace(def.JsonSchema))
         {
-            throw new ArgumentException("ToolDefinition.JsonSchema is required.", nameof(def));
+            throw new ArgumentException(Resources.Val_ToolDefinitionJsonSchemaRequired, nameof(def));
         }
 
         if (!string.IsNullOrWhiteSpace(def.SpName) && !def.SpName.StartsWith("ai_", StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException("ToolDefinition.SpName must start with 'ai_'.", nameof(def));
+            throw new ArgumentException(Resources.Val_ToolDefinitionSpNameMustStartWithAi, nameof(def));
         }
 
         if (_definitions.ContainsKey(def.Name))
         {
-            throw new InvalidOperationException($"Tool '{def.Name}' is already registered.");
+            throw new InvalidOperationException(string.Format(Resources.Ex_ToolAlreadyRegistered, def.Name));
         }
 
         _definitions[def.Name] = def;
@@ -48,7 +50,7 @@ public sealed class ToolRegistry : IToolRegistry
     {
         if (string.IsNullOrWhiteSpace(name))
         {
-            throw new ArgumentException("Tool name is required.", nameof(name));
+            throw new ArgumentException(Resources.Val_ToolNameRequired, nameof(name));
         }
 
         if (!_definitions.TryGetValue(name, out var def))

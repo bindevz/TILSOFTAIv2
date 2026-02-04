@@ -55,6 +55,7 @@ using TILSOFTAI.Orchestration.Planning;
 using TILSOFTAI.Orchestration.Sql;
 using TILSOFTAI.Orchestration.Tools;
 using TILSOFTAI.Modules.Core.Tools;
+using TILSOFTAI.Orchestration.Analytics;
 using TILSOFTAI.Infrastructure.Observability;
 using TILSOFTAI.Orchestration.Observability;
 using TILSOFTAI.Domain.Telemetry;
@@ -166,6 +167,10 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<ActionApprovalService>();
         services.AddSingleton<CacheStampedeGuard>();
         services.AddSingleton<SemanticCache>();
+        
+        // Analytics services (PATCH 28)
+        services.AddSingleton<IInsightAssemblyService, InsightAssemblyService>();
+        
         services.AddHttpClient<OpenAiEmbeddingClient>();
         services.AddSingleton<IEmbeddingClient>(sp => sp.GetRequiredService<OpenAiEmbeddingClient>());
         services.AddSingleton<SqlVectorSemanticCache>();
@@ -468,6 +473,18 @@ public static class AddTilsoftAiExtensions
 
         services.AddOptions<SecretsOptions>()
             .Bind(configuration.GetSection("Secrets"))
+            .ValidateOnStart();
+        
+        // Analytics options (PATCH 28)
+        services.AddOptions<AnalyticsOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.Analytics))
+            .Validate(options => options.MaxRows > 0, "Analytics:MaxRows must be > 0.")
+            .Validate(options => options.MaxGroupBy > 0, "Analytics:MaxGroupBy must be > 0.")
+            .Validate(options => options.MaxMetrics > 0, "Analytics:MaxMetrics must be > 0.")
+            .Validate(options => options.MaxJoins >= 0, "Analytics:MaxJoins must be >= 0.")
+            .Validate(options => options.MaxTimeWindowDays > 0, "Analytics:MaxTimeWindowDays must be > 0.")
+            .Validate(options => options.AllowedMetricOps != null && options.AllowedMetricOps.Length > 0, 
+                "Analytics:AllowedMetricOps must have at least one allowed operation.")
             .ValidateOnStart();
     }
 

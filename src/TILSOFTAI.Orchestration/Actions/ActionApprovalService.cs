@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Domain.Properties;
 using TILSOFTAI.Orchestration.Compaction;
 using TILSOFTAI.Orchestration.Conversations;
 using TILSOFTAI.Orchestration.Tools;
@@ -45,25 +46,25 @@ public sealed class ActionApprovalService
     {
         if (string.IsNullOrWhiteSpace(proposedSpName))
         {
-            throw new ArgumentException("Proposed SP name is required.", nameof(proposedSpName));
+            throw new ArgumentException(Resources.Val_ProposedSpNameRequired, nameof(proposedSpName));
         }
 
         if (proposedSpName.StartsWith("ai_", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Write actions must not execute ai_ stored procedures directly.");
+            throw new InvalidOperationException(Resources.Ex_WriteActionsMustNotExecuteAiStoredProcedures);
         }
 
         // Validate against Catalog
         var catalogEntry = await GetCatalogEntryAsync(context.TenantId, proposedSpName, ct);
         if (catalogEntry == null)
         {
-            throw new InvalidOperationException($"Write action '{proposedSpName}' is not allowed or not found in the WriteActionCatalog.");
+            throw new InvalidOperationException(string.Format(Resources.Ex_WriteActionNotAllowedOrNotFound, proposedSpName));
         }
 
         // Check IsEnabled flag
         if (!catalogEntry.IsEnabled)
         {
-            throw new InvalidOperationException($"Write action '{proposedSpName}' is currently disabled.");
+            throw new InvalidOperationException(string.Format(Resources.Ex_WriteActionCurrentlyDisabled, proposedSpName));
         }
 
         // Validate Roles
@@ -87,7 +88,7 @@ public sealed class ActionApprovalService
                     : string.IsNullOrWhiteSpace(validation.Summary)
                         ? "Arguments do not match the required schema."
                         : validation.Summary;
-                throw new ArgumentException($"Schema validation failed: {errorDetail}");
+                throw new ArgumentException(string.Format(Resources.Val_SchemaValidationFailed, errorDetail));
             }
         }
         else
@@ -99,7 +100,7 @@ public sealed class ActionApprovalService
             }
             catch (System.Text.Json.JsonException ex)
             {
-                throw new ArgumentException($"Arguments must be valid JSON: {ex.Message}");
+                throw new ArgumentException(string.Format(Resources.Val_ArgumentsMustBeValidJson, ex.Message));
             }
         }
 
@@ -132,25 +133,25 @@ public sealed class ActionApprovalService
         var request = await _requestStore.GetAsync(context.TenantId, actionId, ct);
         if (request is null)
         {
-            throw new InvalidOperationException("Action request not found.");
+            throw new InvalidOperationException(Resources.Ex_ActionRequestNotFound);
         }
 
         if (!string.Equals(request.Status, "Approved", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Action request must be approved before execution.");
+            throw new InvalidOperationException(Resources.Ex_ActionRequestMustBeApproved);
         }
 
         // Re-validate Catalog and Roles at execution time (defense-in-depth)
         var catalogEntry = await GetCatalogEntryAsync(context.TenantId, request.ProposedSpName, ct);
         if (catalogEntry == null)
         {
-             throw new InvalidOperationException($"Write action '{request.ProposedSpName}' is no longer allowed.");
+             throw new InvalidOperationException(string.Format(Resources.Ex_WriteActionNoLongerAllowed, request.ProposedSpName));
         }
 
         // Re-check IsEnabled flag
         if (!catalogEntry.IsEnabled)
         {
-            throw new InvalidOperationException($"Write action '{request.ProposedSpName}' has been disabled.");
+            throw new InvalidOperationException(string.Format(Resources.Ex_WriteActionHasBeenDisabled, request.ProposedSpName));
         }
 
         // Re-validate Roles
@@ -174,7 +175,7 @@ public sealed class ActionApprovalService
                     : string.IsNullOrWhiteSpace(validation.Summary)
                         ? "Arguments no longer match the current schema."
                         : validation.Summary;
-                throw new ArgumentException($"Schema validation failed at execution time: {errorDetail}");
+                throw new ArgumentException(string.Format(Resources.Val_SchemaValidationFailedAtExecutionTime, errorDetail));
             }
         }
 

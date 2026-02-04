@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Domain.Properties;
 using TILSOFTAI.Orchestration.Planning;
 using TILSOFTAI.Orchestration.Sql;
 
@@ -25,7 +26,7 @@ public sealed class AtomicDataEngine
         var validation = await _planOptimizer.ValidateAsync(planJson, ctx, ct);
         if (!validation.IsValid || validation.NormalizedPlan is null)
         {
-            throw new InvalidOperationException(validation.Error ?? "Plan validation failed.");
+            throw new InvalidOperationException(validation.Error ?? Resources.Ex_PlanValidationFailed);
         }
 
         var normalizedPlanJson = validation.NormalizedPlan.RootElement.GetRawText();

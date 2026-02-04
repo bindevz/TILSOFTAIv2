@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  
+  <!-- Validation Messages (Val_) - Vietnamese -->
+  <data name="Val_ToolNameRequired" xml:space="preserve">
+    <value>Tên công cụ là bắt buộc.</value>
+  </data>
+  <data name="Val_HandlerTypeMustImplementIToolHandler" xml:space="preserve">
+    <value>Kiểu xử lý phải triển khai IToolHandler.</value>
+  </data>
+  <data name="Val_ToolDefinitionNameRequired" xml:space="preserve">
+    <value>ToolDefinition.Name là bắt buộc.</value>
+  </data>
+  <data name="Val_ToolDefinitionInstructionRequired" xml:space="preserve">
+    <value>ToolDefinition.Instruction là bắt buộc.</value>
+  </data>
+  <data name="Val_ToolDefinitionJsonSchemaRequired" xml:space="preserve">
+    <value>ToolDefinition.JsonSchema là bắt buộc.</value>
+  </data>
+  <data name="Val_ToolDefinitionSpNameMustStartWithAi" xml:space="preserve">
+    <value>ToolDefinition.SpName phải bắt đầu bằng 'ai_'.</value>
+  </data>
+  <data name="Val_ArgumentsJsonRequired" xml:space="preserve">
+    <value>Arguments JSON là bắt buộc.</value>
+  </data>
+  <data name="Val_MissingRequiredProperty" xml:space="preserve">
+    <value>Thiếu thuộc tính bắt buộc '{0}'.</value>
+  </data>
+  <data name="Val_PropertyMustBeIntegerGreaterThanOne" xml:space="preserve">
+    <value>Thuộc tính '{0}' phải là số nguyên &gt;= 1.</value>
+  </data>
+  <data name="Val_PropertyMustBeArray" xml:space="preserve">
+    <value>Thuộc tính '{0}' phải là một mảng.</value>
+  </data>
+  <data name="Val_PropertyMustContainIntegersGreaterThanOne" xml:space="preserve">
+    <value>Thuộc tính '{0}' phải chứa các số nguyên &gt;= 1.</value>
+  </data>
+  <data name="Val_PropertyMustContainMinimumItems" xml:space="preserve">
+    <value>Thuộc tính '{0}' phải chứa ít nhất {1} mục.</value>
+  </data>
+  <data name="Val_StoredProcedureRequired" xml:space="preserve">
+    <value>Tên thủ tục lưu trữ là bắt buộc.</value>
+  </data>
+  <data name="Val_ProposedSpNameRequired" xml:space="preserve">
+    <value>Tên SP đề xuất là bắt buộc.</value>
+  </data>
+  <data name="Val_SchemaValidationFailed" xml:space="preserve">
+    <value>Xác thực lược đồ thất bại: {0}</value>
+  </data>
+  <data name="Val_ArgumentsMustBeValidJson" xml:space="preserve">
+    <value>Đối số phải là JSON hợp lệ: {0}</value>
+  </data>
+  <data name="Val_SchemaValidationFailedAtExecutionTime" xml:space="preserve">
+    <value>Xác thực lược đồ thất bại tại thời điểm thực thi: {0}</value>
+  </data>
+  <data name="Val_QueryRequiredForCatalogSearch" xml:space="preserve">
+    <value>Truy vấn là bắt buộc cho catalog_search</value>
+  </data>
+  <data name="Val_DatasetKeyRequiredForCatalogGetDataset" xml:space="preserve">
+    <value>DatasetKey là bắt buộc cho catalog_get_dataset</value>
+  </data>
+  <data name="Val_PlanJsonRequiredForAnalyticsValidatePlan" xml:space="preserve">
+    <value>PlanJson là bắt buộc cho analytics_validate_plan</value>
+  </data>
+  <data name="Val_IdRequired" xml:space="preserve">
+    <value>id là bắt buộc.</value>
+  </data>
+  <data name="Val_EventNameRequired" xml:space="preserve">
+    <value>Tên sự kiện là bắt buộc.</value>
+  </data>
+  <data name="Val_JwksAddressRequired" xml:space="preserve">
+    <value>Địa chỉ JWKS phải được cung cấp.</value>
+  </data>
+  <data name="Val_RequestBodyRequired" xml:space="preserve">
+    <value>Nội dung yêu cầu là bắt buộc.</value>
+  </data>
+  <data name="Val_MessagesRequired" xml:space="preserve">
+    <value>messages là bắt buộc.</value>
+  </data>
+  <data name="Val_LastMessageMustBeUserMessage" xml:space="preserve">
+    <value>Tin nhắn cuối cùng phải là tin nhắn của người dùng.</value>
+  </data>
+  <data name="Val_AtLeastOneUserMessageRequired" xml:space="preserve">
+    <value>Ít nhất một tin nhắn của người dùng là bắt buộc.</value>
+  </data>
+  <data name="Val_ModuleArgumentRequired" xml:space="preserve">
+    <value>Thiếu đối số 'module' bắt buộc.</value>
+  </data>
+  <data name="Val_RuleKeyArgumentRequired" xml:space="preserve">
+    <value>Thiếu đối số 'ruleKey' bắt buộc.</value>
+  </data>
+  <data name="Val_ProposedToolNameArgumentRequired" xml:space="preserve">
+    <value>Thiếu đối số 'proposedToolName' bắt buộc.</value>
+  </data>
+  <data name="Val_ProposedSpNameArgumentRequired" xml:space="preserve">
+    <value>Thiếu đối số 'proposedSpName' bắt buộc.</value>
+  </data>
+  <data name="Val_ArgsJsonArgumentRequired" xml:space="preserve">
+    <value>Thiếu đối số 'argsJson' bắt buộc.</value>
+  </data>
+  <data name="Val_PlanJsonRequired" xml:space="preserve">
+    <value>atomic_execute_plan yêu cầu planJson.</value>
+  </data>
+  
+  <!-- Exception Messages (Ex_) - Vietnamese -->
+  <data name="Ex_ToolAlreadyRegistered" xml:space="preserve">
+    <value>Công cụ '{0}' đã được đăng ký.</value>
+  </data>
+  <data name="Ex_ToolAlreadyRegisteredWithDifferentHandler" xml:space="preserve">
+    <value>Công cụ '{0}' đã được đăng ký với kiểu xử lý khác: {1}.</value>
+  </data>
+  <data name="Ex_PlanValidationFailed" xml:space="preserve">
+    <value>Xác thực kế hoạch thất bại.</value>
+  </data>
+  <data name="Ex_WriteActionsMustNotExecuteAiStoredProcedures" xml:space="preserve">
+    <value>Hành động ghi không được thực thi thủ tục lưu trữ ai_ trực tiếp.</value>
+  </data>
+  <data name="Ex_WriteActionNotAllowedOrNotFound" xml:space="preserve">
+    <value>Hành động ghi '{0}' không được phép hoặc không tìm thấy trong WriteActionCatalog.</value>
+  </data>
+  <data name="Ex_WriteActionCurrentlyDisabled" xml:space="preserve">
+    <value>Hành động ghi '{0}' hiện đang bị vô hiệu hóa.</value>
+  </data>
+  <data name="Ex_ActionRequestNotFound" xml:space="preserve">
+    <value>Không tìm thấy yêu cầu hành động.</value>
+  </data>
+  <data name="Ex_ActionRequestMustBeApproved" xml:space="preserve">
+    <value>Yêu cầu hành động phải được phê duyệt trước khi thực thi.</value>
+  </data>
+  <data name="Ex_WriteActionNoLongerAllowed" xml:space="preserve">
+    <value>Hành động ghi '{0}' không còn được phép.</value>
+  </data>
+  <data name="Ex_WriteActionHasBeenDisabled" xml:space="preserve">
+    <value>Hành động ghi '{0}' đã bị vô hiệu hóa.</value>
+  </data>
+  <data name="Ex_ToolSpNameRequired" xml:space="preserve">
+    <value>Tên SP của công cụ là bắt buộc.</value>
+  </data>
+  <data name="Ex_DiagnosticsToolHandlerCanOnlyExecuteAiDiagnosticsRun" xml:space="preserve">
+    <value>Trình xử lý công cụ chẩn đoán chỉ có thể thực thi ai_diagnostics_run.</value>
+  </data>
+  <data name="Ex_DiagnosticsArgumentsFailedSchemaValidation" xml:space="preserve">
+    <value>Đối số chẩn đoán không xác thực lược đồ.</value>
+  </data>
+  <data name="Ex_DiagnosticsRequiresModuleAndRuleKey" xml:space="preserve">
+    <value>Chẩn đoán yêu cầu module và ruleKey.</value>
+  </data>
+  <data name="Ex_ExecutionContextTenantIdRequired" xml:space="preserve">
+    <value>Ngữ cảnh thực thi TenantId là bắt buộc.</value>
+  </data>
+  <data name="Ex_AtomicExecutePlanToolHandlerCanOnlyExecuteAiAtomicExecutePlan" xml:space="preserve">
+    <value>Trình xử lý công cụ thực thi kế hoạch nguyên tử chỉ có thể thực thi ai_atomic_execute_plan.</value>
+  </data>
+  <data name="Ex_AtomicExecutePlanArgumentsFailedSchemaValidation" xml:space="preserve">
+    <value>Đối số thực thi kế hoạch nguyên tử không xác thực lược đồ.</value>
+  </data>
+  <data name="Ex_ExecutionContextTenantIdRequiredToResolveTools" xml:space="preserve">
+    <value>Ngữ cảnh thực thi TenantId là bắt buộc để phân giải công cụ.</value>
+  </data>
+  <data name="Ex_ToolDoesNotSpecifySpName" xml:space="preserve">
+    <value>Công cụ '{0}' không chỉ định tên SP.</value>
+  </data>
+  <data name="Ex_ConnectionStringNotFoundForTenant" xml:space="preserve">
+    <value>Không tìm thấy chuỗi kết nối cho người thuê '{0}'. Kiểm tra khóa cấu hình 'ConnectionStrings:{0}'.</value>
+  </data>
+  <data name="Ex_ConnectionStringNotFoundForTenantInMetadata" xml:space="preserve">
+    <value>Không tìm thấy chuỗi kết nối cho người thuê '{0}' trong kho siêu dữ liệu. Kiểm tra khóa cấu hình 'ConnectionStrings:{0}'.</value>
+  </data>
+  <data name="Ex_AzureKeyVaultUriRequired" xml:space="preserve">
+    <value>AzureKeyVaultUri là bắt buộc cho nhà cung cấp AzureKeyVault</value>
+  </data>
+  <data name="Ex_SqlContractValidationFailed" xml:space="preserve">
+    <value>Xác thực hợp đồng SQL thất bại:{0}{1}</value>
+  </data>
+  <data name="Ex_ErrorCatalogCoverageCheckFailed" xml:space="preserve">
+    <value>Kiểm tra phạm vi danh mục lỗi thất bại.</value>
+  </data>
+  <data name="Ex_EmbeddingRequestFailed" xml:space="preserve">
+    <value>Yêu cầu nhúng thất bại: {0}</value>
+  </data>
+  <data name="Ex_EmbeddingResponseContainedNoData" xml:space="preserve">
+    <value>Phản hồi nhúng không chứa dữ liệu.</value>
+  </data>
+  <data name="Ex_LlmRequestFailed" xml:space="preserve">
+    <value>Yêu cầu LLM thất bại với trạng thái {0}: {1}</value>
+  </data>
+  <data name="Ex_LlmEndpointRequired" xml:space="preserve">
+    <value>Llm:Endpoint là bắt buộc cho nhà cung cấp tương thích OpenAI.</value>
+  </data>
+  <data name="Ex_LlmApiKeyRequired" xml:space="preserve">
+    <value>Llm:ApiKey là bắt buộc cho nhà cung cấp tương thích OpenAI.</value>
+  </data>
+  <data name="Ex_LlmModelRequired" xml:space="preserve">
+    <value>Llm:Model là bắt buộc cho nhà cung cấp tương thích OpenAI.</value>
+  </data>
+  <data name="Ex_ExecutionContextConversationIdRequired" xml:space="preserve">
+    <value>Ngữ cảnh thực thi ConversationId là bắt buộc.</value>
+  </data>
+  <data name="Ex_ExecutionContextUserIdRequired" xml:space="preserve">
+    <value>Ngữ cảnh thực thi UserId là bắt buộc.</value>
+  </data>
+  <data name="Ex_TenantIdRequired" xml:space="preserve">
+    <value>TenantId là bắt buộc</value>
+  </data>
+</root>

@@ -1,3 +1,5 @@
+using TILSOFTAI.Domain.Properties;
+
 namespace TILSOFTAI.Orchestration.Tools;
 
 public sealed class NamedToolHandlerRegistry : INamedToolHandlerRegistry
@@ -8,7 +10,7 @@ public sealed class NamedToolHandlerRegistry : INamedToolHandlerRegistry
     {
         if (string.IsNullOrWhiteSpace(toolName))
         {
-            throw new ArgumentException("Tool name is required.", nameof(toolName));
+            throw new ArgumentException(Resources.Val_ToolNameRequired, nameof(toolName));
         }
 
         if (handlerType is null)
@@ -18,15 +20,14 @@ public sealed class NamedToolHandlerRegistry : INamedToolHandlerRegistry
 
         if (!typeof(IToolHandler).IsAssignableFrom(handlerType))
         {
-            throw new ArgumentException("Handler type must implement IToolHandler.", nameof(handlerType));
+            throw new ArgumentException(Resources.Val_HandlerTypeMustImplementIToolHandler, nameof(handlerType));
         }
 
         if (_handlers.ContainsKey(toolName))
         {
             var existingType = _handlers[toolName].FullName ?? _handlers[toolName].Name;
             throw new InvalidOperationException(
-                $"TOOL_DUPLICATE_REGISTRATION: Tool '{toolName}' is already registered " +
-                $"with handler '{existingType}'. Cannot register '{handlerType.FullName ?? handlerType.Name}'.");
+                string.Format(Resources.Ex_ToolAlreadyRegisteredWithDifferentHandler, toolName, existingType));
         }
 
         _handlers[toolName] = handlerType;

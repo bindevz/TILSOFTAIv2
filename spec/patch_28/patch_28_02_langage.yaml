@@ -1,0 +1,183 @@
+version: "1.0"
+name: "Hardcoded Strings to .resx Localization Refactor"
+language: "en"
+
+objective: >
+  Convert all hardcoded, user-facing language strings embedded in C# source code
+  into .NET Resource files (.resx) and update the code to use resources via
+  Culture/UICulture. Ensure correct fallback behavior and preserve runtime behavior.
+
+scope:
+  include:
+    - "**/*.cs"
+    - "**/*.xaml"
+    - "**/*.csproj"
+    - "**/*.resx"
+  exclude:
+    - "**/bin/**"
+    - "**/obj/**"
+    - "**/*.Designer.cs"
+    - "**/*.g.cs"
+    - "**/*.g.i.cs"
+    - "**/Migrations/**"
+    - "**/*.min.*"
+    - "**/packages/**"
+    - "**/.git/**"
+
+assumptions:
+  - "Project is a C#/.NET application (WinForms/WPF/Console/ASP.NET) using SDK-style csproj if possible."
+  - "Strings intended for end-users (UI text, messages, labels, tooltips, errors shown to users) must be localized."
+  - "Logs intended for developers/ops and diagnostic messages may remain hardcoded unless explicitly flagged as user-facing."
+
+definitions:
+  user_facing_string: >
+    Any string shown to end users (UI labels, button text, menu items, dialog titles,
+    message boxes, validation messages, notifications, tooltips, status texts, etc.).
+  non_user_facing_string: >
+    Strings used only for internal logic: keys, identifiers, protocol values, SQL, JSON property names,
+    file paths (unless displayed to user), log tags, telemetry event names, exception types, regex patterns.
+  resource_base_name: "Properties.Resources"
+  default_culture: "en"
+  additional_cultures: ["vi-VN"]
+
+deliverables:
+  - "Create/Update Resources.resx as the default (fallback) resource file."
+  - "Create/Update culture-specific .resx files (e.g., Resources.vi-VN.resx) with matching keys."
+  - "Replace hardcoded user-facing strings in code/XAML with resource lookups."
+  - "Add/Update culture initialization plumbing (CultureInfo) where applicable."
+  - "Provide a report listing: extracted strings, new resource keys, file locations, and replacements made."
+  - "Build passes with no missing resource keys."
+
+rules:
+  key_naming:
+    format: "PascalCase with semantic prefix"
+    examples:
+      - "App_Title"
+      - "Button_Save"
+      - "Dialog_ConfirmTitle"
+      - "Msg_InvalidEmail"
+      - "Menu_File_Exit"
+    uniqueness: "Keys must be unique within the resource set."
+  duplicates:
+    dedupe_policy: >
+      If identical text appears in multiple places with the same meaning, reuse a single key.
+      If identical text has different meaning or context, create separate keys.
+  placeholders_and_formatting:
+    preserve_interpolations: true
+    policy: >
+      Convert string interpolation and concatenation into format strings with placeholders where possible.
+      Use string.Format / FormattableString / resources with placeholders {0}, {1}, etc.
+      Keep placeholder order stable; do not change runtime meaning.
+    examples:
+      before: ' $"Hello {name}" '
+      after:  ' string.Format(Resources.Greeting_HelloUser, name) '
+  escape_and_newlines:
+    policy: >
+      Preserve line breaks, punctuation, and whitespace that affect UI layout.
+      Prefer verbatim resource text for multi-line strings.
+  safety:
+    do_not_localize:
+      - "Security-sensitive tokens, secrets, passwords."
+      - "Programmatic keys, IDs, enums serialized to storage."
+      - "HTTP headers, MIME types, protocol constants."
+      - "Regex patterns, SQL unless displayed to users."
+    review_required:
+      - "Strings used both for display and logic (must split into separate display string vs logic token)."
+
+workflow:
+  steps:
+    - id: "scan"
+      description: "Scan the project to identify all hardcoded user-facing strings."
+      actions:
+        - "Parse .cs and .xaml files."
+        - "Collect string literals and XAML text nodes/attributes likely shown to user."
+        - "Classify each candidate as user-facing or non-user-facing."
+    - id: "key_generation"
+      description: "Generate stable resource keys for each user-facing string."
+      actions:
+        - "Derive key prefix from usage context (Button_, Label_, Msg_, Dialog_, Menu_, Tooltip_, Status_)."
+        - "Ensure uniqueness; append suffix if collision (e.g., _2) ONLY if necessary."
+    - id: "resource_creation"
+      description: "Create/Update .resx files and populate entries."
+      actions:
+        - "Add entries to Resources.resx for default culture."
+        - "Add entries to Resources.vi-VN.resx with the same keys."
+        - "If translation is unknown, populate vi-VN value with a TODO marker but keep key consistent."
+      translation_policy:
+        default: "keep existing English text in Resources.resx"
+        vi_VN: "translate if obvious; otherwise set value to 'TODO:TRANSLATE:<original>'"
+    - id: "code_rewrite"
+      description: "Replace hardcoded strings with resource references."
+      actions:
+        - "For C# code: replace with Properties.Resources.<Key> (strongly-typed) when available."
+        - "For formatted strings: replace with string.Format(Properties.Resources.<Key>, args...)."
+        - "For MessageBox/dialog titles: use resources for both caption and body."
+        - "For exceptions shown to users: localize only the user-visible message."
+    - id: "xaml_rewrite"
+      description: "Replace hardcoded XAML strings with resource bindings."
+      actions:
+        - "Use x:Static to bind to generated Resources class where applicable."
+        - "Alternatively use DynamicResource/StaticResource depending on framework conventions."
+      examples:
+        wpf:
+          before: '<TextBlock Text="Save" />'
+          after:  '<TextBlock Text="{x:Static properties:Resources.Button_Save}" />'
+    - id: "culture_plumbing"
+      description: "Ensure Culture and UICulture can be set and that resources follow it."
+      actions:
+        - "Add a central culture switch method (e.g., SetCulture('vi-VN'))."
+        - "Set both CurrentCulture and CurrentUICulture."
+        - "Persist user choice (config/settings) if project already has a settings mechanism."
+      code_snippet:
+        csharp: |
+          using System.Globalization;
+          using System.Threading;
+
+          public static class Localization
+          {
+              public static void SetCulture(string cultureName)
+              {
+                  var culture = new CultureInfo(cultureName);
+                  Thread.CurrentThread.CurrentCulture = culture;
+                  Thread.CurrentThread.CurrentUICulture = culture;
+              }
+          }
+    - id: "validation"
+      description: "Validate that the application builds and no resources are missing."
+      actions:
+        - "Build the solution."
+        - "Fail if any resource keys are referenced but missing."
+        - "Fail if any hardcoded user-facing strings remain (except explicitly waived)."
+        - "Run basic smoke checks if tests exist."
+
+acceptance_criteria:
+  - "No hardcoded user-facing strings remain in .cs/.xaml except those explicitly waived."
+  - "Resources.resx exists and contains all keys."
+  - "Culture-specific .resx files exist for all specified cultures with matching keys."
+  - "Code compiles and runs without missing-manifest-resource exceptions."
+  - "Formatting/placeholders preserved and validated."
+  - "A summary report is produced."
+
+reporting:
+  output_format: "markdown"
+  include_sections:
+    - "Summary"
+    - "New/Updated Resource Keys"
+    - "Replacements (file → line → before → after)"
+    - "Potential Issues / Manual Review Items"
+    - "Remaining Hardcoded Strings (Waived/Non-user-facing)"
+
+waivers:
+  allowlist_patterns:
+    - "^[A-Z0-9_]+$"          # constants/tokens
+    - "^https?://.*"          # URLs (unless displayed to users)
+    - "^[0-9]+$"              # numeric literals
+    - "^[\\w\\-\\.]+\\.(json|xml|txt)$"  # filenames
+  notes: >
+    If a string matches an allowlist pattern but is clearly user-facing (e.g., shown in UI),
+    it must still be localized.
+
+notes:
+  - "Prefer strongly-typed resources (Properties.Resources.<Key>) for C#."
+  - "For WinForms designer-generated localization, do not manually edit .Designer.cs; use form resx where applicable."
+  - "If runtime language switching is required in WPF/WinForms, UI may need re-apply/reload; flag in report."

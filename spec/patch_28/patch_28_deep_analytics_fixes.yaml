@@ -1,0 +1,1382 @@
+################################################################################
+# TILSOFTAI Patch 28 - Deep Analytics Integration Fixes
+# 
+# Mục tiêu: Sửa lỗi và hoàn thiện các vấn đề P0/P1 từ patch_27
+# Nguyên tắc: Enterprise end-to-end, đồng bộ tuyệt đối với cấu trúc hiện có
+#
+# Audit Reference: post_patch28_deep_analytics_audit.yaml
+################################################################################
+
+version: "1.0"
+patch_id: "28"
+patch_name: "deep_analytics_integration_fixes"
+generated_at: "2026-02-04"
+project: "TILSOFTAI"
+
+overview:
+  summary: |
+    Patch này sửa các lỗi nghiêm trọng (P0) và hoàn thiện các điểm còn thiếu (P1) 
+    sau khi triển khai patch_27 (deep_analytics_integration).
+    
+  critical_issues_fixed:
+    - id: "P0-I01"
+      title: "Catalog Schema Mismatch"
+      description: "Views/SPs tham chiếu columns không tồn tại trong DatasetCatalog/FieldCatalog"
+      solution: "Migration script thêm semantic columns vào catalog tables"
+      
+    - id: "P0-I03"
+      title: "Validation Contract Drift"
+      description: "ai_analytics_validate_plan chỉ validate một phần, thiếu metrics/joins/security/time-window"
+      solution: "Rewrite SP với đầy đủ validation checks"
+      
+    - id: "P0-I04"
+      title: "DI Wiring Incomplete"
+      description: "AnalyticsOptions và InsightAssemblyService không được đăng ký DI"
+      solution: "Thêm DI registration và ConfigurationSectionNames.Analytics"
+      
+    - id: "P0-I07"
+      title: "EntityGraphCatalog Schema Mismatch"
+      description: "Table có FromDatasetKey/ToDatasetKey nhưng SP cần SourceDatasetKey/TargetDatasetKey"
+      solution: "Migration thêm alias columns và sửa SP"
+
+  p1_issues_fixed:
+    - id: "P1-I05"
+      title: "Output Contract Incomplete"
+      description: "BuildNotes() không include warnings/freshness"
+      solution: "Cập nhật InsightAssemblyService.BuildNotes()"
+      
+  execution_order:
+    - "Phase 1: SQL Schema Migration (catalog tables)"
+    - "Phase 2: SQL View/SP Compatibility (fix views to match new schema)"
+    - "Phase 3: Validation SP Enhancement (complete validation logic)"
+    - "Phase 4: C# DI Wiring (options + services registration)"
+    - "Phase 5: InsightAssemblyService Fix (complete output contract)"
+    - "Phase 6: Verification"
+
+################################################################################
+# PHASE 1: SQL Schema Migration
+# Mục tiêu: Thêm semantic columns vào DatasetCatalog, FieldCatalog, EntityGraphCatalog
+################################################################################
+
+phase_1:
+  name: "SQL Schema Migration"
+  description: "Thêm các columns thiếu để views và SPs có thể hoạt động"
+  
+  files:
+    - path: "sql/02_atomic/005_migration_catalog_semantic_columns.sql"
+      action: "create"
+      content: |
+        /*******************************************************************************
+        * TILSOFTAI Patch 28 - Migration: Add semantic columns to catalog tables
+        * 
+        * Purpose: Fix schema mismatch between catalog tables and analytics views/SPs
+        * Dependencies: sql/02_atomic/001_tables_catalog.sql
+        * 
+        * CRITICAL: Idempotent - safe to run multiple times
+        *******************************************************************************/
+        SET ANSI_NULLS ON;
+        SET QUOTED_IDENTIFIER ON;
+        GO
+        
+        PRINT 'Patch 28 - Phase 1: Adding semantic columns to DatasetCatalog...';
+        GO
+        
+        -- DatasetCatalog: Add DisplayName
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.DatasetCatalog') AND name = 'DisplayName')
+        BEGIN
+            ALTER TABLE dbo.DatasetCatalog ADD DisplayName NVARCHAR(500) NULL;
+            PRINT '  Added DatasetCatalog.DisplayName';
+        END
+        GO
+        
+        -- DatasetCatalog: Add Description
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.DatasetCatalog') AND name = 'Description')
+        BEGIN
+            ALTER TABLE dbo.DatasetCatalog ADD Description NVARCHAR(2000) NULL;
+            PRINT '  Added DatasetCatalog.Description';
+        END
+        GO
+        
+        -- DatasetCatalog: Add Grain
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.DatasetCatalog') AND name = 'Grain')
+        BEGIN
+            ALTER TABLE dbo.DatasetCatalog ADD Grain NVARCHAR(200) NULL;
+            PRINT '  Added DatasetCatalog.Grain';
+        END
+        GO
+        
+        -- DatasetCatalog: Add Tags
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.DatasetCatalog') AND name = 'Tags')
+        BEGIN
+            ALTER TABLE dbo.DatasetCatalog ADD Tags NVARCHAR(1000) NULL;
+            PRINT '  Added DatasetCatalog.Tags';
+        END
+        GO
+        
+        -- DatasetCatalog: Add CreatedAtUtc
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.DatasetCatalog') AND name = 'CreatedAtUtc')
+        BEGIN
+            ALTER TABLE dbo.DatasetCatalog ADD CreatedAtUtc DATETIME2(3) NOT NULL 
+                CONSTRAINT DF_DatasetCatalog_CreatedAtUtc DEFAULT SYSUTCDATETIME();
+            PRINT '  Added DatasetCatalog.CreatedAtUtc';
+        END
+        GO
+        
+        PRINT 'Patch 28 - Phase 1: Adding semantic columns to FieldCatalog...';
+        GO
+        
+        -- FieldCatalog: Add Id (identity for views)
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FieldCatalog') AND name = 'Id')
+        BEGIN
+            -- Cannot add IDENTITY to existing table easily, use computed column workaround
+            -- For views, we'll use ROW_NUMBER() instead. Skip this.
+            PRINT '  FieldCatalog.Id skipped - will use ROW_NUMBER in views';
+        END
+        GO
+        
+        -- FieldCatalog: Add DisplayName
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FieldCatalog') AND name = 'DisplayName')
+        BEGIN
+            ALTER TABLE dbo.FieldCatalog ADD DisplayName NVARCHAR(500) NULL;
+            PRINT '  Added FieldCatalog.DisplayName';
+        END
+        GO
+        
+        -- FieldCatalog: Add Description
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FieldCatalog') AND name = 'Description')
+        BEGIN
+            ALTER TABLE dbo.FieldCatalog ADD Description NVARCHAR(2000) NULL;
+            PRINT '  Added FieldCatalog.Description';
+        END
+        GO
+        
+        -- FieldCatalog: Add SemanticType
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FieldCatalog') AND name = 'SemanticType')
+        BEGIN
+            ALTER TABLE dbo.FieldCatalog ADD SemanticType NVARCHAR(100) NULL;
+            PRINT '  Added FieldCatalog.SemanticType';
+        END
+        GO
+        
+        -- FieldCatalog: Add SecurityTag
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FieldCatalog') AND name = 'SecurityTag')
+        BEGIN
+            ALTER TABLE dbo.FieldCatalog ADD SecurityTag NVARCHAR(50) NULL;
+            PRINT '  Added FieldCatalog.SecurityTag';
+        END
+        GO
+        
+        PRINT 'Patch 28 - Phase 1: Fixing EntityGraphCatalog schema...';
+        GO
+        
+        -- EntityGraphCatalog: Add SourceDatasetKey (alias for FromDatasetKey)
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.EntityGraphCatalog') AND name = 'SourceDatasetKey')
+        BEGIN
+            ALTER TABLE dbo.EntityGraphCatalog ADD SourceDatasetKey AS FromDatasetKey PERSISTED;
+            PRINT '  Added EntityGraphCatalog.SourceDatasetKey (computed from FromDatasetKey)';
+        END
+        GO
+        
+        -- EntityGraphCatalog: Add TargetDatasetKey (alias for ToDatasetKey)
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.EntityGraphCatalog') AND name = 'TargetDatasetKey')
+        BEGIN
+            ALTER TABLE dbo.EntityGraphCatalog ADD TargetDatasetKey AS ToDatasetKey PERSISTED;
+            PRINT '  Added EntityGraphCatalog.TargetDatasetKey (computed from ToDatasetKey)';
+        END
+        GO
+        
+        -- EntityGraphCatalog: Add SourceFields
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.EntityGraphCatalog') AND name = 'SourceFields')
+        BEGIN
+            ALTER TABLE dbo.EntityGraphCatalog ADD SourceFields NVARCHAR(500) NULL;
+            PRINT '  Added EntityGraphCatalog.SourceFields';
+        END
+        GO
+        
+        -- EntityGraphCatalog: Add TargetFields
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.EntityGraphCatalog') AND name = 'TargetFields')
+        BEGIN
+            ALTER TABLE dbo.EntityGraphCatalog ADD TargetFields NVARCHAR(500) NULL;
+            PRINT '  Added EntityGraphCatalog.TargetFields';
+        END
+        GO
+        
+        PRINT 'Patch 28 - Phase 1: Schema migration complete.';
+        GO
+
+################################################################################
+# PHASE 2: SQL View/SP Compatibility
+# Mục tiêu: Cập nhật views để tương thích với schema mới
+################################################################################
+
+phase_2:
+  name: "SQL View/SP Compatibility"
+  description: "Cập nhật analytics views để handle FieldCatalog.Id và tương thích với schema"
+  
+  files:
+    - path: "sql/02_modules/analytics/002_views_analytics.sql"
+      action: "replace"
+      description: "Cập nhật views để handle FieldCatalog không có Id column"
+      content: |
+        /*******************************************************************************
+        * TILSOFTAI Analytics Module - Semantic Views
+        * Purpose: Flattened views for catalog search and schema RAG
+        * 
+        * PATCH 28 FIX: Handle FieldCatalog without Id column using ROW_NUMBER()
+        *******************************************************************************/
+        SET ANSI_NULLS ON;
+        SET QUOTED_IDENTIFIER ON;
+        GO
+        
+        -- Dataset catalog view with search-friendly fields
+        CREATE OR ALTER VIEW dbo.v_Analytics_DatasetCatalog
+        AS
+        SELECT
+            dc.Id,
+            dc.TenantId,
+            dc.DatasetKey,
+            ISNULL(dc.DisplayName, dc.DatasetKey) AS DisplayName,
+            dc.Description,
+            dc.BaseObject,
+            dc.Grain,
+            dc.TimeColumn,
+            dc.IsEnabled,
+            dc.Tags,
+            ISNULL(dc.CreatedAtUtc, dc.UpdatedAtUtc) AS CreatedAtUtc,
+            dc.UpdatedAtUtc,
+            -- Computed search fields
+            LOWER(dc.DatasetKey + ' ' + ISNULL(dc.DisplayName, '') + ' ' + ISNULL(dc.Description, '') + ' ' + ISNULL(dc.Tags, '')) AS SearchText,
+            -- Field count for ranking
+            (SELECT COUNT(1) FROM dbo.FieldCatalog fc WHERE fc.DatasetKey = dc.DatasetKey AND fc.IsEnabled = 1) AS EnabledFieldCount
+        FROM dbo.DatasetCatalog dc
+        WHERE dc.IsEnabled = 1;
+        GO
+        
+        -- Field catalog view with semantic type info
+        -- NOTE: Uses ROW_NUMBER() for Id since FieldCatalog doesn't have identity column
+        CREATE OR ALTER VIEW dbo.v_Analytics_FieldCatalog
+        AS
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY fc.DatasetKey, fc.FieldKey) AS Id,
+            fc.DatasetKey,
+            fc.FieldKey,
+            fc.PhysicalColumn,
+            ISNULL(fc.DisplayName, fc.FieldKey) AS DisplayName,
+            fc.Description,
+            fc.DataType,
+            fc.SemanticType,
+            fc.AllowedAggregations,
+            fc.IsFilterable,
+            fc.IsGroupable,
+            fc.IsSortable,
+            fc.IsEnabled,
+            fc.SecurityTag,
+            -- Computed search fields
+            LOWER(fc.FieldKey + ' ' + ISNULL(fc.DisplayName, '') + ' ' + ISNULL(fc.Description, '') + ' ' + ISNULL(fc.SemanticType, '')) AS SearchText
+        FROM dbo.FieldCatalog fc
+        WHERE fc.IsEnabled = 1;
+        GO
+        
+        -- Combined catalog search view
+        CREATE OR ALTER VIEW dbo.v_Analytics_CatalogSearch
+        AS
+        SELECT
+            'dataset' AS ItemType,
+            dc.DatasetKey AS ItemKey,
+            dc.DisplayName AS ItemName,
+            dc.Description AS ItemDescription,
+            dc.SearchText,
+            dc.EnabledFieldCount AS Score,
+            dc.TenantId,
+            dc.Grain,
+            NULL AS DatasetKeyRef
+        FROM dbo.v_Analytics_DatasetCatalog dc
+        UNION ALL
+        SELECT
+            'field' AS ItemType,
+            fc.FieldKey AS ItemKey,
+            fc.DisplayName AS ItemName,
+            fc.Description AS ItemDescription,
+            fc.SearchText,
+            CASE 
+                WHEN fc.IsFilterable = 1 AND fc.IsGroupable = 1 THEN 10
+                WHEN fc.IsFilterable = 1 OR fc.IsGroupable = 1 THEN 5
+                ELSE 1
+            END AS Score,
+            NULL AS TenantId,
+            NULL AS Grain,
+            fc.DatasetKey AS DatasetKeyRef
+        FROM dbo.v_Analytics_FieldCatalog fc;
+        GO
+
+################################################################################
+# PHASE 3: Validation SP Enhancement
+# Mục tiêu: Hoàn thiện ai_analytics_validate_plan với đầy đủ validation
+################################################################################
+
+phase_3:
+  name: "Validation SP Enhancement"
+  description: "Rewrite ai_analytics_validate_plan với đầy đủ validation checks"
+  
+  files:
+    - path: "sql/02_modules/analytics/004_sps_ai_analytics.sql"
+      action: "replace"
+      description: "Hoàn thiện validation SP với metrics/joins/security/time-window checks"
+      content: |
+        /*******************************************************************************
+        * TILSOFTAI Analytics Module - Model-Callable Stored Procedures (ai_*)
+        * Purpose: Schema RAG tools for LLM to discover datasets/fields
+        * 
+        * CRITICAL: All ai_* SPs MUST:
+        *   1. Accept @TenantId and enforce tenant scope
+        *   2. Return JSON envelope (meta + columns + rows)
+        *   3. Apply pagination/limit guards
+        *
+        * PATCH 28: Enhanced validation for metrics/joins/security/time-window
+        *******************************************************************************/
+        SET ANSI_NULLS ON;
+        SET QUOTED_IDENTIFIER ON;
+        GO
+        
+        -- catalog_search: Search datasets and fields by query
+        CREATE OR ALTER PROCEDURE dbo.ai_catalog_search
+            @TenantId   NVARCHAR(50),
+            @Query      NVARCHAR(500),
+            @TopK       INT = 5,
+            @Domain     NVARCHAR(50) = 'internal'
+        AS
+        BEGIN
+            SET NOCOUNT ON;
+            
+            DECLARE @GeneratedAtUtc DATETIME2(3) = SYSUTCDATETIME();
+            DECLARE @MaxTopK INT = 20;
+            
+            -- Validate inputs
+            IF @TenantId IS NULL OR @TenantId = ''
+            BEGIN
+                RAISERROR('TenantId is required.', 16, 1);
+                RETURN;
+            END
+            
+            IF @Query IS NULL OR LTRIM(RTRIM(@Query)) = ''
+            BEGIN
+                RAISERROR('Query is required.', 16, 1);
+                RETURN;
+            END
+            
+            IF @TopK <= 0 SET @TopK = 5;
+            IF @TopK > @MaxTopK SET @TopK = @MaxTopK;
+            
+            -- Normalize query for search
+            DECLARE @NormalizedQuery NVARCHAR(500) = LOWER(LTRIM(RTRIM(@Query)));
+            
+            -- Search datasets
+            DECLARE @Datasets TABLE (
+                DatasetKey NVARCHAR(200),
+                DisplayName NVARCHAR(500),
+                Description NVARCHAR(2000),
+                Grain NVARCHAR(200),
+                Score INT
+            );
+            
+            INSERT INTO @Datasets (DatasetKey, DisplayName, Description, Grain, Score)
+            SELECT TOP (@TopK)
+                DatasetKey,
+                DisplayName,
+                Description,
+                Grain,
+                -- Simple scoring: exact match > contains > partial
+                CASE 
+                    WHEN LOWER(DatasetKey) = @NormalizedQuery THEN 100
+                    WHEN SearchText LIKE '%' + @NormalizedQuery + '%' THEN 50 + EnabledFieldCount
+                    ELSE EnabledFieldCount
+                END AS Score
+            FROM dbo.v_Analytics_DatasetCatalog
+            WHERE (TenantId = @TenantId OR TenantId IS NULL)
+              AND (
+                  LOWER(DatasetKey) = @NormalizedQuery
+                  OR SearchText LIKE '%' + @NormalizedQuery + '%'
+              )
+            ORDER BY Score DESC, DatasetKey;
+            
+            -- Search fields across matched datasets
+            DECLARE @Fields TABLE (
+                DatasetKey NVARCHAR(200),
+                FieldKey NVARCHAR(200),
+                DisplayName NVARCHAR(500),
+                DataType NVARCHAR(50),
+                SemanticType NVARCHAR(100),
+                IsFilterable BIT,
+                IsGroupable BIT,
+                AllowedAggregations NVARCHAR(500),
+                Score INT
+            );
+            
+            INSERT INTO @Fields (DatasetKey, FieldKey, DisplayName, DataType, SemanticType, IsFilterable, IsGroupable, AllowedAggregations, Score)
+            SELECT TOP (@TopK * 3)
+                fc.DatasetKey,
+                fc.FieldKey,
+                fc.DisplayName,
+                fc.DataType,
+                fc.SemanticType,
+                fc.IsFilterable,
+                fc.IsGroupable,
+                fc.AllowedAggregations,
+                CASE 
+                    WHEN LOWER(fc.FieldKey) = @NormalizedQuery THEN 100
+                    WHEN fc.SearchText LIKE '%' + @NormalizedQuery + '%' THEN 50
+                    ELSE 10
+                END AS Score
+            FROM dbo.v_Analytics_FieldCatalog fc
+            WHERE fc.DatasetKey IN (SELECT DatasetKey FROM @Datasets)
+               OR fc.SearchText LIKE '%' + @NormalizedQuery + '%'
+            ORDER BY Score DESC, fc.FieldKey;
+            
+            -- Generate hints based on search
+            DECLARE @Hints TABLE (Hint NVARCHAR(500));
+            
+            IF NOT EXISTS (SELECT 1 FROM @Datasets)
+            BEGIN
+                INSERT INTO @Hints (Hint) VALUES ('No datasets found matching query. Try broader search terms.');
+            END
+            ELSE
+            BEGIN
+                INSERT INTO @Hints (Hint)
+                SELECT TOP 3 'Try dataset: ' + DatasetKey + ' (grain: ' + ISNULL(Grain, 'unknown') + ')'
+                FROM @Datasets
+                ORDER BY Score DESC;
+            END
+            
+            -- Return JSON envelope
+            DECLARE @RowCount INT = (SELECT COUNT(1) FROM @Datasets) + (SELECT COUNT(1) FROM @Fields);
+            
+            SELECT (
+                SELECT
+                    meta = (
+                        SELECT
+                            @TenantId AS tenantId,
+                            @GeneratedAtUtc AS generatedAtUtc,
+                            @RowCount AS [rowCount],
+                            @NormalizedQuery AS searchQuery,
+                            @TopK AS topK
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ),
+                    datasets = (
+                        SELECT DatasetKey, DisplayName, Description, Grain, Score
+                        FROM @Datasets
+                        ORDER BY Score DESC
+                        FOR JSON PATH
+                    ),
+                    fields = (
+                        SELECT DatasetKey, FieldKey, DisplayName, DataType, SemanticType, 
+                               IsFilterable, IsGroupable, AllowedAggregations, Score
+                        FROM @Fields
+                        ORDER BY Score DESC
+                        FOR JSON PATH
+                    ),
+                    hints = (
+                        SELECT Hint AS [hint]
+                        FROM @Hints
+                        FOR JSON PATH
+                    )
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            ) AS ResultJson;
+        END;
+        GO
+        
+        -- catalog_get_dataset: Get full schema + metadata for a dataset
+        CREATE OR ALTER PROCEDURE dbo.ai_catalog_get_dataset
+            @TenantId   NVARCHAR(50),
+            @DatasetKey NVARCHAR(200)
+        AS
+        BEGIN
+            SET NOCOUNT ON;
+            
+            DECLARE @GeneratedAtUtc DATETIME2(3) = SYSUTCDATETIME();
+            
+            -- Validate inputs
+            IF @TenantId IS NULL OR @TenantId = ''
+            BEGIN
+                RAISERROR('TenantId is required.', 16, 1);
+                RETURN;
+            END
+            
+            IF @DatasetKey IS NULL OR LTRIM(RTRIM(@DatasetKey)) = ''
+            BEGIN
+                RAISERROR('DatasetKey is required.', 16, 1);
+                RETURN;
+            END
+            
+            -- Get dataset metadata
+            DECLARE @Dataset TABLE (
+                DatasetKey NVARCHAR(200),
+                DisplayName NVARCHAR(500),
+                Description NVARCHAR(2000),
+                BaseObject NVARCHAR(500),
+                Grain NVARCHAR(200),
+                TimeColumn NVARCHAR(200),
+                Tags NVARCHAR(1000)
+            );
+            
+            INSERT INTO @Dataset
+            SELECT TOP 1
+                DatasetKey,
+                DisplayName,
+                Description,
+                BaseObject,
+                Grain,
+                TimeColumn,
+                Tags
+            FROM dbo.v_Analytics_DatasetCatalog
+            WHERE DatasetKey = @DatasetKey
+              AND (TenantId = @TenantId OR TenantId IS NULL)
+            ORDER BY CASE WHEN TenantId = @TenantId THEN 0 ELSE 1 END;
+            
+            IF NOT EXISTS (SELECT 1 FROM @Dataset)
+            BEGIN
+                RAISERROR('Dataset not found or access denied.', 16, 1);
+                RETURN;
+            END
+            
+            -- Get all enabled fields
+            DECLARE @Fields TABLE (
+                FieldKey NVARCHAR(200),
+                PhysicalColumn NVARCHAR(200),
+                DisplayName NVARCHAR(500),
+                Description NVARCHAR(2000),
+                DataType NVARCHAR(50),
+                SemanticType NVARCHAR(100),
+                AllowedAggregations NVARCHAR(500),
+                IsFilterable BIT,
+                IsGroupable BIT,
+                IsSortable BIT,
+                SecurityTag NVARCHAR(50)
+            );
+            
+            INSERT INTO @Fields
+            SELECT
+                FieldKey,
+                PhysicalColumn,
+                DisplayName,
+                Description,
+                DataType,
+                SemanticType,
+                AllowedAggregations,
+                IsFilterable,
+                IsGroupable,
+                IsSortable,
+                SecurityTag
+            FROM dbo.v_Analytics_FieldCatalog
+            WHERE DatasetKey = @DatasetKey
+            ORDER BY FieldKey;
+            
+            -- Get join relationships from EntityGraphCatalog (if exists)
+            DECLARE @Joins TABLE (
+                TargetDatasetKey NVARCHAR(200),
+                JoinType NVARCHAR(50),
+                SourceFields NVARCHAR(500),
+                TargetFields NVARCHAR(500)
+            );
+            
+            IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'EntityGraphCatalog')
+            BEGIN
+                INSERT INTO @Joins
+                SELECT
+                    TargetDatasetKey,
+                    JoinType,
+                    SourceFields,
+                    TargetFields
+                FROM dbo.EntityGraphCatalog
+                WHERE SourceDatasetKey = @DatasetKey
+                  AND IsEnabled = 1;
+            END
+            
+            -- Return JSON envelope
+            DECLARE @RowCount INT = (SELECT COUNT(1) FROM @Fields);
+            
+            SELECT (
+                SELECT
+                    meta = (
+                        SELECT
+                            @TenantId AS tenantId,
+                            @GeneratedAtUtc AS generatedAtUtc,
+                            @RowCount AS fieldCount
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ),
+                    dataset = (
+                        SELECT TOP 1 DatasetKey, DisplayName, Description, BaseObject, Grain, TimeColumn, Tags
+                        FROM @Dataset
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ),
+                    fields = (
+                        SELECT FieldKey, PhysicalColumn, DisplayName, Description, DataType,
+                               SemanticType, AllowedAggregations, IsFilterable, IsGroupable, IsSortable, SecurityTag
+                        FROM @Fields
+                        ORDER BY FieldKey
+                        FOR JSON PATH
+                    ),
+                    joins = (
+                        SELECT TargetDatasetKey, JoinType, SourceFields, TargetFields
+                        FROM @Joins
+                        FOR JSON PATH
+                    )
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            ) AS ResultJson;
+        END;
+        GO
+        
+        -- analytics_validate_plan: Validate atomic plan before execution
+        -- PATCH 28: Complete validation with metrics/joins/security/time-window
+        CREATE OR ALTER PROCEDURE dbo.ai_analytics_validate_plan
+            @TenantId   NVARCHAR(50),
+            @PlanJson   NVARCHAR(MAX)
+        AS
+        BEGIN
+            SET NOCOUNT ON;
+            
+            DECLARE @GeneratedAtUtc DATETIME2(3) = SYSUTCDATETIME();
+            DECLARE @IsValid BIT = 1;
+            DECLARE @ErrorCode NVARCHAR(100) = NULL;
+            DECLARE @ErrorMessage NVARCHAR(2000) = NULL;
+            
+            -- Validation limits (configurable via appsettings, hardcoded as defaults here)
+            DECLARE @MaxRows INT = 200;
+            DECLARE @MaxGroupBy INT = 4;
+            DECLARE @MaxMetrics INT = 3;
+            DECLARE @MaxJoins INT = 1;
+            DECLARE @MaxTimeWindowDays INT = 366;
+            DECLARE @AllowedMetricOps NVARCHAR(500) = 'count,countDistinct,sum,avg,min,max';
+            
+            -- Validate inputs
+            IF @TenantId IS NULL OR @TenantId = ''
+            BEGIN
+                RAISERROR('TenantId is required.', 16, 1);
+                RETURN;
+            END
+            
+            IF ISJSON(@PlanJson) <> 1
+            BEGIN
+                SET @IsValid = 0;
+                SET @ErrorCode = 'INVALID_JSON';
+                SET @ErrorMessage = 'PlanJson must be valid JSON.';
+            END
+            
+            -- Check datasetKey exists
+            DECLARE @DatasetKey NVARCHAR(200) = JSON_VALUE(@PlanJson, '$.datasetKey');
+            IF @IsValid = 1 AND (@DatasetKey IS NULL OR @DatasetKey = '')
+            BEGIN
+                SET @IsValid = 0;
+                SET @ErrorCode = 'MISSING_DATASET';
+                SET @ErrorMessage = 'datasetKey is required.';
+            END
+            
+            -- Validate dataset exists and accessible
+            IF @IsValid = 1 AND NOT EXISTS (
+                SELECT 1 FROM dbo.DatasetCatalog 
+                WHERE DatasetKey = @DatasetKey 
+                  AND IsEnabled = 1
+                  AND (TenantId = @TenantId OR TenantId IS NULL)
+            )
+            BEGIN
+                SET @IsValid = 0;
+                SET @ErrorCode = 'DATASET_NOT_FOUND';
+                SET @ErrorMessage = 'Dataset not found or disabled: ' + @DatasetKey;
+            END
+            
+            -- Check limit
+            DECLARE @Limit INT = TRY_CONVERT(INT, JSON_VALUE(@PlanJson, '$.limit'));
+            IF @IsValid = 1 AND @Limit IS NOT NULL AND @Limit > @MaxRows
+            BEGIN
+                SET @IsValid = 0;
+                SET @ErrorCode = 'LIMIT_EXCEEDED';
+                SET @ErrorMessage = 'Limit (' + CAST(@Limit AS NVARCHAR(10)) + ') exceeds maximum allowed (' + CAST(@MaxRows AS NVARCHAR(10)) + ').';
+            END
+            
+            -- Check groupBy count
+            DECLARE @GroupByCount INT = (SELECT COUNT(1) FROM OPENJSON(@PlanJson, '$.groupBy'));
+            IF @IsValid = 1 AND @GroupByCount > @MaxGroupBy
+            BEGIN
+                SET @IsValid = 0;
+                SET @ErrorCode = 'GROUPBY_EXCEEDED';
+                SET @ErrorMessage = 'GroupBy count (' + CAST(@GroupByCount AS NVARCHAR(10)) + ') exceeds maximum allowed (' + CAST(@MaxGroupBy AS NVARCHAR(10)) + ').';
+            END
+            
+            -- Check metrics count
+            DECLARE @MetricsCount INT = (SELECT COUNT(1) FROM OPENJSON(@PlanJson, '$.metrics'));
+            IF @IsValid = 1 AND @MetricsCount > @MaxMetrics
+            BEGIN
+                SET @IsValid = 0;
+                SET @ErrorCode = 'METRICS_EXCEEDED';
+                SET @ErrorMessage = 'Metrics count (' + CAST(@MetricsCount AS NVARCHAR(10)) + ') exceeds maximum allowed (' + CAST(@MaxMetrics AS NVARCHAR(10)) + ').';
+            END
+            
+            -- Check joins count
+            DECLARE @JoinsCount INT = (SELECT COUNT(1) FROM OPENJSON(@PlanJson, '$.joins'));
+            IF @IsValid = 1 AND @JoinsCount > @MaxJoins
+            BEGIN
+                SET @IsValid = 0;
+                SET @ErrorCode = 'JOINS_EXCEEDED';
+                SET @ErrorMessage = 'Joins count (' + CAST(@JoinsCount AS NVARCHAR(10)) + ') exceeds maximum allowed (' + CAST(@MaxJoins AS NVARCHAR(10)) + ').';
+            END
+            
+            -- Validate field existence for select/where/groupBy
+            DECLARE @InvalidFields TABLE (FieldKey NVARCHAR(200), Context NVARCHAR(50));
+            
+            IF @IsValid = 1
+            BEGIN
+                -- Check select fields
+                INSERT INTO @InvalidFields (FieldKey, Context)
+                SELECT value, 'select'
+                FROM OPENJSON(@PlanJson, '$.select')
+                WHERE value NOT IN (
+                    SELECT FieldKey FROM dbo.FieldCatalog WHERE DatasetKey = @DatasetKey AND IsEnabled = 1
+                );
+                
+                -- Check where fields
+                INSERT INTO @InvalidFields (FieldKey, Context)
+                SELECT JSON_VALUE(value, '$.field'), 'where'
+                FROM OPENJSON(@PlanJson, '$.where')
+                WHERE JSON_VALUE(value, '$.field') IS NOT NULL
+                  AND JSON_VALUE(value, '$.field') NOT IN (
+                    SELECT FieldKey FROM dbo.FieldCatalog WHERE DatasetKey = @DatasetKey AND IsEnabled = 1
+                );
+                
+                -- Check groupBy fields
+                INSERT INTO @InvalidFields (FieldKey, Context)
+                SELECT value, 'groupBy'
+                FROM OPENJSON(@PlanJson, '$.groupBy')
+                WHERE value NOT IN (
+                    SELECT FieldKey FROM dbo.FieldCatalog WHERE DatasetKey = @DatasetKey AND IsEnabled = 1
+                );
+                
+                -- Check orderBy fields
+                INSERT INTO @InvalidFields (FieldKey, Context)
+                SELECT JSON_VALUE(value, '$.field'), 'orderBy'
+                FROM OPENJSON(@PlanJson, '$.orderBy')
+                WHERE JSON_VALUE(value, '$.field') IS NOT NULL
+                  AND JSON_VALUE(value, '$.field') NOT IN (
+                    SELECT FieldKey FROM dbo.FieldCatalog WHERE DatasetKey = @DatasetKey AND IsEnabled = 1
+                );
+                
+                IF EXISTS (SELECT 1 FROM @InvalidFields)
+                BEGIN
+                    SET @IsValid = 0;
+                    SET @ErrorCode = 'UNKNOWN_FIELD';
+                    SELECT @ErrorMessage = 'Unknown fields: ' + STRING_AGG(FieldKey + ' (' + Context + ')', ', ')
+                    FROM @InvalidFields;
+                END
+            END
+            
+            -- Validate metrics fields and operations
+            DECLARE @InvalidMetrics TABLE (FieldKey NVARCHAR(200), Op NVARCHAR(50), Reason NVARCHAR(200));
+            
+            IF @IsValid = 1
+            BEGIN
+                -- Check each metric
+                INSERT INTO @InvalidMetrics (FieldKey, Op, Reason)
+                SELECT 
+                    JSON_VALUE(value, '$.field') AS FieldKey,
+                    JSON_VALUE(value, '$.op') AS Op,
+                    CASE
+                        WHEN JSON_VALUE(value, '$.field') NOT IN (
+                            SELECT FieldKey FROM dbo.FieldCatalog WHERE DatasetKey = @DatasetKey AND IsEnabled = 1
+                        ) THEN 'Field not found'
+                        WHEN CHARINDEX(JSON_VALUE(value, '$.op'), @AllowedMetricOps) = 0 
+                        THEN 'Operation not allowed'
+                        WHEN fc.AllowedAggregations IS NOT NULL 
+                             AND CHARINDEX(JSON_VALUE(value, '$.op'), fc.AllowedAggregations) = 0
+                        THEN 'Operation not allowed for this field'
+                        ELSE NULL
+                    END AS Reason
+                FROM OPENJSON(@PlanJson, '$.metrics')
+                LEFT JOIN dbo.FieldCatalog fc 
+                    ON fc.DatasetKey = @DatasetKey 
+                    AND fc.FieldKey = JSON_VALUE(value, '$.field')
+                    AND fc.IsEnabled = 1
+                WHERE JSON_VALUE(value, '$.field') IS NOT NULL;
+                
+                -- Filter out nulls and check for errors
+                DELETE FROM @InvalidMetrics WHERE Reason IS NULL;
+                
+                IF EXISTS (SELECT 1 FROM @InvalidMetrics)
+                BEGIN
+                    SET @IsValid = 0;
+                    SET @ErrorCode = 'INVALID_METRIC';
+                    SELECT @ErrorMessage = 'Invalid metrics: ' + STRING_AGG(FieldKey + '.' + Op + ' (' + Reason + ')', '; ')
+                    FROM @InvalidMetrics;
+                END
+            END
+            
+            -- Validate security tags (PII fields require special roles - simplified check)
+            DECLARE @RestrictedFields TABLE (FieldKey NVARCHAR(200), SecurityTag NVARCHAR(50));
+            
+            IF @IsValid = 1
+            BEGIN
+                -- Find any referenced fields with security tags
+                INSERT INTO @RestrictedFields (FieldKey, SecurityTag)
+                SELECT fc.FieldKey, fc.SecurityTag
+                FROM dbo.FieldCatalog fc
+                WHERE fc.DatasetKey = @DatasetKey 
+                  AND fc.IsEnabled = 1
+                  AND fc.SecurityTag IS NOT NULL
+                  AND fc.SecurityTag IN ('PII', 'SENSITIVE', 'RESTRICTED')
+                  AND (
+                      fc.FieldKey IN (SELECT value FROM OPENJSON(@PlanJson, '$.select'))
+                      OR fc.FieldKey IN (SELECT JSON_VALUE(value, '$.field') FROM OPENJSON(@PlanJson, '$.where'))
+                      OR fc.FieldKey IN (SELECT value FROM OPENJSON(@PlanJson, '$.groupBy'))
+                      OR fc.FieldKey IN (SELECT JSON_VALUE(value, '$.field') FROM OPENJSON(@PlanJson, '$.metrics'))
+                  );
+                
+                IF EXISTS (SELECT 1 FROM @RestrictedFields)
+                BEGIN
+                    SET @IsValid = 0;
+                    SET @ErrorCode = 'SECURITY_VIOLATION';
+                    SELECT @ErrorMessage = 'Restricted fields referenced: ' + STRING_AGG(FieldKey + ' (' + SecurityTag + ')', ', ')
+                    FROM @RestrictedFields;
+                END
+            END
+            
+            -- Validate time window (if time filters are present)
+            IF @IsValid = 1
+            BEGIN
+                DECLARE @StartDate DATE, @EndDate DATE;
+                
+                -- Try to extract time range from where conditions
+                SELECT @StartDate = TRY_CONVERT(DATE, JSON_VALUE(value, '$.value'))
+                FROM OPENJSON(@PlanJson, '$.where')
+                WHERE JSON_VALUE(value, '$.op') IN ('>=', '>', 'gte', 'gt')
+                  AND TRY_CONVERT(DATE, JSON_VALUE(value, '$.value')) IS NOT NULL;
+                
+                SELECT @EndDate = TRY_CONVERT(DATE, JSON_VALUE(value, '$.value'))
+                FROM OPENJSON(@PlanJson, '$.where')
+                WHERE JSON_VALUE(value, '$.op') IN ('<=', '<', 'lte', 'lt')
+                  AND TRY_CONVERT(DATE, JSON_VALUE(value, '$.value')) IS NOT NULL;
+                
+                IF @StartDate IS NOT NULL AND @EndDate IS NOT NULL
+                BEGIN
+                    DECLARE @DaysDiff INT = DATEDIFF(DAY, @StartDate, @EndDate);
+                    IF @DaysDiff > @MaxTimeWindowDays
+                    BEGIN
+                        SET @IsValid = 0;
+                        SET @ErrorCode = 'TIME_WINDOW_EXCEEDED';
+                        SET @ErrorMessage = 'Time window (' + CAST(@DaysDiff AS NVARCHAR(10)) + ' days) exceeds maximum allowed (' + CAST(@MaxTimeWindowDays AS NVARCHAR(10)) + ' days).';
+                    END
+                END
+            END
+            
+            -- Generate suggestions for errors
+            DECLARE @Suggestions TABLE (Suggestion NVARCHAR(500));
+            
+            IF @IsValid = 0
+            BEGIN
+                IF @ErrorCode = 'UNKNOWN_FIELD'
+                BEGIN
+                    -- Suggest similar fields (fuzzy match)
+                    INSERT INTO @Suggestions (Suggestion)
+                    SELECT DISTINCT TOP 5 'Did you mean: ' + fc.FieldKey
+                    FROM @InvalidFields inv
+                    CROSS APPLY (
+                        SELECT FieldKey
+                        FROM dbo.FieldCatalog
+                        WHERE DatasetKey = @DatasetKey AND IsEnabled = 1
+                          AND (
+                              SOUNDEX(FieldKey) = SOUNDEX(inv.FieldKey)
+                              OR FieldKey LIKE '%' + LEFT(inv.FieldKey, 3) + '%'
+                          )
+                    ) fc;
+                END
+                
+                IF @ErrorCode = 'LIMIT_EXCEEDED'
+                BEGIN
+                    INSERT INTO @Suggestions (Suggestion)
+                    VALUES ('Use limit <= ' + CAST(@MaxRows AS NVARCHAR(10)));
+                END
+                
+                IF @ErrorCode = 'INVALID_METRIC'
+                BEGIN
+                    INSERT INTO @Suggestions (Suggestion)
+                    VALUES ('Allowed metric operations: ' + @AllowedMetricOps);
+                END
+                
+                IF @ErrorCode = 'SECURITY_VIOLATION'
+                BEGIN
+                    INSERT INTO @Suggestions (Suggestion)
+                    VALUES ('Remove restricted fields or request elevated permissions.');
+                END
+                
+                IF @ErrorCode = 'TIME_WINDOW_EXCEEDED'
+                BEGIN
+                    INSERT INTO @Suggestions (Suggestion)
+                    VALUES ('Reduce time window to <= ' + CAST(@MaxTimeWindowDays AS NVARCHAR(10)) + ' days.');
+                END
+            END
+            
+            -- Return validation result
+            SELECT (
+                SELECT
+                    meta = (
+                        SELECT
+                            @TenantId AS tenantId,
+                            @GeneratedAtUtc AS generatedAtUtc,
+                            @DatasetKey AS datasetKey
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ),
+                    validation = (
+                        SELECT
+                            @IsValid AS isValid,
+                            @ErrorCode AS errorCode,
+                            @ErrorMessage AS errorMessage,
+                            CASE WHEN @IsValid = 0 AND @ErrorCode NOT IN ('SECURITY_VIOLATION') THEN 1 ELSE 0 END AS retryable
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ),
+                    suggestions = (
+                        SELECT Suggestion AS [suggestion]
+                        FROM @Suggestions
+                        FOR JSON PATH
+                    )
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            ) AS ResultJson;
+        END;
+        GO
+
+################################################################################
+# PHASE 4: C# DI Wiring
+# Mục tiêu: Đăng ký AnalyticsOptions và IInsightAssemblyService vào DI
+################################################################################
+
+phase_4:
+  name: "C# DI Wiring"
+  description: "Thêm DI registration cho Analytics services và options"
+  
+  files:
+    # 4.1: Update ConfigurationSectionNames
+    - path: "src/TILSOFTAI.Domain/Configuration/ConfigurationSectionNames.cs"
+      action: "replace"
+      description: "Thêm Analytics vào ConfigurationSectionNames"
+      content: |
+        namespace TILSOFTAI.Domain.Configuration;
+        
+        public static class ConfigurationSectionNames
+        {
+            public const string Sql = "Sql";
+            public const string Redis = "Redis";
+            public const string Auth = "Auth";
+            public const string Chat = "Chat";
+            public const string Localization = "Localization";
+            public const string Governance = "Governance";
+            public const string Modules = "Modules";
+            public const string Observability = "Observability";
+            public const string SensitiveData = "SensitiveData";
+            public const string OpenTelemetry = "OpenTelemetry";
+            public const string ErrorHandling = "ErrorHandling";
+            public const string SemanticCache = "SemanticCache";
+            public const string Llm = "Llm";
+            public const string Streaming = "Streaming";
+            public const string Validation = "Validation";
+            public const string Audit = "Audit";
+            public const string StructuredLogging = "StructuredLogging";
+            public const string Metrics = "Metrics";
+            public const string Resilience = "Resilience";
+            public const string Analytics = "Analytics"; // PATCH 28: Added
+        }
+
+    # 4.2: Update AddTilsoftAiExtensions.cs
+    - path: "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+      action: "str_replace_multiple"
+      description: "Thêm DI registration cho Analytics"
+      replacements:
+        # 4.2.1: Add using statements at top of file
+        - old_str: "using TILSOFTAI.Modules.Core.Tools;"
+          new_str: |
+            using TILSOFTAI.Modules.Core.Tools;
+            using TILSOFTAI.Orchestration.Analytics;
+
+        # 4.2.2: Add Analytics services registration (after services.AddSingleton<SemanticCache>)
+        - old_str: |
+            services.AddSingleton<SemanticCache>();
+                    services.AddHttpClient<OpenAiEmbeddingClient>();
+          new_str: |
+            services.AddSingleton<SemanticCache>();
+                    
+                    // Analytics services (PATCH 28)
+                    services.AddSingleton<IInsightAssemblyService, InsightAssemblyService>();
+                    
+                    services.AddHttpClient<OpenAiEmbeddingClient>();
+
+        # 4.2.3: Add AnalyticsOptions registration in RegisterOptions method
+        - old_str: |
+            services.AddOptions<SecretsOptions>()
+                        .Bind(configuration.GetSection("Secrets"))
+                        .ValidateOnStart();
+                }
+          new_str: |
+            services.AddOptions<SecretsOptions>()
+                        .Bind(configuration.GetSection("Secrets"))
+                        .ValidateOnStart();
+            
+                    // Analytics options (PATCH 28)
+                    services.AddOptions<AnalyticsOptions>()
+                        .Bind(configuration.GetSection(ConfigurationSectionNames.Analytics))
+                        .Validate(options => options.MaxRows > 0, "Analytics:MaxRows must be > 0.")
+                        .Validate(options => options.MaxGroupBy > 0, "Analytics:MaxGroupBy must be > 0.")
+                        .Validate(options => options.MaxMetrics > 0, "Analytics:MaxMetrics must be > 0.")
+                        .Validate(options => options.MaxJoins >= 0, "Analytics:MaxJoins must be >= 0.")
+                        .Validate(options => options.MaxTimeWindowDays > 0, "Analytics:MaxTimeWindowDays must be > 0.")
+                        .Validate(options => options.AllowedMetricOps != null && options.AllowedMetricOps.Length > 0, 
+                            "Analytics:AllowedMetricOps must have at least one allowed operation.")
+                        .ValidateOnStart();
+                }
+
+################################################################################
+# PHASE 5: InsightAssemblyService Fix
+# Mục tiêu: Hoàn thiện BuildNotes với warnings và freshness
+################################################################################
+
+phase_5:
+  name: "InsightAssemblyService Fix"
+  description: "Cập nhật BuildNotes để include warnings và freshness trong notes"
+  
+  files:
+    - path: "src/TILSOFTAI.Orchestration/Analytics/InsightAssemblyService.cs"
+      action: "replace"
+      description: "Hoàn thiện output contract với warnings và freshness trong notes"
+      content: |
+        using System.Globalization;
+        using Microsoft.Extensions.Logging;
+        using Microsoft.Extensions.Options;
+        using TILSOFTAI.Domain.Analytics;
+        using TILSOFTAI.Domain.Configuration;
+        using TILSOFTAI.Domain.ExecutionContext;
+        
+        namespace TILSOFTAI.Orchestration.Analytics;
+        
+        /// <summary>
+        /// Assembles query results into structured insight output.
+        /// PATCH 28: Complete output contract with warnings/freshness in notes.
+        /// </summary>
+        public sealed class InsightAssemblyService : IInsightAssemblyService
+        {
+            private readonly AnalyticsOptions _options;
+            private readonly ILogger<InsightAssemblyService> _logger;
+        
+            public InsightAssemblyService(
+                IOptions<AnalyticsOptions> options,
+                ILogger<InsightAssemblyService> logger)
+            {
+                _options = options?.Value ?? new AnalyticsOptions();
+                _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            }
+        
+            public Task<InsightOutput> AssembleAsync(
+                TaskFrame taskFrame,
+                IReadOnlyList<QueryResultSet> queryResults,
+                TilsoftExecutionContext context,
+                CancellationToken ct)
+            {
+                ArgumentNullException.ThrowIfNull(taskFrame);
+                ArgumentNullException.ThrowIfNull(queryResults);
+                ArgumentNullException.ThrowIfNull(context);
+        
+                var warnings = CollectWarnings(queryResults);
+                var freshness = GetFreshness(queryResults);
+        
+                var insight = new InsightOutput
+                {
+                    Headline = BuildHeadline(taskFrame, queryResults, context.Language),
+                    Tables = BuildTables(queryResults, context.Language),
+                    Notes = BuildNotes(taskFrame, queryResults, warnings, freshness, context.Language),
+                    Warnings = warnings,
+                    Freshness = freshness
+                };
+        
+                _logger.LogInformation(
+                    "InsightAssembled | Headline: {Headline} | Tables: {TableCount} | Notes: {NoteCount} | Warnings: {WarningCount}",
+                    insight.Headline.Text, insight.Tables.Count, insight.Notes.Count, insight.Warnings.Count);
+        
+                return Task.FromResult(insight);
+            }
+        
+            private static InsightHeadline BuildHeadline(
+                TaskFrame taskFrame, 
+                IReadOnlyList<QueryResultSet> results,
+                string language)
+            {
+                var totalResult = results.FirstOrDefault(r => r.Type == QueryResultType.Total);
+                
+                string headlineText;
+                if (totalResult?.Rows.Count > 0 && totalResult.Rows[0].Count > 0)
+                {
+                    var value = totalResult.Rows[0][0];
+                    var formattedValue = FormatNumber(value);
+                    
+                    var entity = taskFrame.Entity ?? "items";
+                    var filterContext = BuildFilterContext(taskFrame, language);
+                    
+                    headlineText = language == "vi"
+                        ? $"{filterContext} có {formattedValue} {entity}"
+                        : $"{filterContext} has {formattedValue} {entity}";
+                }
+                else
+                {
+                    // Fallback: sum from breakdown if no total
+                    var breakdown = results.FirstOrDefault(r => r.Type == QueryResultType.Breakdown);
+                    if (breakdown?.Rows.Count > 0)
+                    {
+                        var sum = breakdown.Rows
+                            .Where(r => r.Count > 1)
+                            .Sum(r => Convert.ToDecimal(r[^1] ?? 0));
+                        
+                        var entity = taskFrame.Entity ?? "items";
+                        var filterContext = BuildFilterContext(taskFrame, language);
+                        headlineText = language == "vi"
+                            ? $"{filterContext} có {FormatNumber(sum)} {entity}"
+                            : $"{filterContext} has {FormatNumber(sum)} {entity}";
+                    }
+                    else
+                    {
+                        headlineText = language == "vi" 
+                            ? "Không có dữ liệu" 
+                            : "No data available";
+                    }
+                }
+        
+                return new InsightHeadline { Text = headlineText, Language = language };
+            }
+        
+            private static string BuildFilterContext(TaskFrame taskFrame, string language)
+            {
+                if (taskFrame.Filters.Count == 0)
+                    return language == "vi" ? "Tổng cộng" : "Overall";
+        
+                var seasonFilter = taskFrame.Filters
+                    .FirstOrDefault(f => f.FieldHint?.Contains("season", StringComparison.OrdinalIgnoreCase) == true);
+                
+                if (seasonFilter?.Value != null)
+                {
+                    return language == "vi" 
+                        ? $"Mùa {seasonFilter.Value}" 
+                        : $"Season {seasonFilter.Value}";
+                }
+        
+                return language == "vi" ? "Theo bộ lọc" : "Filtered";
+            }
+        
+            private static List<InsightTable> BuildTables(
+                IReadOnlyList<QueryResultSet> results, 
+                string language)
+            {
+                return results
+                    .Where(r => r.Type == QueryResultType.Breakdown && r.Rows.Count > 0)
+                    .Select(r => new InsightTable
+                    {
+                        Title = r.Label,
+                        Columns = r.Columns,
+                        Rows = r.Rows,
+                        TopN = r.Rows.Count
+                    })
+                    .ToList();
+            }
+        
+            /// <summary>
+            /// Builds complete notes including filter, limit, warnings, and data freshness.
+            /// PATCH 28: Now includes warnings and freshness as per enterprise output contract.
+            /// </summary>
+            private static List<string> BuildNotes(
+                TaskFrame taskFrame,
+                IReadOnlyList<QueryResultSet> results,
+                List<string> warnings,
+                DataFreshness? freshness,
+                string language)
+            {
+                var notes = new List<string>();
+        
+                // 1. Filter notes
+                if (taskFrame.Filters.Count > 0)
+                {
+                    foreach (var filter in taskFrame.Filters)
+                    {
+                        var filterText = language == "vi"
+                            ? $"Bộ lọc: {filter.FieldHint} {filter.Op} {filter.Value}"
+                            : $"Filter: {filter.FieldHint} {filter.Op} {filter.Value}";
+                        notes.Add(filterText);
+                    }
+                }
+                else
+                {
+                    notes.Add(language == "vi" ? "Bộ lọc: (không có)" : "Filter: (none)");
+                }
+        
+                // 2. Limit/truncation notes
+                var truncatedResults = results.Where(r => r.Type == QueryResultType.Breakdown && r.Truncated).ToList();
+                if (truncatedResults.Count > 0)
+                {
+                    foreach (var result in truncatedResults)
+                    {
+                        var limitText = language == "vi"
+                            ? $"Giới hạn: Top {result.RowCount} cho {result.Label}"
+                            : $"Limit: Top {result.RowCount} for {result.Label}";
+                        notes.Add(limitText);
+                    }
+                }
+                else
+                {
+                    var maxRows = results.Where(r => r.Type == QueryResultType.Breakdown).MaxBy(r => r.RowCount)?.RowCount ?? 0;
+                    if (maxRows > 0)
+                    {
+                        notes.Add(language == "vi" 
+                            ? $"Giới hạn: Hiển thị tối đa {maxRows} hàng" 
+                            : $"Limit: Showing up to {maxRows} rows");
+                    }
+                }
+        
+                // 3. Warnings notes
+                if (warnings.Count > 0)
+                {
+                    var warningsText = language == "vi"
+                        ? $"Cảnh báo: {string.Join("; ", warnings)}"
+                        : $"Warnings: {string.Join("; ", warnings)}";
+                    notes.Add(warningsText);
+                }
+                else
+                {
+                    notes.Add(language == "vi" ? "Cảnh báo: (không có)" : "Warnings: (none)");
+                }
+        
+                // 4. Data freshness notes
+                if (freshness != null)
+                {
+                    var freshnessText = language == "vi"
+                        ? $"Dữ liệu mới nhất: {freshness.AsOfUtc:yyyy-MM-dd HH:mm:ss} UTC, nguồn: {freshness.Source}"
+                        : $"Data freshness: {freshness.AsOfUtc:yyyy-MM-dd HH:mm:ss} UTC, source: {freshness.Source}";
+                    notes.Add(freshnessText);
+                }
+        
+                return notes;
+            }
+        
+            private static List<string> CollectWarnings(IReadOnlyList<QueryResultSet> results)
+            {
+                return results
+                    .SelectMany(r => r.Warnings)
+                    .Distinct()
+                    .ToList();
+            }
+        
+            private static DataFreshness? GetFreshness(IReadOnlyList<QueryResultSet> results)
+            {
+                var latestResult = results
+                    .OrderByDescending(r => r.GeneratedAtUtc)
+                    .FirstOrDefault();
+        
+                return latestResult != null
+                    ? new DataFreshness
+                    {
+                        AsOfUtc = latestResult.GeneratedAtUtc,
+                        Source = "SQL"
+                    }
+                    : null;
+            }
+        
+            private static string FormatNumber(object? value)
+            {
+                return value switch
+                {
+                    null => "0",
+                    int i => i.ToString("N0", CultureInfo.InvariantCulture),
+                    long l => l.ToString("N0", CultureInfo.InvariantCulture),
+                    decimal d => d.ToString("N0", CultureInfo.InvariantCulture),
+                    double db => db.ToString("N0", CultureInfo.InvariantCulture),
+                    _ => value.ToString() ?? "0"
+                };
+            }
+        }
+
+################################################################################
+# PHASE 6: Verification
+# Mục tiêu: Kiểm tra tất cả các thay đổi đã được apply đúng
+################################################################################
+
+phase_6:
+  name: "Verification"
+  description: "Checklist để xác nhận patch đã được apply thành công"
+  
+  pre_deployment_checks:
+    - check: "SQL syntax validation"
+      command: "Run all SQL files through SSMS or sqlcmd with SET NOEXEC ON"
+      
+    - check: "C# compilation"
+      command: "dotnet build TILSOFTAI.slnx"
+      
+    - check: "Missing references check"
+      command: "grep -r 'IInsightAssemblyService' src/ | wc -l"
+      expected: ">= 2"
+
+  post_deployment_checks:
+    - check: "DatasetCatalog has semantic columns"
+      sql: |
+        SELECT COUNT(*) FROM sys.columns 
+        WHERE object_id = OBJECT_ID('dbo.DatasetCatalog') 
+        AND name IN ('DisplayName', 'Description', 'Grain', 'Tags', 'CreatedAtUtc');
+      expected: "5"
+      
+    - check: "FieldCatalog has semantic columns"
+      sql: |
+        SELECT COUNT(*) FROM sys.columns 
+        WHERE object_id = OBJECT_ID('dbo.FieldCatalog') 
+        AND name IN ('DisplayName', 'Description', 'SemanticType', 'SecurityTag');
+      expected: "4"
+      
+    - check: "EntityGraphCatalog has alias columns"
+      sql: |
+        SELECT COUNT(*) FROM sys.columns 
+        WHERE object_id = OBJECT_ID('dbo.EntityGraphCatalog') 
+        AND name IN ('SourceDatasetKey', 'TargetDatasetKey', 'SourceFields', 'TargetFields');
+      expected: "4"
+      
+    - check: "Analytics views can be queried"
+      sql: |
+        SELECT TOP 1 * FROM dbo.v_Analytics_DatasetCatalog;
+        SELECT TOP 1 * FROM dbo.v_Analytics_FieldCatalog;
+        SELECT TOP 1 * FROM dbo.v_Analytics_CatalogSearch;
+      expected: "No errors"
+      
+    - check: "DI resolution test"
+      code: |
+        var service = serviceProvider.GetService<IInsightAssemblyService>();
+        Assert.NotNull(service);
+      expected: "Pass"
+
+  rollback_instructions:
+    description: "Nếu cần rollback, thực hiện theo thứ tự ngược lại"
+    steps:
+      - "Revert AddTilsoftAiExtensions.cs to original"
+      - "Revert ConfigurationSectionNames.cs to original"
+      - "Revert InsightAssemblyService.cs to original"
+      - "DROP columns added to catalog tables (if needed)"
+      - "Note: Catalog column additions are backward compatible, no need to drop"
+
+################################################################################
+# SUMMARY
+################################################################################
+
+summary:
+  files_created:
+    - "sql/02_atomic/005_migration_catalog_semantic_columns.sql"
+    
+  files_modified:
+    - "sql/02_modules/analytics/002_views_analytics.sql"
+    - "sql/02_modules/analytics/004_sps_ai_analytics.sql"
+    - "src/TILSOFTAI.Domain/Configuration/ConfigurationSectionNames.cs"
+    - "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+    - "src/TILSOFTAI.Orchestration/Analytics/InsightAssemblyService.cs"
+    
+  issues_resolved:
+    - "P0-I01: Catalog Schema Mismatch"
+    - "P0-I03: Validation Contract Drift"
+    - "P0-I04: DI Wiring Incomplete"
+    - "P0-I07: EntityGraphCatalog Schema Mismatch"
+    - "P1-I05: Output Contract Incomplete"
+    
+  breaking_changes: "None - all changes are backward compatible"
+  
+  estimated_deployment_time: "15 minutes"

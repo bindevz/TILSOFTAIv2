@@ -1,6 +1,8 @@
 /*******************************************************************************
 * TILSOFTAI Analytics Module - Semantic Views
 * Purpose: Flattened views for catalog search and schema RAG
+* 
+* PATCH 28 FIX: Handle FieldCatalog without Id column using ROW_NUMBER()
 *******************************************************************************/
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
@@ -13,14 +15,14 @@ SELECT
     dc.Id,
     dc.TenantId,
     dc.DatasetKey,
-    dc.DisplayName,
+    ISNULL(dc.DisplayName, dc.DatasetKey) AS DisplayName,
     dc.Description,
     dc.BaseObject,
     dc.Grain,
     dc.TimeColumn,
     dc.IsEnabled,
     dc.Tags,
-    dc.CreatedAtUtc,
+    ISNULL(dc.CreatedAtUtc, dc.UpdatedAtUtc) AS CreatedAtUtc,
     dc.UpdatedAtUtc,
     -- Computed search fields
     LOWER(dc.DatasetKey + ' ' + ISNULL(dc.DisplayName, '') + ' ' + ISNULL(dc.Description, '') + ' ' + ISNULL(dc.Tags, '')) AS SearchText,
@@ -31,14 +33,15 @@ WHERE dc.IsEnabled = 1;
 GO
 
 -- Field catalog view with semantic type info
+-- NOTE: Uses ROW_NUMBER() for Id since FieldCatalog doesn't have identity column
 CREATE OR ALTER VIEW dbo.v_Analytics_FieldCatalog
 AS
 SELECT
-    fc.Id,
+    ROW_NUMBER() OVER (ORDER BY fc.DatasetKey, fc.FieldKey) AS Id,
     fc.DatasetKey,
     fc.FieldKey,
     fc.PhysicalColumn,
-    fc.DisplayName,
+    ISNULL(fc.DisplayName, fc.FieldKey) AS DisplayName,
     fc.Description,
     fc.DataType,
     fc.SemanticType,
