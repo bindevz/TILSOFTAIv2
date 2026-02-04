@@ -14,7 +14,7 @@ namespace TILSOFTAI.Api.Controllers;
 
 [ApiController]
 [Route("v1/chat/completions")]
-[Authorize]
+[AllowAnonymous]
 public sealed class OpenAiChatCompletionsController : ControllerBase
 {
     private readonly IOrchestrationEngine _engine;
@@ -65,7 +65,14 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
                 detail: new { maxInputChars = _chatOptions.Value.MaxInputChars });
         }
         
-        var context = _contextAccessor.Current;
+        
+        var context = _contextAccessor.Current ?? new TilsoftExecutionContext
+        {
+            TenantId = "guest",
+            UserId = "anonymous", 
+            Roles = new[] { "guest" },
+            CorrelationId = Guid.NewGuid().ToString("N")
+        };
         var created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var id = $"chatcmpl_{Guid.NewGuid():N}";
         var model = string.IsNullOrWhiteSpace(_llmOptions.Model) ? request.Model ?? "unknown" : _llmOptions.Model;

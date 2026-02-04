@@ -74,9 +74,39 @@ public static class MapTilsoftAiExtensions
             Predicate = check => check.Tags.Contains("ready")
         }).AllowAnonymous();
         
+        // Detailed health endpoint with JSON response (authenticated)
+        app.MapHealthChecks("/health/detailed", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+        {
+            ResponseWriter = WriteDetailedResponse
+        }).RequireAuthorization();
+        
         // Keep backward compatible /health endpoint
         app.MapHealthChecks("/health").AllowAnonymous();
 
         return app;
+    }
+
+    private static async Task WriteDetailedResponse(
+        HttpContext context,
+        Microsoft.Extensions.Diagnostics.HealthChecks.HealthReport report)
+    {
+        context.Response.ContentType = "application/json";
+        
+        var result = new
+        {
+            status = report.Status.ToString(),
+            totalDuration = report.TotalDuration.TotalMilliseconds,
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                duration = e.Value.Duration.TotalMilliseconds,
+                description = e.Value.Description,
+                data = e.Value.Data,
+                exception = e.Value.Exception?.Message
+            })
+        };
+        
+        await context.Response.WriteAsJsonAsync(result);
     }
 }

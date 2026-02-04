@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Configuration;
@@ -120,6 +121,7 @@ public static class AddTilsoftAiExtensions
         // Structured logging services
         services.AddSingleton<Infrastructure.Logging.LogRedactor>();
         services.AddSingleton<Infrastructure.Logging.ILogRedactor>(sp => sp.GetRequiredService<Infrastructure.Logging.LogRedactor>());
+        services.AddSingleton<JsonLogFormatter>();
         services.AddSingleton<StructuredLoggerProvider>();
         services.AddLogging(builder =>
         {
@@ -243,15 +245,38 @@ public static class AddTilsoftAiExtensions
         var redisEnabled = configuration.GetValue<bool>("Redis:Enabled");
         
         var healthChecksBuilder = services.AddHealthChecks()
-            .AddCheck<SqlHealthCheck>("sql", tags: new[] { "ready" });
+            .AddCheck<SqlHealthCheck>("sql", tags: new[] { "ready", "db" })
+            .AddCheck<LlmHealthCheck>("llm", tags: new[] { "ready", "external" })
+            .AddCheck<CircuitBreakerHealthCheck>("circuits", tags: new[] { "ready", "resilience" })
+            .AddCheck<ToolCatalogHealthCheck>("toolcatalog", tags: new[] { "ready", "runtime" })
+            .AddCheck<ModuleHealthCheck>("modules", tags: new[] { "ready", "runtime" });
         
         if (redisEnabled)
         {
-            healthChecksBuilder.AddCheck<RedisHealthCheck>("redis", tags: new[] { "ready" });
+            healthChecksBuilder.AddCheck<RedisHealthCheck>("redis", tags: new[] { "ready", "cache" });
         }
 
         // CORS - register service only, configuration happens at runtime in Program.cs
         services.AddCors();
+
+        // Secret provider - register based on configuration
+        var secretsProvider = configuration["Secrets:Provider"] ?? "Environment";
+        
+        services.AddSingleton<TILSOFTAI.Domain.Secrets.ISecretProvider>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<SecretsOptions>>();
+            var cache = sp.GetRequiredService<IMemoryCache>();
+            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            
+            TILSOFTAI.Domain.Secrets.ISecretProvider provider = secretsProvider switch
+            {
+                "AzureKeyVault" => new TILSOFTAI.Infrastructure.Secrets.AzureKeyVaultSecretProvider(
+                    options, cache, loggerFactory.CreateLogger<TILSOFTAI.Infrastructure.Secrets.AzureKeyVaultSecretProvider>()),
+                _ => new TILSOFTAI.Infrastructure.Secrets.EnvironmentSecretProvider()
+            };
+            
+            return new TILSOFTAI.Infrastructure.Secrets.CachingSecretProvider(provider, cache, options);
+        });
 
         // Typed client handlers
         services.AddTransient<CircuitBreakerDelegatingHandler>(sp =>
@@ -277,6 +302,9 @@ public static class AddTilsoftAiExtensions
             .Bind(configuration.GetSection(ConfigurationSectionNames.Sql))
             .Validate(options => !string.IsNullOrWhiteSpace(options.ConnectionString), "Sql:ConnectionString is required.")
             .Validate(options => options.CommandTimeoutSeconds > 0, "Sql:CommandTimeoutSeconds must be > 0.")
+            .Validate(options => options.MinPoolSize >= 0, "Sql:MinPoolSize must be >= 0.")
+            .Validate(options => options.MaxPoolSize >= options.MinPoolSize, "Sql:MaxPoolSize must be >= MinPoolSize.")
+            .Validate(options => options.ConnectionTimeoutSeconds > 0, "Sql:ConnectionTimeoutSeconds must be > 0.")
             .ValidateOnStart();
 
         services.AddOptions<RedisOptions>()
@@ -290,7 +318,8 @@ public static class AddTilsoftAiExtensions
             .Bind(configuration.GetSection(ConfigurationSectionNames.Auth))
             .Validate(options => !string.IsNullOrWhiteSpace(options.Issuer), "Auth:Issuer is required.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.Audience), "Auth:Audience is required.")
-            .Validate(options => !string.IsNullOrWhiteSpace(options.JwksUrl), "Auth:JwksUrl is required.")
+            // JwksUrl is optional - if empty, JWT signing key refresh will be skipped
+            // .Validate(options => !string.IsNullOrWhiteSpace(options.JwksUrl), "Auth:JwksUrl is required.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.TenantClaimName), "Auth:TenantClaimName is required.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.UserIdClaimName), "Auth:UserIdClaimName is required.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.TrustedGatewayClaimName), "Auth:TrustedGatewayClaimName is required.")
@@ -435,6 +464,10 @@ public static class AddTilsoftAiExtensions
 
         services.AddOptions<ResilienceOptions>()
             .Bind(configuration.GetSection(ConfigurationSectionNames.Resilience))
+            .ValidateOnStart();
+
+        services.AddOptions<SecretsOptions>()
+            .Bind(configuration.GetSection("Secrets"))
             .ValidateOnStart();
     }
 

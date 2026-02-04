@@ -1,4 +1,4 @@
-@TILSOFTAI.Api_HostAddress = http://localhost:5218
+@TILSOFTAI.Api_HostAddress = http://0.0.0.0:5218
 
 GET {{TILSOFTAI.Api_HostAddress}}/weatherforecast/
 Accept: application/json

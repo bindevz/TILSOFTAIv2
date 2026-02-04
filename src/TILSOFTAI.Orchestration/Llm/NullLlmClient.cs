@@ -16,4 +16,7 @@ public sealed class NullLlmClient : ILlmClient
         yield return LlmStreamEvent.Final("LLM client not configured.");
         await Task.CompletedTask;
     }
+
+    public Task<bool> PingAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(true);
 }

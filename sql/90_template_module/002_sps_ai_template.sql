@@ -18,7 +18,7 @@ BEGIN
                 SELECT
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
-                    0 AS rowCount
+                    0 AS [rowCount]
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
             ),
             columns = (

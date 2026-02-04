@@ -31,7 +31,7 @@ BEGIN
                 SELECT
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
-                    @RowCount AS rowCount,
+                    @RowCount AS [rowCount],
                     @ModelId AS modelId,
                     NULLIF(LTRIM(RTRIM(@Language)), '') AS language
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
@@ -106,7 +106,7 @@ BEGIN
                 SELECT
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
-                    @RowCount AS rowCount,
+                    @RowCount AS [rowCount],
                     @ModelId AS modelId,
                     NULLIF(LTRIM(RTRIM(@Language)), '') AS language
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
@@ -174,7 +174,7 @@ BEGIN
                 SELECT
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
-                    @RowCount AS rowCount,
+                    @RowCount AS [rowCount],
                     @ModelId AS modelId,
                     NULLIF(LTRIM(RTRIM(@Language)), '') AS language
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
@@ -253,7 +253,7 @@ BEGIN
                 SELECT
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
-                    @RowCount AS rowCount,
+                    @RowCount AS [rowCount],
                     @ModelId AS modelId,
                     NULLIF(LTRIM(RTRIM(@Language)), '') AS language
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
@@ -340,7 +340,7 @@ BEGIN
                 SELECT
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
-                    (SELECT COUNT(1) FROM Selected) AS rowCount,
+                    (SELECT COUNT(1) FROM Selected) AS [rowCount],
                     NULLIF(LTRIM(RTRIM(@Language)), '') AS language
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
             ),
@@ -410,7 +410,7 @@ BEGIN
                 SELECT
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
-                    @RowCount AS rowCount,
+                    @RowCount AS [rowCount],
                     NULLIF(LTRIM(RTRIM(@Language)), '') AS language
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
             ),

@@ -276,14 +276,14 @@ BEGIN
                f.PhysicalColumn,
                LOWER(LTRIM(RTRIM(d.op))),
                d.value,
-               d.values
+               d.[values]
         FROM OPENJSON(@PlanJson, '$.where') j
         CROSS APPLY (
             SELECT
                 JSON_VALUE(j.value, '$.field') AS field,
                 JSON_VALUE(j.value, '$.op') AS op,
                 JSON_VALUE(j.value, '$.value') AS value,
-                JSON_QUERY(j.value, '$.values') AS values
+                JSON_QUERY(j.value, '$.values') AS [values]
         ) d
         INNER JOIN @Fields f ON f.FieldKey = d.field
         WHERE f.IsFilterable = 1;
@@ -296,7 +296,7 @@ BEGIN
                     JSON_VALUE(j.value, '$.field') AS field,
                     JSON_VALUE(j.value, '$.op') AS op,
                     JSON_VALUE(j.value, '$.value') AS value,
-                    JSON_QUERY(j.value, '$.values') AS values
+                    JSON_QUERY(j.value, '$.values') AS [values]
             ) d
             LEFT JOIN @Fields f ON f.FieldKey = d.field
             WHERE f.FieldKey IS NULL OR f.IsFilterable = 0 OR d.op IS NULL OR LOWER(LTRIM(RTRIM(d.op))) NOT IN
@@ -522,14 +522,14 @@ BEGIN
                    f.PhysicalColumn,
                    LOWER(LTRIM(RTRIM(d.op))),
                    d.value,
-                   d.values
+                   d.[values]
             FROM OPENJSON(@PlanJson, '$.drilldown.where') j
             CROSS APPLY (
                 SELECT
                     JSON_VALUE(j.value, '$.field') AS field,
                     JSON_VALUE(j.value, '$.op') AS op,
                     JSON_VALUE(j.value, '$.value') AS value,
-                    JSON_QUERY(j.value, '$.values') AS values
+                    JSON_QUERY(j.value, '$.values') AS [values]
             ) d
             INNER JOIN @DrilldownFields f ON f.FieldKey = d.field
             WHERE f.IsFilterable = 1;
@@ -542,7 +542,7 @@ BEGIN
                         JSON_VALUE(j.value, '$.field') AS field,
                         JSON_VALUE(j.value, '$.op') AS op,
                         JSON_VALUE(j.value, '$.value') AS value,
-                        JSON_QUERY(j.value, '$.values') AS values
+                        JSON_QUERY(j.value, '$.values') AS [values]
                 ) d
                 LEFT JOIN @DrilldownFields f ON f.FieldKey = d.field
                 WHERE f.FieldKey IS NULL OR f.IsFilterable = 0 OR d.op IS NULL OR LOWER(LTRIM(RTRIM(d.op))) NOT IN
@@ -731,19 +731,19 @@ WHERE 1 = 1' + @TenantFilter + @DrilldownTenantFilter + @WhereSql + @DrilldownWh
                 SELECT
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
-                    @RowCount AS rowCount,
+                    @RowCount AS [rowCount],
                     @DatasetKey AS datasetKey,
                     JSON_QUERY(@PlanJson) AS [plan],
                     CASE WHEN @WarningsJson IS NOT NULL THEN JSON_QUERY(@WarningsJson) END AS warnings
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
             ),
-            columns = (
+            [columns] = (
                 SELECT [name], [type], [descriptionKey]
                 FROM @Columns
                 ORDER BY Ordinal
                 FOR JSON PATH
             ),
-            rows = (
+            [rows] = (
                 SELECT *
                 FROM #AtomicResults
                 FOR JSON PATH

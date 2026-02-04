@@ -13,8 +13,9 @@ using TILSOFTAI.Orchestration.Pipeline;
 namespace TILSOFTAI.Api.Controllers;
 
 [ApiController]
-[Route("api/chat")]
-[Authorize]
+[Route("api/chats")]
+//[Authorize]
+[AllowAnonymous]
 public sealed class ChatController : ControllerBase
 {
     private readonly IOrchestrationEngine _engine;

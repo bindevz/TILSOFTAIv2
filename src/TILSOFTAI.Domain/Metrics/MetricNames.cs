@@ -17,5 +17,11 @@ namespace TILSOFTAI.Domain.Metrics
         public const string ErrorsTotal = "tilsoftai_errors_total";
         public const string RetryAttemptsTotal = "tilsoftai_retry_attempts_total";
         public const string RetryExhaustedTotal = "tilsoftai_retry_exhausted_total";
+        
+        // SQL Connection Pool
+        public const string SqlConnectionOpenTotal = "tilsoftai_sql_connection_open_total";
+        public const string SqlConnectionTimeoutTotal = "tilsoftai_sql_connection_timeout_total";
+        public const string SqlPoolActiveConnections = "tilsoftai_sql_pool_active_connections";
+        public const string SqlPoolIdleConnections = "tilsoftai_sql_pool_idle_connections";
     }
 }

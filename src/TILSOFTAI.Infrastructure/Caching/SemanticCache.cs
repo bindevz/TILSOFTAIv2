@@ -5,6 +5,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Caching;
+using TILSOFTAI.Domain.Common;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Caching;
@@ -21,7 +22,7 @@ public sealed class SemanticCache : ISemanticCache
     private readonly SensitiveDataOptions _sensitiveDataOptions;
     private readonly SqlOptions _sqlOptions;
     private readonly ILogger<SemanticCache> _logger;
-    private readonly TimeSpan _defaultTtl;
+   private readonly TimeSpan _defaultTtl;
 
     public SemanticCache(
         IRedisCacheProvider cacheProvider,
@@ -46,7 +47,7 @@ public sealed class SemanticCache : ISemanticCache
 
     public bool Enabled => _options.Enabled;
 
-    public async Task<string?> TryGetAnswerAsync(
+    public async Task<Result<string?>> TryGetAnswerAsync(
         TilsoftExecutionContext context,
         string module,
         string question,
@@ -57,23 +58,37 @@ public sealed class SemanticCache : ISemanticCache
     {
         if (!CanCache(containsSensitive))
         {
-            return null;
+            return Result<string?>.Success(null);
         }
 
         var (digest, _, _, _) = ComputeCacheDigests(context, question, tools, planJson);
 
         if (_options.EnableSqlVectorCache)
         {
-            var sqlAnswer = await TryGetSqlCacheAsync(context, module, digest, ct);
-            if (!string.IsNullOrWhiteSpace(sqlAnswer))
+            var sqlResult = await TryGetSqlCacheAsync(context, module, digest, ct);
+            if (!sqlResult.IsSuccess)
             {
-                return sqlAnswer;
+                // Log but continue to Redis cache
+                _logger.LogWarning("SQL cache failed, falling back to Redis. Error: {Code}", sqlResult.Error?.Code);
+            }
+            else if (!string.IsNullOrWhiteSpace(sqlResult.Value))
+            {
+                return Result<string?>.Success(sqlResult.Value);
             }
         }
 
         var key = BuildKey(context.TenantId, module, "semantic_answer", digest);
 
-        return await _cacheProvider.GetStringAsync(key, ct);
+        try
+        {
+            var answer = await _cacheProvider.GetStringAsync(key, ct);
+            return Result<string?>.Success(answer);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Redis semantic cache read failed.");
+            return Result<string?>.Failure(TILSOFTAI.Domain.Common.Errors.CacheReadFailed(key, ex));
+        }
     }
 
     public async Task SetAnswerAsync(
@@ -178,7 +193,7 @@ public sealed class SemanticCache : ISemanticCache
         var normalizedQuestion = NormalizeQuestion(question);
         var questionHash = ComputeHash(normalizedQuestion);
         var toolDigest = ComputeToolDigest(tools);
-        var planDigest = string.IsNullOrWhiteSpace(planJson) ? string.Empty : ComputeHash(planJson);
+        var planDigest =string.IsNullOrWhiteSpace(planJson) ? string.Empty : ComputeHash(planJson);
 
         var digest = ComputeHash(context.Language, normalizedQuestion, toolDigest, planDigest);
         return (digest, questionHash, toolDigest, planDigest);
@@ -213,7 +228,7 @@ public sealed class SemanticCache : ISemanticCache
         return ComputeHash(builder.ToString());
     }
 
-    private async Task<string?> TryGetSqlCacheAsync(
+    private async Task<Result<string?>> TryGetSqlCacheAsync(
         TilsoftExecutionContext context,
         string module,
         string cacheKey,
@@ -221,7 +236,7 @@ public sealed class SemanticCache : ISemanticCache
     {
         if (string.IsNullOrWhiteSpace(_sqlOptions.ConnectionString))
         {
-            return null;
+            return Result<string?>.Success(null);
         }
 
         try
@@ -240,12 +255,17 @@ public sealed class SemanticCache : ISemanticCache
             command.Parameters.Add(new SqlParameter("@CacheKey", cacheKey));
 
             var result = await command.ExecuteScalarAsync(ct);
-            return result as string;
+            return Result<string?>.Success(result as string);
+        }
+        catch (SqlException ex) when (ex.Number == -2)
+        {
+            _logger.LogWarning(ex, "SQL semantic cache read timed out.");
+            return Result<string?>.Failure(TILSOFTAI.Domain.Common.Errors.SqlTimeout("ai_semantic_cache_get"));
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "SQL semantic cache read failed.");
-            return null;
+            return Result<string?>.Failure(TILSOFTAI.Domain.Common.Errors.CacheReadFailed(cacheKey, ex));
         }
     }
 

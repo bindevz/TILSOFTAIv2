@@ -46,7 +46,7 @@ public sealed class DiagnosticsRunToolHandler : IToolHandler
 
         // Execute diagnostics via ISqlExecutor
         var result = await _sqlExecutor.ExecuteDiagnosticsAsync(
-            "ai_diagnostics_execute",
+            "ai_diagnostics_run",
             context.TenantId,
             module,
             ruleKey,

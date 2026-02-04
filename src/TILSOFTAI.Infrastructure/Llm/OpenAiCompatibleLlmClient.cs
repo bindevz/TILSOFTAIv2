@@ -300,4 +300,20 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         }
         return body;
     }
+
+    public async Task<bool> PingAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // Try to list models as a lightweight ping
+            using var request = new HttpRequestMessage(HttpMethod.Get, "models");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

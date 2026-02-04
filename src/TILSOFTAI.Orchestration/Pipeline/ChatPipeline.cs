@@ -133,7 +133,7 @@ public sealed class ChatPipeline
 
         if (request.AllowCache && _semanticCache.Enabled && !policy.ShouldBypassCache)
         {
-            var cached = await _semanticCache.TryGetAnswerAsync(
+            var cacheResult = await _semanticCache.TryGetAnswerAsync(
                 ctx,
                 "chat",
                 normalized,
@@ -141,6 +141,14 @@ public sealed class ChatPipeline
                 null,
                 containsSensitive,
                 ct);
+
+            var cached = cacheResult.Match(
+                onSuccess: answer => answer,
+                onFailure: error =>
+                {
+                    _logger.LogWarning("Cache retrieval failed: {Code} - {Message}", error.Code, error.Message);
+                    return null; // Graceful degradation - proceed without cache
+                });
 
             if (!string.IsNullOrWhiteSpace(cached))
             {

@@ -5,6 +5,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Caching;
+using TILSOFTAI.Domain.Common;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Caching;
@@ -37,7 +38,7 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
 
     public bool Enabled => _options.Enabled && string.Equals(_options.Mode, "SqlVector", StringComparison.OrdinalIgnoreCase);
 
-    public async Task<string?> TryGetAnswerAsync(
+    public async Task<Result<string?>> TryGetAnswerAsync(
         TilsoftExecutionContext context,
         string module,
         string question,
@@ -46,17 +47,17 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
         bool containsSensitive,
         CancellationToken ct)
     {
-        if (!Enabled) return null;
-        if (containsSensitive && _sensitiveDataOptions.DisableCachingWhenSensitive) return null;
-        if (containsSensitive && !_options.AllowSensitiveContent) return null;
+        if (!Enabled) return Result<string?>.Success(null);
+        if (containsSensitive && _sensitiveDataOptions.DisableCachingWhenSensitive) return Result<string?>.Success(null);
+        if (containsSensitive && !_options.AllowSensitiveContent) return Result<string?>.Success(null);
 
         try
         {
             var normalizedQuestion = NormalizeQuestion(question);
-            var (digest, _, toolDigest, planDigest) = ComputeCacheDigests(context, normalizedQuestion, tools, planJson);
+           var (digest, _, toolDigest, planDigest) = ComputeCacheDigests(context, normalizedQuestion, tools, planJson);
             
             // 1. Generate Embedding (SQL or C#)
-            float[] embedding;
+            float[]? embedding;
             if (_options.UseSqlEmbeddings)
             {
                 _logger.LogDebug("Attempting to use SQL Server AI embeddings.");
@@ -74,16 +75,22 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
                 embedding = await _embeddingClient.GenerateEmbeddingAsync(normalizedQuestion, ct);
             }
             
-            if (embedding.Length == 0) return null;
+            if (embedding == null || embedding.Length == 0) return Result<string?>.Success(null);
 
             // 2. Search in SQL
             // We verify tool digest and plan digest match exactly to ensure context safety
-            return await SearchSqlAsync(context, module, normalizedQuestion, toolDigest, planDigest, embedding, ct);
+            var answer = await SearchSqlAsync(context, module, normalizedQuestion, toolDigest, planDigest, embedding, ct);
+            return Result<string?>.Success(answer);
+        }
+        catch (SqlException ex) when (ex.Number == -2)
+        {
+            _logger.LogWarning(ex, "SqlVectorSemanticCache lookup timed out.");
+            return Result<string?>.Failure(TILSOFTAI.Domain.Common.Errors.SqlTimeout("app_semanticcache_search"));
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "SqlVectorSemanticCache lookup failed.");
-            return null;
+            return Result<string?>.Failure(TILSOFTAI.Domain.Common.Errors.CacheReadFailed("vector_cache", ex));
         }
     }
 
@@ -107,7 +114,7 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
             var (digest, questionHash, toolDigest, planDigest) = ComputeCacheDigests(context, normalizedQuestion, tools, planJson);
 
             // 1. Generate Embedding (SQL or C#)
-            float[] embedding;
+            float[]? embedding;
             if (_options.UseSqlEmbeddings)
             {
                 _logger.LogDebug("Attempting to use SQL Server AI embeddings for cache write.");
@@ -125,7 +132,7 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
                 embedding = await _embeddingClient.GenerateEmbeddingAsync(normalizedQuestion, ct);
             }
             
-            if (embedding.Length == 0) return;
+            if (embedding == null || embedding.Length == 0) return;
 
             // 2. Upsert in SQL
             await UpsertSqlAsync(context, module, questionHash, normalizedQuestion, toolDigest, planDigest, answer, embedding, ct);

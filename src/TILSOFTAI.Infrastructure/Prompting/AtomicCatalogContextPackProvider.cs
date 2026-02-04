@@ -40,12 +40,10 @@ public sealed class AtomicCatalogContextPackProvider : IContextPackProvider
         // Fetch dataset catalog
         var datasetParams = new Dictionary<string, object?>
         {
-            ["@TenantId"] = string.IsNullOrWhiteSpace(context.TenantId) ? null : context.TenantId,
-            ["@Language"] = resolvedLanguage,
-            ["@DefaultLanguage"] = _localizationOptions.DefaultLanguage
+            ["@TenantId"] = string.IsNullOrWhiteSpace(context.TenantId) ? null : context.TenantId
         };
 
-        var datasets = await _sqlExecutor.ExecuteQueryAsync("dbo.ai_atomic_catalog_datasets", datasetParams, cancellationToken);
+        var datasets = await _sqlExecutor.ExecuteQueryAsync("dbo.app_catalog_dataset_list", datasetParams, cancellationToken);
 
         if (datasets.Count == 0)
         {
@@ -79,12 +77,10 @@ public sealed class AtomicCatalogContextPackProvider : IContextPackProvider
             var fieldParams = new Dictionary<string, object?>
             {
                 ["@TenantId"] = string.IsNullOrWhiteSpace(context.TenantId) ? null : context.TenantId,
-                ["@DatasetCode"] = datasetCode,
-                ["@Language"] = resolvedLanguage,
-                ["@DefaultLanguage"] = _localizationOptions.DefaultLanguage
+                ["@DatasetKey"] = datasetCode
             };
 
-            var fields = await _sqlExecutor.ExecuteQueryAsync("dbo.ai_atomic_catalog_fields", fieldParams, cancellationToken);
+            var fields = await _sqlExecutor.ExecuteQueryAsync("dbo.app_catalog_field_list", fieldParams, cancellationToken);
             var limitedFields = fields.Take(MaxFieldsPerDataset).ToList();
 
             if (limitedFields.Count > 0)

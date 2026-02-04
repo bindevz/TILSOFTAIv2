@@ -4,5 +4,5 @@ public sealed class RedisOptions
 {
     public bool Enabled { get; set; }
     public string ConnectionString { get; set; } = string.Empty;
-    public int DefaultTtlMinutes { get; set; } = 30;
+    public int DefaultTtlMinutes { get; set; } = ConfigurationDefaults.Redis.DefaultTtlMinutes;
 }

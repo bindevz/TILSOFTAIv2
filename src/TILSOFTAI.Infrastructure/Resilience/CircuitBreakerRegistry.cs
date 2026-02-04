@@ -60,7 +60,7 @@ public class CircuitBreakerRegistry
         return CircuitState.Closed; // Default if not found/initialized
     }
 
-    public Dictionary<string, CircuitState> GetAllStates()
+    public IReadOnlyDictionary<string, CircuitState> GetAllStates()
     {
         return _policies.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.State);
     }

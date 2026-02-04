@@ -95,6 +95,41 @@ public sealed class InMemoryErrorCatalog : IErrorCatalog
                 ["en"] = "Chat request failed.",
                 ["vi"] = "Yeu cau chat that bai."
             },
+            [ErrorCode.InvalidInput] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Invalid input provided.",
+                ["vi"] = "Du lieu dau vao khong hop le."
+            },
+            [ErrorCode.InputTooLong] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Input exceeds maximum allowed length.",
+                ["vi"] = "Du lieu dau vao vuot qua do dai toi da."
+            },
+            [ErrorCode.ForbiddenPattern] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Input contains forbidden patterns.",
+                ["vi"] = "Du lieu dau vao chua mau cam."
+            },
+            [ErrorCode.PromptInjectionDetected] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Potential prompt injection detected.",
+                ["vi"] = "Phat hien kha nang tan cong prompt."
+            },
+            [ErrorCode.ServiceUnavailable] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "The service is temporarily unavailable.",
+                ["vi"] = "Dich vu tam thoi khong kha dung."
+            },
+            [ErrorCode.DependencyFailure] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "An external dependency failed.",
+                ["vi"] = "Mot phu thuoc ben ngoai that bai."
+            },
+            [ErrorCode.CircuitOpen] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Circuit breaker is open. Service temporarily unavailable.",
+                ["vi"] = "Circuit breaker dang mo. Dich vu tam thoi khong kha dung."
+            },
             [ErrorCode.UnhandledError] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["en"] = "An unexpected error occurred.",

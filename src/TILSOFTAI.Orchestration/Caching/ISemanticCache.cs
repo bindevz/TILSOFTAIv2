@@ -1,3 +1,4 @@
+using TILSOFTAI.Domain.Common;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Tools;
 
@@ -7,7 +8,7 @@ public interface ISemanticCache
 {
     bool Enabled { get; }
 
-    Task<string?> TryGetAnswerAsync(
+    Task<Result<string?>> TryGetAnswerAsync(
         TilsoftExecutionContext context,
         string module,
         string question,

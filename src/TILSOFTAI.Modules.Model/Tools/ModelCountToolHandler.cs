@@ -26,17 +26,11 @@ public sealed class ModelCountToolHandler : ModelToolHandlerBase, IToolHandler
             throw new InvalidOperationException("Tool SP name is required.");
         }
 
-        using var args = ParseArguments(argumentsJson);
-        string? season = null;
-        if (args.RootElement.TryGetProperty("season", out var seasonNode)
-            && seasonNode.ValueKind == System.Text.Json.JsonValueKind.String)
-        {
-            season = seasonNode.GetString();
-        }
-
+        // Pass the full argumentsJson as @ArgsJson per Patch 26.01 standard contract
+        // The stored procedure will extract the optional "season" filter from the JSON
         var parameters = new Dictionary<string, object?>
         {
-            ["@Season"] = string.IsNullOrWhiteSpace(season) ? DBNull.Value : season
+            ["@ArgsJson"] = string.IsNullOrWhiteSpace(argumentsJson) ? "{}" : argumentsJson
         };
 
         return ExecuteAsync(tool.SpName, context, parameters, cancellationToken);

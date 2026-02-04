@@ -72,7 +72,7 @@ public sealed class ExecutionContextHubFilter : IHubFilter
         finally
         {
             // Clear context to prevent leakage
-            _contextAccessor.Set(null);
+            _contextAccessor.Set(null!);
         }
     }
 

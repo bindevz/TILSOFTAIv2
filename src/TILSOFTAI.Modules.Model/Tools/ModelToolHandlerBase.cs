@@ -90,10 +90,11 @@ public abstract class ModelToolHandlerBase
             throw new InvalidOperationException("Execution context TenantId is required.");
         }
 
+        // Patch 26.01: Model procedures only accept @TenantId and @ArgsJson
+        // Removed @Language parameter to match new signature
         var sqlParams = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
-            ["@TenantId"] = context.TenantId,
-            ["@Language"] = string.IsNullOrWhiteSpace(context.Language) ? DBNull.Value : context.Language
+            ["@TenantId"] = context.TenantId
         };
 
         foreach (var (key, value) in parameters)

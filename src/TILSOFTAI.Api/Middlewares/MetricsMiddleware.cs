@@ -35,18 +35,12 @@ namespace TILSOFTAI.Api.Middlewares
             {
                 { "method", method },
                 { "endpoint", path }, // Be careful with cardinality here in prod
-                { "tenant_id", tenantId }
+                { "tenant_id", tenantId },
+                { "status_code", "0" } // Placeholder, will be set after request completes
             };
             
-            _metrics.RecordGauge(MetricNames.HttpRequestsInProgress, 1, labels); // This should ideally be Up/Down but with gauge we set value. 
-            // Actually, prometheus-net InProgress is usually a Gauge we Inc/Dec.
-            // IMetricsService only has RecordGauge(set value).
-            // To track in-progress properly with RecordGauge(set), we can't easily do it across concurrent requests without atomic inc/dec support in interface.
-            // However, for RED metrics, Duration and Total are most critical. 
-            // InProgress is nice to have.
-            // Let's increment Total here.
-            
-            _metrics.IncrementCounter(MetricNames.HttpRequestsTotal, labels);
+            // Note: We only increment HttpRequestsTotal AFTER the request completes
+            // to ensure the status_code label is populated correctly
 
             var sw = Stopwatch.StartNew();
 

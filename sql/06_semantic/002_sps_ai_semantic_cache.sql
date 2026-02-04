@@ -9,6 +9,7 @@ BEGIN
     PRINT 'SQL 2025 VECTOR type not available. Skipping SemanticCache procedures.';
     RETURN;
 END;
+GO
 
 CREATE OR ALTER PROCEDURE dbo.ai_semantic_cache_get
     @TenantId nvarchar(50),

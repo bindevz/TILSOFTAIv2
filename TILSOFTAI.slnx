@@ -8,4 +8,8 @@
     <Project Path="src/TILSOFTAI.Modules.Platform/TILSOFTAI.Modules.Platform.csproj" />
     <Project Path="src/TILSOFTAI.Orchestration/TILSOFTAI.Orchestration.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/TILSOFTAI.Migrations/TILSOFTAI.Migrations.csproj" />
+  </Folder>
 </Solution>
+

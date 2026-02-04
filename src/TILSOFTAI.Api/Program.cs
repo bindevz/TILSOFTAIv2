@@ -30,8 +30,3 @@ if (!app.Environment.IsDevelopment())
 app.MapTilsoftAi();
 
 app.Run();
-
-public partial class Program
-{
-
-}

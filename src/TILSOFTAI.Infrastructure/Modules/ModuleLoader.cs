@@ -11,6 +11,7 @@ public sealed class ModuleLoader : IModuleLoader
     private readonly IToolRegistry _toolRegistry;
     private readonly INamedToolHandlerRegistry _handlerRegistry;
     private readonly List<Assembly> _loaded = new();
+    private readonly List<ITilsoftModule> _loadedModules = new();
 
     public ModuleLoader(
         ILogger<ModuleLoader> logger,
@@ -68,7 +69,13 @@ public sealed class ModuleLoader : IModuleLoader
             }
 
             module.Register(_toolRegistry, _handlerRegistry);
+            _loadedModules.Add(module);
             _logger.LogInformation("Registered module {ModuleName} from {AssemblyName}.", module.Name, assembly.GetName().Name);
         }
+    }
+
+    public IReadOnlyList<ITilsoftModule> GetLoadedModules()
+    {
+        return _loadedModules.AsReadOnly();
     }
 }
