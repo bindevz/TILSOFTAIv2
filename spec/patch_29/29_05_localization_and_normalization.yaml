@@ -1,0 +1,41 @@
+# File: PATCH_PACK_29/29_05_localization_and_normalization.yaml
+patch_pack: 29
+pack_id: "29_05"
+title: "Language Negotiation + Whitespace Canonicalization (Fix known instability)"
+priority: "P1"
+goal:
+  - "Vietnamese-first UX works by default."
+  - "Whitespace noise no longer breaks intent/tool routing."
+
+tasks:
+  - id: "29_05_T01"
+    summary: "Enable Vietnamese in Localization and prefer user language"
+    files:
+      - path: "src/TILSOFTAI.Api/appsettings.json"
+        diff_intent: >
+          Add 'vi' to SupportedLanguages; set DefaultLanguage='vi' if product is VN-first,
+          or keep default 'en' but implement 'reply in user's language' in PromptBuilder.
+      - path: "src/TILSOFTAI.Api/Auth/ExecutionContextResolver.cs"
+        diff_intent: "Prefer detected user language hint when present; fallback to default."
+    acceptance_criteria:
+      - "Vietnamese question returns Vietnamese answer without manual selection."
+    checklist:
+      - "[ ] Do not break existing auth/tenant resolution."
+
+  - id: "29_05_T02"
+    summary: "Implement PromptTextCanonicalizer and integrate into normalization pipeline"
+    files:
+      - path: "src/TILSOFTAI.Orchestration/Normalization/PromptTextCanonicalizer.cs"
+        diff_intent: >
+          New utility: normalize CRLF/LF, collapse spaces/tabs/NBSP, trim per line,
+          collapse excessive blank lines; optional letter-digit boundary spacing.
+      - path: "src/TILSOFTAI.Orchestration/Normalization/NormalizationService.cs"
+        diff_intent: "Apply canonicalize pre/post rule application + guard against whitespace stripping."
+    acceptance_criteria:
+      - "Inputs with NBSP/tabs/multi-space normalize deterministically."
+      - "No accidental removal of all whitespace after normalization rules."
+    checklist:
+      - "[ ] Add unit tests for canonicalizer (pack 29_09)."
+
+exit_gate:
+  - "Language and whitespace are stable enough for deterministic analytics routing."

@@ -1,0 +1,38 @@
+# File: PATCH_PACK_29/29_07_rbac_and_security.yaml
+patch_pack: 29
+pack_id: "29_07"
+title: "Enterprise Governance: RequiredRoles + Role-aware SecurityTag Policy"
+priority: "P1"
+goal:
+  - "Analytics schema exploration and restricted data access are controlled by RBAC."
+
+tasks:
+  - id: "29_07_T01"
+    summary: "Set RequiredRoles for analytics tools and enforce in ToolGovernance"
+    files:
+      - path: "sql/99_seed/analytics/001_seed_toolcatalog_analytics.sql"
+        diff_intent: "Set RequiredRoles='analytics.read' for catalog_search/get_dataset/validate/execute."
+      - path: "src/TILSOFTAI.Orchestration/Tools/ToolGovernance.cs"
+        diff_intent: "Enforce RequiredRoles against ExecutionContext roles; return structured denial."
+    acceptance_criteria:
+      - "User without analytics.read cannot call analytics tools."
+    checklist:
+      - "[ ] Denial message is deterministic and safe (no leakage)."
+
+  - id: "29_07_T02"
+    summary: "Implement role-aware SecurityPolicy for SecurityTag (PII/SENSITIVE/RESTRICTED)"
+    files:
+      - path: "src/TILSOFTAI.Domain/Security/AnalyticsSecurityPolicy.cs"
+        diff_intent: "Define mapping: role -> allowed tags; default deny restricted."
+      - path: "sql/02_modules/analytics/004_sps_ai_analytics.sql"
+        diff_intent: "Validator checks roles/tags (via argsJson roles or tenant policy table) OR returns SECURITY_VIOLATION."
+      - path: "sql/02_modules/analytics/005_sps_ai_analytics_execute.sql"
+        diff_intent: "Execution re-validates security tags (defense-in-depth)."
+    acceptance_criteria:
+      - "Restricted fields are blocked unless role allows."
+      - "Policy is consistent between validate and execute."
+    checklist:
+      - "[ ] Decide where roles are sourced for SQL (ArgsJson roles array vs config table)."
+
+exit_gate:
+  - "RBAC + SecurityTag enforcement meets enterprise expectation."

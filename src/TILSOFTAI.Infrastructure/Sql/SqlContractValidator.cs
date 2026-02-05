@@ -77,10 +77,10 @@ public sealed class SqlContractValidator
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         const string query = """
-SELECT s.name AS SchemaName, p.name AS ProcName
-FROM sys.procedures p
-INNER JOIN sys.schemas s ON p.schema_id = s.schema_id
-""";
+        SELECT s.name AS SchemaName, p.name AS ProcName
+        FROM sys.procedures p
+        INNER JOIN sys.schemas s ON p.schema_id = s.schema_id
+        """;
 
         await using var command = new SqlCommand(query, connection) { CommandType = CommandType.Text };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);

@@ -48,17 +48,32 @@ public sealed class NormalizationService : INormalizationService
             throw new ArgumentNullException(nameof(context));
         }
 
+        // PATCH 29.05: Pre-canonicalize whitespace for deterministic processing
+        var output = PromptTextCanonicalizer.Canonicalize(input);
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return string.Empty;
+        }
+
         var tenantId = string.IsNullOrWhiteSpace(context.TenantId) ? "unknown" : context.TenantId;
         var rules = await GetRulesAsync(tenantId, ct);
 
-        var output = input.Trim();
         foreach (var rule in rules.OrderBy(rule => rule.Priority).ThenBy(rule => rule.RuleKey, StringComparer.OrdinalIgnoreCase))
         {
             output = ApplyRule(output, rule);
         }
 
         output = _seasonNormalizer.ExpandMarkedSeasons(output);
-        return output.Trim();
+        
+        // PATCH 29.05: Post-canonicalize and guard against empty result
+        output = PromptTextCanonicalizer.Canonicalize(output);
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            // Guard: if normalization stripped all content, return original (trimmed)
+            return input.Trim();
+        }
+        
+        return output;
     }
 
     private async Task<IReadOnlyList<NormalizationRuleRecord>> GetRulesAsync(string tenantId, CancellationToken ct)

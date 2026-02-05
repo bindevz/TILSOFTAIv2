@@ -302,6 +302,7 @@ GO
 
 -- analytics_validate_plan: Validate atomic plan before execution
 -- PATCH 28: Complete validation with metrics/joins/security/time-window
+-- PATCH 29.03: Exact token matching, error code alignment, time-window tied to TimeColumn
 CREATE OR ALTER PROCEDURE dbo.ai_analytics_validate_plan
     @TenantId   NVARCHAR(50),
     @PlanJson   NVARCHAR(MAX)
@@ -320,7 +321,11 @@ BEGIN
     DECLARE @MaxMetrics INT = 3;
     DECLARE @MaxJoins INT = 1;
     DECLARE @MaxTimeWindowDays INT = 366;
-    DECLARE @AllowedMetricOps NVARCHAR(500) = 'count,countDistinct,sum,avg,min,max';
+    
+    -- PATCH 29.03: Build exact-match allowlist using table variable
+    DECLARE @AllowedOps TABLE (Op NVARCHAR(50) PRIMARY KEY);
+    INSERT INTO @AllowedOps (Op) VALUES 
+        ('count'), ('countdistinct'), ('sum'), ('avg'), ('min'), ('max');
     
     -- Validate inputs
     IF @TenantId IS NULL OR @TenantId = ''
@@ -345,17 +350,32 @@ BEGIN
         SET @ErrorMessage = 'datasetKey is required.';
     END
     
+    -- Get dataset metadata (needed for TimeColumn check)
+    DECLARE @TimeColumn NVARCHAR(200) = NULL;
+    
     -- Validate dataset exists and accessible
-    IF @IsValid = 1 AND NOT EXISTS (
-        SELECT 1 FROM dbo.DatasetCatalog 
-        WHERE DatasetKey = @DatasetKey 
-          AND IsEnabled = 1
-          AND (TenantId = @TenantId OR TenantId IS NULL)
-    )
+    IF @IsValid = 1
     BEGIN
-        SET @IsValid = 0;
-        SET @ErrorCode = 'DATASET_NOT_FOUND';
-        SET @ErrorMessage = 'Dataset not found or disabled: ' + @DatasetKey;
+        IF NOT EXISTS (
+            SELECT 1 FROM dbo.DatasetCatalog 
+            WHERE DatasetKey = @DatasetKey 
+              AND IsEnabled = 1
+              AND (TenantId = @TenantId OR TenantId IS NULL)
+        )
+        BEGIN
+            SET @IsValid = 0;
+            SET @ErrorCode = 'DATASET_NOT_FOUND';
+            SET @ErrorMessage = 'Dataset not found or disabled: ' + @DatasetKey;
+        END
+        ELSE
+        BEGIN
+            -- Get TimeColumn for time-window validation
+            SELECT @TimeColumn = TimeColumn
+            FROM dbo.DatasetCatalog
+            WHERE DatasetKey = @DatasetKey 
+              AND IsEnabled = 1
+              AND (TenantId = @TenantId OR TenantId IS NULL);
+        END
     END
     
     -- Check limit
@@ -424,15 +444,6 @@ BEGIN
             SELECT FieldKey FROM dbo.FieldCatalog WHERE DatasetKey = @DatasetKey AND IsEnabled = 1
         );
         
-        -- Check orderBy fields
-        INSERT INTO @InvalidFields (FieldKey, Context)
-        SELECT JSON_VALUE(value, '$.field'), 'orderBy'
-        FROM OPENJSON(@PlanJson, '$.orderBy')
-        WHERE JSON_VALUE(value, '$.field') IS NOT NULL
-          AND JSON_VALUE(value, '$.field') NOT IN (
-            SELECT FieldKey FROM dbo.FieldCatalog WHERE DatasetKey = @DatasetKey AND IsEnabled = 1
-        );
-        
         IF EXISTS (SELECT 1 FROM @InvalidFields)
         BEGIN
             SET @IsValid = 0;
@@ -442,59 +453,138 @@ BEGIN
         END
     END
     
-    -- Validate metrics fields and operations
-    DECLARE @InvalidMetrics TABLE (FieldKey NVARCHAR(200), Op NVARCHAR(50), Reason NVARCHAR(200));
+    -- PATCH 29.03 T01/T02: Validate metrics with EXACT token matching and aligned error codes
+    DECLARE @InvalidMetrics TABLE (FieldKey NVARCHAR(200), Op NVARCHAR(50), Reason NVARCHAR(200), ErrorType NVARCHAR(50));
     
     IF @IsValid = 1
     BEGIN
-        -- Check each metric
-        INSERT INTO @InvalidMetrics (FieldKey, Op, Reason)
+        -- Check each metric for field existence and op validity
+        INSERT INTO @InvalidMetrics (FieldKey, Op, Reason, ErrorType)
         SELECT 
             JSON_VALUE(value, '$.field') AS FieldKey,
-            JSON_VALUE(value, '$.op') AS Op,
+            LOWER(LTRIM(RTRIM(JSON_VALUE(value, '$.op')))) AS Op,
             CASE
-                WHEN JSON_VALUE(value, '$.field') NOT IN (
-                    SELECT FieldKey FROM dbo.FieldCatalog WHERE DatasetKey = @DatasetKey AND IsEnabled = 1
-                ) THEN 'Field not found'
-                WHEN CHARINDEX(JSON_VALUE(value, '$.op'), @AllowedMetricOps) = 0 
-                THEN 'Operation not allowed'
+                -- Check if field exists (except * which is allowed for count)
+                WHEN JSON_VALUE(value, '$.field') IS NOT NULL 
+                     AND JSON_VALUE(value, '$.field') <> '*'
+                     AND JSON_VALUE(value, '$.field') NOT IN (
+                         SELECT FieldKey FROM dbo.FieldCatalog WHERE DatasetKey = @DatasetKey AND IsEnabled = 1
+                     ) THEN 'Field not found'
+                -- PATCH 29.03: Exact match check using table join
+                WHEN LOWER(LTRIM(RTRIM(JSON_VALUE(value, '$.op')))) NOT IN (SELECT Op FROM @AllowedOps)
+                THEN 'Invalid operation'
+                -- Check field-specific allowed aggregations  
                 WHEN fc.AllowedAggregations IS NOT NULL 
-                     AND CHARINDEX(JSON_VALUE(value, '$.op'), fc.AllowedAggregations) = 0
+                     AND EXISTS (
+                         SELECT 1 FROM STRING_SPLIT(fc.AllowedAggregations, ',') allowed
+                         WHERE LOWER(LTRIM(RTRIM(allowed.value))) = LOWER(LTRIM(RTRIM(JSON_VALUE(m.value, '$.op'))))
+                     ) = 0
                 THEN 'Operation not allowed for this field'
                 ELSE NULL
-            END AS Reason
-        FROM OPENJSON(@PlanJson, '$.metrics')
+            END AS Reason,
+            CASE
+                WHEN JSON_VALUE(value, '$.field') IS NOT NULL 
+                     AND JSON_VALUE(value, '$.field') <> '*'
+                     AND JSON_VALUE(value, '$.field') NOT IN (
+                         SELECT FieldKey FROM dbo.FieldCatalog WHERE DatasetKey = @DatasetKey AND IsEnabled = 1
+                     ) THEN 'UNKNOWN_FIELD'
+                ELSE 'INVALID_OP'
+            END AS ErrorType
+        FROM OPENJSON(@PlanJson, '$.metrics') m
         LEFT JOIN dbo.FieldCatalog fc 
             ON fc.DatasetKey = @DatasetKey 
-            AND fc.FieldKey = JSON_VALUE(value, '$.field')
-            AND fc.IsEnabled = 1
-        WHERE JSON_VALUE(value, '$.field') IS NOT NULL;
+            AND fc.FieldKey = JSON_VALUE(m.value, '$.field')
+            AND fc.IsEnabled = 1;
         
-        -- Filter out nulls and check for errors
+        -- Filter out valid metrics
         DELETE FROM @InvalidMetrics WHERE Reason IS NULL;
         
         IF EXISTS (SELECT 1 FROM @InvalidMetrics)
         BEGIN
             SET @IsValid = 0;
-            SET @ErrorCode = 'INVALID_METRIC';
+            -- PATCH 29.03 T02: Use INVALID_OP or UNKNOWN_FIELD based on error type
+            SELECT TOP 1 @ErrorCode = ErrorType FROM @InvalidMetrics;
             SELECT @ErrorMessage = 'Invalid metrics: ' + STRING_AGG(FieldKey + '.' + Op + ' (' + Reason + ')', '; ')
             FROM @InvalidMetrics;
         END
     END
     
-    -- Validate security tags (PII fields require special roles - simplified check)
+    -- PATCH 29.03 T04: Validate orderBy against groupBy fields AND metric aliases
+    DECLARE @GroupByFields TABLE (FieldKey NVARCHAR(200));
+    DECLARE @MetricAliases TABLE (Alias NVARCHAR(200));
+    
+    IF @IsValid = 1
+    BEGIN
+        -- Collect valid groupBy fields
+        INSERT INTO @GroupByFields (FieldKey)
+        SELECT value FROM OPENJSON(@PlanJson, '$.groupBy');
+        
+        -- Collect metric aliases
+        INSERT INTO @MetricAliases (Alias)
+        SELECT COALESCE(
+            JSON_VALUE(value, '$.alias'),
+            JSON_VALUE(value, '$.as'),
+            JSON_VALUE(value, '$.op') + '_' + COALESCE(JSON_VALUE(value, '$.field'), 'total')
+        )
+        FROM OPENJSON(@PlanJson, '$.metrics');
+        
+        -- Also add raw field catalog fields
+        INSERT INTO @GroupByFields (FieldKey)
+        SELECT FieldKey FROM dbo.FieldCatalog WHERE DatasetKey = @DatasetKey AND IsEnabled = 1
+        EXCEPT SELECT FieldKey FROM @GroupByFields;
+        
+        -- Check orderBy fields
+        DECLARE @InvalidOrderBy TABLE (FieldKey NVARCHAR(200));
+        
+        INSERT INTO @InvalidOrderBy (FieldKey)
+        SELECT JSON_VALUE(value, '$.field')
+        FROM OPENJSON(@PlanJson, '$.orderBy')
+        WHERE JSON_VALUE(value, '$.field') IS NOT NULL
+          AND JSON_VALUE(value, '$.field') NOT IN (SELECT FieldKey FROM @GroupByFields)
+          AND JSON_VALUE(value, '$.field') NOT IN (SELECT Alias FROM @MetricAliases);
+        
+        IF EXISTS (SELECT 1 FROM @InvalidOrderBy)
+        BEGIN
+            SET @IsValid = 0;
+            SET @ErrorCode = 'UNKNOWN_FIELD';
+            SELECT @ErrorMessage = 'Unknown orderBy field(s): ' + STRING_AGG(FieldKey, ', ') + 
+                '. Must be a groupBy field or metric alias.'
+            FROM @InvalidOrderBy;
+        END
+    END
+    
+    -- PATCH 29.07: Validate security tags with role-aware access
+    -- Roles can be passed via plan JSON as "_roles" array
+    DECLARE @UserRoles TABLE (Role NVARCHAR(100));
+    DECLARE @AllowedTags TABLE (Tag NVARCHAR(50));
+    
+    -- Parse roles from plan (e.g., "$._roles": ["analytics.read", "analytics.pii"])
+    INSERT INTO @UserRoles (Role)
+    SELECT value FROM OPENJSON(@PlanJson, '$._roles');
+    
+    -- Build allowed tags based on roles
+    INSERT INTO @AllowedTags (Tag) VALUES ('PUBLIC'), ('INTERNAL'); -- All authenticated users
+    IF EXISTS (SELECT 1 FROM @UserRoles WHERE Role = 'analytics.pii')
+        INSERT INTO @AllowedTags (Tag) VALUES ('PII');
+    IF EXISTS (SELECT 1 FROM @UserRoles WHERE Role = 'analytics.sensitive')
+        INSERT INTO @AllowedTags (Tag) VALUES ('SENSITIVE');
+    IF EXISTS (SELECT 1 FROM @UserRoles WHERE Role = 'analytics.admin')
+    BEGIN
+        INSERT INTO @AllowedTags (Tag) VALUES ('PII'), ('SENSITIVE'), ('RESTRICTED');
+    END
+    
     DECLARE @RestrictedFields TABLE (FieldKey NVARCHAR(200), SecurityTag NVARCHAR(50));
     
     IF @IsValid = 1
     BEGIN
-        -- Find any referenced fields with security tags
+        -- Find any referenced fields with security tags NOT in allowed list
         INSERT INTO @RestrictedFields (FieldKey, SecurityTag)
         SELECT fc.FieldKey, fc.SecurityTag
         FROM dbo.FieldCatalog fc
         WHERE fc.DatasetKey = @DatasetKey 
           AND fc.IsEnabled = 1
           AND fc.SecurityTag IS NOT NULL
-          AND fc.SecurityTag IN ('PII', 'SENSITIVE', 'RESTRICTED')
+          AND fc.SecurityTag NOT IN (SELECT Tag FROM @AllowedTags)
           AND (
               fc.FieldKey IN (SELECT value FROM OPENJSON(@PlanJson, '$.select'))
               OR fc.FieldKey IN (SELECT JSON_VALUE(value, '$.field') FROM OPENJSON(@PlanJson, '$.where'))
@@ -506,26 +596,61 @@ BEGIN
         BEGIN
             SET @IsValid = 0;
             SET @ErrorCode = 'SECURITY_VIOLATION';
-            SELECT @ErrorMessage = 'Restricted fields referenced: ' + STRING_AGG(FieldKey + ' (' + SecurityTag + ')', ', ')
+            SELECT @ErrorMessage = 'Access denied to restricted fields: ' + STRING_AGG(FieldKey + ' (' + SecurityTag + ')', ', ')
             FROM @RestrictedFields;
         END
     END
     
-    -- Validate time window (if time filters are present)
+    -- PATCH 29.03 T03: Time-window validation ONLY for dataset's TimeColumn or date semantic type
     IF @IsValid = 1
     BEGIN
-        DECLARE @StartDate DATE, @EndDate DATE;
+        -- Get date/time fields for this dataset
+        DECLARE @TimeFields TABLE (FieldKey NVARCHAR(200));
         
-        -- Try to extract time range from where conditions
-        SELECT @StartDate = TRY_CONVERT(DATE, JSON_VALUE(value, '$.value'))
-        FROM OPENJSON(@PlanJson, '$.where')
-        WHERE JSON_VALUE(value, '$.op') IN ('>=', '>', 'gte', 'gt')
-          AND TRY_CONVERT(DATE, JSON_VALUE(value, '$.value')) IS NOT NULL;
+        INSERT INTO @TimeFields (FieldKey)
+        SELECT FieldKey FROM dbo.FieldCatalog 
+        WHERE DatasetKey = @DatasetKey 
+          AND IsEnabled = 1
+          AND (
+              FieldKey = @TimeColumn
+              OR SemanticType IN ('date', 'datetime', 'timestamp')
+          );
         
-        SELECT @EndDate = TRY_CONVERT(DATE, JSON_VALUE(value, '$.value'))
+        -- Only validate time window if filtering on a time field
+        DECLARE @StartDate DATETIME2, @EndDate DATETIME2;
+        DECLARE @TimeFieldFiltered BIT = 0;
+        
+        -- Check if any where clause targets a time field with date operators
+        SELECT TOP 1 
+            @TimeFieldFiltered = 1,
+            @StartDate = CASE 
+                WHEN JSON_VALUE(value, '$.op') IN ('>=', '>', 'gte', 'gt', 'between') 
+                THEN TRY_CONVERT(DATETIME2, JSON_VALUE(value, '$.value'))
+                ELSE @StartDate
+            END,
+            @EndDate = CASE 
+                WHEN JSON_VALUE(value, '$.op') IN ('<=', '<', 'lte', 'lt') 
+                THEN TRY_CONVERT(DATETIME2, JSON_VALUE(value, '$.value'))
+                -- Handle between operator (value2 for end date)
+                WHEN JSON_VALUE(value, '$.op') = 'between'
+                THEN TRY_CONVERT(DATETIME2, JSON_VALUE(value, '$.value2'))
+                ELSE @EndDate
+            END
         FROM OPENJSON(@PlanJson, '$.where')
-        WHERE JSON_VALUE(value, '$.op') IN ('<=', '<', 'lte', 'lt')
-          AND TRY_CONVERT(DATE, JSON_VALUE(value, '$.value')) IS NOT NULL;
+        WHERE JSON_VALUE(value, '$.field') IN (SELECT FieldKey FROM @TimeFields);
+        
+        -- Also try to parse gte/lte style with separate entries
+        SELECT @StartDate = COALESCE(@StartDate, TRY_CONVERT(DATETIME2, JSON_VALUE(value, '$.value')))
+        FROM OPENJSON(@PlanJson, '$.where')
+        WHERE JSON_VALUE(value, '$.field') IN (SELECT FieldKey FROM @TimeFields)
+          AND JSON_VALUE(value, '$.op') IN ('>=', '>', 'gte', 'gt')
+          AND @StartDate IS NULL;
+        
+        SELECT @EndDate = COALESCE(@EndDate, TRY_CONVERT(DATETIME2, JSON_VALUE(value, '$.value')))
+        FROM OPENJSON(@PlanJson, '$.where')
+        WHERE JSON_VALUE(value, '$.field') IN (SELECT FieldKey FROM @TimeFields)
+          AND JSON_VALUE(value, '$.op') IN ('<=', '<', 'lte', 'lt')
+          AND @EndDate IS NULL;
         
         IF @StartDate IS NOT NULL AND @EndDate IS NOT NULL
         BEGIN
@@ -567,10 +692,11 @@ BEGIN
             VALUES ('Use limit <= ' + CAST(@MaxRows AS NVARCHAR(10)));
         END
         
-        IF @ErrorCode = 'INVALID_METRIC'
+        -- PATCH 29.03: Standardize on INVALID_OP
+        IF @ErrorCode = 'INVALID_OP'
         BEGIN
             INSERT INTO @Suggestions (Suggestion)
-            VALUES ('Allowed metric operations: ' + @AllowedMetricOps);
+            VALUES ('Allowed metric operations: count, countDistinct, sum, avg, min, max');
         END
         
         IF @ErrorCode = 'SECURITY_VIOLATION'

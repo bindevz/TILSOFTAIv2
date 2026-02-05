@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Orchestration.Analytics;
 using TILSOFTAI.Orchestration.Caching;
 using TILSOFTAI.Orchestration.Compaction;
 using TILSOFTAI.Orchestration.Conversations;
@@ -31,6 +32,9 @@ public sealed class ChatPipeline
     private readonly RecursionPolicy _recursionPolicy;
     private readonly IInputValidator _inputValidator;
     private readonly ChatOptions _chatOptions;
+    private readonly AnalyticsOptions _analyticsOptions;
+    private readonly AnalyticsIntentDetector _intentDetector;
+    private readonly AnalyticsOrchestrator? _analyticsOrchestrator;
     private readonly ILogger<ChatPipeline> _logger;
 
     public ChatPipeline(
@@ -46,6 +50,9 @@ public sealed class ChatPipeline
         RecursionPolicy recursionPolicy,
         IInputValidator inputValidator,
         IOptions<ChatOptions> chatOptions,
+        IOptions<AnalyticsOptions> analyticsOptions,
+        AnalyticsIntentDetector intentDetector,
+        AnalyticsOrchestrator? analyticsOrchestrator,
         ILogger<ChatPipeline> logger,
         Observability.ChatPipelineInstrumentation instrumentation,
         IMetricsService metrics)
@@ -62,6 +69,9 @@ public sealed class ChatPipeline
         _recursionPolicy = recursionPolicy ?? throw new ArgumentNullException(nameof(recursionPolicy));
         _inputValidator = inputValidator ?? throw new ArgumentNullException(nameof(inputValidator));
         _chatOptions = chatOptions?.Value ?? throw new ArgumentNullException(nameof(chatOptions));
+        _analyticsOptions = analyticsOptions?.Value ?? new AnalyticsOptions();
+        _intentDetector = intentDetector ?? throw new ArgumentNullException(nameof(intentDetector));
+        _analyticsOrchestrator = analyticsOrchestrator; // Optional, null if not registered
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _instrumentation = instrumentation ?? throw new ArgumentNullException(nameof(instrumentation));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
@@ -154,6 +164,41 @@ public sealed class ChatPipeline
             {
                 request.StreamObserver?.Report(ChatStreamEvent.Final(cached));
                 return ChatResult.Ok(cached);
+            }
+        }
+
+        // PATCH 29.02: Detect analytics intent and route to deterministic orchestrator
+        if (_analyticsOptions.Enabled && _analyticsOrchestrator != null)
+        {
+            var intent = _intentDetector.Detect(normalized);
+            if (intent.IsAnalytics)
+            {
+                _logger.LogInformation(
+                    "AnalyticsIntentDetected | Confidence: {Confidence} | Hints: {Hints}",
+                    intent.Confidence, string.Join(", ", intent.Hints));
+
+                var analyticsResult = await _analyticsOrchestrator.ExecuteAsync(normalized, intent, ctx, ct);
+                
+                if (analyticsResult.Success && !string.IsNullOrEmpty(analyticsResult.Content))
+                {
+                    var assistantMessage = new ChatMessage(ChatRoles.Assistant, analyticsResult.Content);
+                    await _conversationStore.SaveAssistantMessageAsync(ctx, assistantMessage, policy, ct);
+                    request.StreamObserver?.Report(ChatStreamEvent.Final(analyticsResult.Content));
+
+                    pipelineStopwatch.Stop();
+                    _logger.LogInformation(
+                        "PipelineCompleted | ConversationId: {ConversationId} | Duration: {DurationMs}ms | Mode: Analytics | ToolCalls: {ToolCalls}",
+                        ctx.ConversationId, pipelineStopwatch.ElapsedMilliseconds, analyticsResult.ToolCallCount);
+
+                    return ChatResult.Ok(analyticsResult.Content);
+                }
+                else if (!analyticsResult.Success)
+                {
+                    _logger.LogWarning(
+                        "AnalyticsOrchestratorFailed | Error: {Error} | Falling back to normal flow",
+                        analyticsResult.ErrorMessage);
+                    // Fall through to normal tool-calling flow
+                }
             }
         }
 

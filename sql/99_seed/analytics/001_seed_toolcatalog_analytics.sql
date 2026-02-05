@@ -16,7 +16,7 @@ BEGIN
         'catalog_search',
         'ai_catalog_search',
         1,
-        NULL,
+        'analytics.read',
         '{
             "type": "object",
             "required": ["query"],
@@ -102,7 +102,7 @@ BEGIN
         'catalog_get_dataset',
         'ai_catalog_get_dataset',
         1,
-        NULL,
+        'analytics.read',
         '{
             "type": "object",
             "required": ["datasetKey"],
@@ -180,7 +180,7 @@ BEGIN
         'analytics_validate_plan',
         'ai_analytics_validate_plan',
         1,
-        NULL,
+        'analytics.read',
         '{
             "type": "object",
             "required": ["planJson"],
@@ -214,4 +214,167 @@ IF VALIDATION FAILS:
         'Validate an atomic plan before execution. Returns validation result with error details and suggestions.'
     );
 END;
+GO
+
+-- analytics_execute_plan tool (PATCH 29.01)
+IF NOT EXISTS (SELECT 1 FROM dbo.ToolCatalog WHERE ToolName = 'analytics_execute_plan')
+BEGIN
+    INSERT INTO dbo.ToolCatalog
+    (ToolName, SpName, IsEnabled, RequiredRoles, JsonSchema, Instruction, Description)
+    VALUES
+    (
+        'analytics_execute_plan',
+        'ai_analytics_execute_plan',
+        1,
+        'analytics.read',
+        '{
+            "type": "object",
+            "required": ["datasetKey", "metrics"],
+            "additionalProperties": false,
+            "properties": {
+                "datasetKey": {
+                    "type": "string",
+                    "description": "The exact datasetKey from catalog_get_dataset",
+                    "minLength": 1,
+                    "maxLength": 200
+                },
+                "metrics": {
+                    "type": "array",
+                    "description": "Aggregation metrics to compute",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "items": {
+                        "type": "object",
+                        "required": ["op"],
+                        "properties": {
+                            "field": {
+                                "type": "string",
+                                "description": "Field to aggregate (optional for count)"
+                            },
+                            "op": {
+                                "type": "string",
+                                "enum": ["count", "countDistinct", "sum", "avg", "min", "max"],
+                                "description": "Aggregation operation"
+                            },
+                            "alias": {
+                                "type": "string",
+                                "description": "Output column name (auto-generated if omitted)"
+                            }
+                        }
+                    }
+                },
+                "groupBy": {
+                    "type": "array",
+                    "description": "Fields to group by (max 4)",
+                    "maxItems": 4,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "where": {
+                    "type": "array",
+                    "description": "Filter conditions",
+                    "items": {
+                        "type": "object",
+                        "required": ["field", "op"],
+                        "properties": {
+                            "field": { "type": "string" },
+                            "op": { "type": "string", "enum": ["eq", "ne", "gt", "gte", "lt", "lte", "like", "in", "between"] },
+                            "value": { "type": "string" },
+                            "values": { "type": "array", "items": { "type": "string" } }
+                        }
+                    }
+                },
+                "orderBy": {
+                    "type": "array",
+                    "description": "Sort by groupBy field or metric alias",
+                    "items": {
+                        "type": "object",
+                        "required": ["field"],
+                        "properties": {
+                            "field": { "type": "string", "description": "groupBy field or metric alias" },
+                            "dir": { "type": "string", "enum": ["asc", "desc"], "default": "desc" }
+                        }
+                    }
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum rows to return (default 200, max 200)",
+                    "minimum": 1,
+                    "maximum": 200,
+                    "default": 200
+                }
+            }
+        }',
+        'Use this tool to EXECUTE a validated analytics plan with aggregate metrics.
+
+WHEN TO CALL:
+- After analytics_validate_plan returns isValid=true
+- When you need totals, breakdowns, or aggregations (count, sum, avg, etc.)
+
+WORKFLOW:
+1. catalog_search → find dataset
+2. catalog_get_dataset → get full schema  
+3. analytics_validate_plan → validate your plan
+4. analytics_execute_plan → execute and get results (THIS TOOL)
+
+INPUTS:
+- datasetKey: from catalog_get_dataset
+- metrics: array of {field, op, alias}
+  - op: count, countDistinct, sum, avg, min, max
+  - alias: optional output column name
+- groupBy: optional array of field keys (max 4)
+- where: optional filter conditions
+- orderBy: optional, reference groupBy field or metric alias
+- limit: max 200 rows
+
+OUTPUT:
+- meta: rowCount, truncated, durationMs, freshness
+- columns: column definitions
+- rows: aggregated data rows
+- warnings: any execution warnings
+
+SECURITY:
+- Requires analytics.read role
+- Tenant isolation enforced
+- Field-level aggregation rules respected',
+        'Execute a validated analytics plan with aggregate metrics (count, sum, avg, etc.) and return results.'
+    );
+END;
+GO
+
+-- analytics_execute_plan translations
+IF NOT EXISTS (SELECT 1 FROM dbo.ToolCatalogTranslation WHERE ToolName = 'analytics_execute_plan' AND Language = 'en')
+BEGIN
+    INSERT INTO dbo.ToolCatalogTranslation (ToolName, Language, Instruction, Description)
+    VALUES
+    (
+        'analytics_execute_plan',
+        'en',
+        'Execute a validated analytics plan. Call after analytics_validate_plan returns isValid=true. Supports count, sum, avg, min, max, countDistinct with groupBy and filters.',
+        'Execute analytics aggregation queries and return totals/breakdowns.'
+    );
+END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.ToolCatalogTranslation WHERE ToolName = 'analytics_execute_plan' AND Language = 'vi')
+BEGIN
+    INSERT INTO dbo.ToolCatalogTranslation (ToolName, Language, Instruction, Description)
+    VALUES
+    (
+        'analytics_execute_plan',
+        'vi',
+        'Thực thi kế hoạch phân tích đã được xác thực. Gọi sau khi analytics_validate_plan trả về isValid=true. Hỗ trợ count, sum, avg, min, max, countDistinct với groupBy và bộ lọc.',
+        'Thực thi truy vấn tổng hợp phân tích và trả về tổng/phân tích chi tiết.'
+    );
+END;
+GO
+
+/*******************************************************************************
+* PATCH 29.07: Enforce analytics.read role for all analytics tools
+*******************************************************************************/
+UPDATE dbo.ToolCatalog 
+SET RequiredRoles = 'analytics.read'
+WHERE ToolName IN ('catalog_search', 'catalog_get_dataset', 'analytics_validate_plan', 'analytics_execute_plan')
+  AND (RequiredRoles IS NULL OR RequiredRoles <> 'analytics.read');
 GO

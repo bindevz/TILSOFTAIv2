@@ -55,4 +55,30 @@ public sealed class AnalyticsOptions
     /// Default insight cache TTL in seconds.
     /// </summary>
     public int InsightCacheTtlSeconds { get; set; } = 300;
+
+    /// <summary>
+    /// Enable deterministic analytics orchestration.
+    /// When enabled, analytics queries bypass free-form LLM flow.
+    /// PATCH 29.02
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Maximum tool calls per analytics turn.
+    /// PATCH 29.02
+    /// </summary>
+    public int MaxToolCallsPerTurn { get; set; } = 10;
+
+    /// <summary>
+    /// Default TopN limit for breakdowns.
+    /// PATCH 29.02
+    /// </summary>
+    public int DefaultTopN { get; set; } = 10;
+
+    /// <summary>
+    /// Maximum breakdown tables to include in output.
+    /// PATCH 29.02
+    /// </summary>
+    public int MaxBreakdownTables { get; set; } = 2;
 }
+

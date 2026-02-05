@@ -34,6 +34,12 @@ public sealed class ToolCatalogContextPackProvider : IContextPackProvider
             throw new ArgumentNullException(nameof(context));
         }
 
+        // PATCH 29.04: When disabled, return empty to avoid tool instruction duplication
+        if (!_options.Enabled)
+        {
+            return new Dictionary<string, string>();
+        }
+
         var tools = await _toolCatalogResolver.GetResolvedToolsAsync(cancellationToken);
         if (tools.Count == 0)
         {

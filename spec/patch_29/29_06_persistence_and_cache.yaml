@@ -1,0 +1,35 @@
+# File: PATCH_PACK_29/29_06_persistence_and_cache.yaml
+patch_pack: 29
+pack_id: "29_06"
+title: "Make Analytics Persistence + Insight Cache Real (Options must work)"
+priority: "P1"
+goal:
+  - "Use existing app_analytics_* procs for audit trail and cache hits."
+
+tasks:
+  - id: "29_06_T01"
+    summary: "Add AnalyticsPersistence service calling app_analytics_taskframe_save and app_analytics_planvalidationerror_save"
+    files:
+      - path: "src/TILSOFTAI.Orchestration/Analytics/AnalyticsPersistence.cs"
+        diff_intent: "New service to persist taskframe + validation errors using existing SQL abstraction."
+      - path: "src/TILSOFTAI.Orchestration/Analytics/AnalyticsOrchestrator.cs"
+        diff_intent: "Call persistence hooks when AnalyticsOptions.EnableTaskFramePersistence=true."
+    acceptance_criteria:
+      - "Each analytics request writes TaskFrame; validation failures write PlanValidationError."
+    checklist:
+      - "[ ] Ensure PII-safe logging."
+
+  - id: "29_06_T02"
+    summary: "Add AnalyticsCache service using app_analytics_insightcache_get/set"
+    files:
+      - path: "src/TILSOFTAI.Orchestration/Analytics/AnalyticsCache.cs"
+        diff_intent: "New service for get/set; key = tenantId + normalizedQuery + planHash; TTL from options."
+      - path: "src/TILSOFTAI.Orchestration/Analytics/AnalyticsOrchestrator.cs"
+        diff_intent: "Check cache before execute; set after InsightOutput assembled."
+    acceptance_criteria:
+      - "Repeated identical query within TTL returns cached InsightOutput (cacheHit logged)."
+    checklist:
+      - "[ ] Cache must not bypass security/role checks."
+
+exit_gate:
+  - "Persistence and cache toggles in AnalyticsOptions produce observable effects."

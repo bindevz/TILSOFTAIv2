@@ -1,0 +1,81 @@
+# File: PATCH_PACK_29/29_02_deterministic_orchestration.yaml
+patch_pack: 29
+pack_id: "29_02"
+title: "Deterministic Deep Analytics Orchestration + Stable Rendering"
+priority: "P0"
+goal:
+  - "Stop relying on LLM to self-direct tool order."
+  - "Guarantee stable output contract for analytics queries."
+
+tasks:
+  - id: "29_02_T01"
+    summary: "Implement AnalyticsIntentDetector (rules-first, bounded fallback)"
+    files:
+      - path: "src/TILSOFTAI.Orchestration/Analytics/AnalyticsIntentDetector.cs"
+        diff_intent: >
+          New component: detect analytics intent for queries containing count/top/breakdown/trend phrases (vi+en).
+          Output: (isAnalytics, confidence, hints: entity/season/date tokens).
+    acceptance_criteria:
+      - "Vietnamese queries like 'bao nhiêu', 'phân bổ', 'top' route to analytics."
+      - "False positives are bounded (require metric trigger + entity hint or season/date token)."
+    checklist:
+      - "[ ] No web calls; deterministic rules."
+      - "[ ] Unit test added in pack 29_09."
+
+  - id: "29_02_T02"
+    summary: "Add AnalyticsOrchestrator enforcing: catalog_search -> catalog_get_dataset -> plan -> validate -> execute -> assemble -> render"
+    files:
+      - path: "src/TILSOFTAI.Orchestration/Analytics/AnalyticsOrchestrator.cs"
+        diff_intent: >
+          New orchestrator that:
+          1) canonicalizes input (uses normalization meta from pack 29_05)
+          2) calls catalog_search + catalog_get_dataset (tools) deterministically
+          3) asks LLM to produce plan JSON using schema bundle (short prompt)
+          4) calls analytics_validate_plan; retries plan up to AnalyticsOptions.MaxPlanRetries
+          5) calls analytics_execute_plan (new tool, pack 29_01) for totals + breakdown(s)
+          6) uses InsightAssemblyService to build InsightOutput
+          7) renders final response via InsightRenderer (task 29_02_T03)
+    acceptance_criteria:
+      - "Analytics tool order is deterministic and logged."
+      - "Max tool calls <= AnalyticsOptions.MaxToolCallsPerTurn."
+      - "Final output always follows contract: headline + breakdown table(s) + notes."
+    checklist:
+      - "[ ] Never let LLM run SQL or pick random tools."
+      - "[ ] Retry only on retryable validation errors."
+      - "[ ] Hard cap breakdown tables (e.g., 2: collection + rangeName)."
+
+  - id: "29_02_T03"
+    summary: "Implement InsightRenderer producing stable user-facing format"
+    files:
+      - path: "src/TILSOFTAI.Orchestration/Analytics/InsightRenderer.cs"
+        diff_intent: >
+          Render InsightOutput -> markdown:
+          - Line 1: headline (single line)
+          - Then tables (markdown tables)
+          - Then Notes: bullet list including filter/limit/warnings/freshness
+          Ensure thousands separators and consistent labels.
+    acceptance_criteria:
+      - "Headline is exactly one line."
+      - "Notes always include filter + limit/topN + warnings (or none) + freshness."
+    checklist:
+      - "[ ] Locale-aware number formatting but stable (InvariantCulture with grouping)."
+      - "[ ] No extra prose before headline."
+
+  - id: "29_02_T04"
+    summary: "Wire orchestrator into ChatPipeline for analytics intent"
+    files:
+      - path: "src/TILSOFTAI.Orchestration/ChatPipeline.cs"
+        diff_intent: >
+          Before normal tool-calling loop, detect analytics intent; if true and Analytics.Enabled,
+          route to AnalyticsOrchestrator and return response directly.
+      - path: "src/TILSOFTAI.Domain/Configuration/AnalyticsOptions.cs"
+        diff_intent: "Ensure options include Enabled, MaxToolCallsPerTurn, MaxPlanRetries, TopN defaults."
+    acceptance_criteria:
+      - "Non-analytics queries remain unchanged."
+      - "Analytics queries bypass free-form LLM flow and use orchestrator."
+    checklist:
+      - "[ ] Feature flag controlled by config."
+      - "[ ] No version bump."
+
+exit_gate:
+  - "For 'bao nhiêu model mùa 25/26', system produces deterministic tool sequence and stable output format."

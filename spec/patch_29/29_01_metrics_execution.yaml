@@ -1,0 +1,84 @@
+# File: PATCH_PACK_29/29_01_metrics_execution.yaml
+patch_pack: 29
+pack_id: "29_01"
+title: "Implement Metrics Execution Engine for Deep Analytics"
+priority: "P0"
+goal:
+  - "Make validated analytics plans with metrics actually executable (totals + breakdowns)."
+strategy:
+  recommended: "Create dedicated analytics executor (ai_analytics_execute_plan) rather than rewriting atomic SP."
+  rationale: "Minimize risk; keep atomic stable; analytics executor can enforce stricter governance and metric allowlists."
+
+tasks:
+  - id: "29_01_T01"
+    summary: "Add SQL stored procedure dbo.ai_analytics_execute_plan to execute aggregate metrics securely"
+    files:
+      - path: "sql/02_modules/analytics/005_sps_ai_analytics_execute.sql"
+        diff_intent: >
+          Create OR ALTER dbo.ai_analytics_execute_plan(@TenantId, @ArgsJson) that:
+          - parses datasetKey, where, groupBy, metrics, orderBy, limit, joins(optional 1 hop)
+          - validates again at execution boundary (defense-in-depth): maxRows/maxGroupBy/maxMetrics/maxJoins, allowed ops
+          - uses DatasetCatalog.BaseObject + FieldCatalog.PhysicalColumn mapping to generate parameterized dynamic SQL
+          - supports metrics: count, countDistinct, sum, avg, min, max with aliases
+          - supports orderBy by metric alias or groupBy field
+          - returns JSON: { meta:{rowCount,truncated,durationMs,freshness:{asOfUtc,source}}, columns:[], rows:[], warnings:[] }
+    acceptance_criteria:
+      - "Given season count query plan, SP returns correct total and breakdown counts without scanning full raw rows."
+      - "SP rejects any metric op not in allowlist; rejects unknown field keys; rejects groupBy > MaxGroupBy."
+      - "SP enforces tenant isolation via @TenantId filters (or BaseObject is tenant-scoped view)."
+      - "SP is idempotent and compiles clean on fresh DB."
+    checklist:
+      - "[ ] Use QUOTENAME for identifiers; never concatenate raw user strings into SQL."
+      - "[ ] Whitelist metric ops strictly; match exact tokens (no CHARINDEX substring checks)."
+      - "[ ] Ensure alias collision is prevented (unique metric alias)."
+      - "[ ] Limit is enforced; meta.truncated=true when capped."
+      - "[ ] Freshness uses SYSUTCDATETIME() and source='SQL'."
+
+  - id: "29_01_T02"
+    summary: "Expose analytics_execute_plan as a tool (ToolCatalog seed + translations)"
+    files:
+      - path: "sql/99_seed/analytics/001_seed_toolcatalog_analytics.sql"
+        diff_intent: "Insert/Upsert tool analytics_execute_plan pointing to dbo.ai_analytics_execute_plan with JSON schema."
+      - path: "sql/99_seed/analytics/001_seed_toolcatalog_analytics_translations.sql"
+        diff_intent: "Add vi/en translations with clear contract: when to call; inputs; outputs; limits."
+    acceptance_criteria:
+      - "Tool appears in ToolCatalog and is retrievable by tool loader at runtime."
+      - "Schema exactly matches SP parsing (no drift)."
+    checklist:
+      - "[ ] RequiredRoles set (at least 'analytics.read')."
+      - "[ ] Instruction warns to call validate first, but execution still validates defensively."
+
+  - id: "29_01_T03"
+    summary: "Add C# tool handler AnalyticsExecutePlanToolHandler and register in AnalyticsModule"
+    files:
+      - path: "src/TILSOFTAI.Modules.Analytics/Tools/AnalyticsExecutePlanToolHandler.cs"
+        diff_intent: >
+          New handler that calls dbo.ai_analytics_execute_plan via existing SQL execution abstraction.
+          Must pass tenantId + argsJson, return tool result JSON string unchanged.
+      - path: "src/TILSOFTAI.Modules.Analytics/AnalyticsModule.cs"
+        diff_intent: "Register handler for tool name 'analytics_execute_plan'."
+    acceptance_criteria:
+      - "Tool invocation succeeds end-to-end in local run; returns JSON envelope."
+      - "Handler enforces max payload size and logs duration + planHash (see pack 29_09)."
+    checklist:
+      - "[ ] Use cancellation token."
+      - "[ ] Do not deserialize into dynamic unless needed; pass through safely."
+      - "[ ] No version changes anywhere."
+
+  - id: "29_01_T04"
+    summary: "Add smoke test SQL script to verify SP compilation and basic query"
+    files:
+      - path: "sql/02_modules/analytics/999_smoke_test_analytics_execute.sql"
+        diff_intent: >
+          Add a smoke script that:
+          - asserts proc exists
+          - executes with a minimal plan against a known datasetKey (or uses temp seed dataset)
+          - verifies JSON structure keys exist
+    acceptance_criteria:
+      - "Script runs without error on dev DB."
+    checklist:
+      - "[ ] Idempotent; does not require production data."
+
+exit_gate:
+  - "A validated plan with metrics can be executed and returns correct totals/breakdowns."
+  - "Tool is registered and callable; contract matches SP."

@@ -24,5 +24,6 @@ public sealed class AnalyticsModule : ITilsoftModule
         handlerRegistry.Register("catalog_search", typeof(CatalogSearchToolHandler));
         handlerRegistry.Register("catalog_get_dataset", typeof(CatalogGetDatasetToolHandler));
         handlerRegistry.Register("analytics_validate_plan", typeof(AnalyticsValidatePlanToolHandler));
+        handlerRegistry.Register("analytics_execute_plan", typeof(AnalyticsExecutePlanToolHandler));
     }
 }

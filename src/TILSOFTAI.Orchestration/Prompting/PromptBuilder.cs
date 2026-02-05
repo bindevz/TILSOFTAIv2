@@ -56,13 +56,16 @@ public sealed class PromptBuilder
         };
     }
 
+    // PATCH 29.04: Compact system prompt - no guessing, user language, tool outputs only
     private static string BuildBaseSystemPrompt(TilsoftExecutionContext context)
     {
-        var builder = new StringBuilder();
-        builder.AppendLine("You are TILSOFTAI, an assistant that follows tool instructions and does not guess domain rules.");
-        builder.Append("Respond in language: ").Append(context.Language).AppendLine(".");
-        builder.AppendLine("If tool calls are needed, call tools that match the user's request and follow tool instructions.");
-        return builder.ToString();
+        // Short, deterministic prompt focused on tool behavior
+        var sb = new StringBuilder();
+        sb.AppendLine("You are TILSOFTAI. Strict rules:");
+        sb.AppendLine("1. Use tools for facts; never guess missing data.");
+        sb.AppendLine("2. Follow tool outputs strictly.");
+        sb.AppendLine("3. Reply in user's language unless asked otherwise.");
+        return sb.ToString();
     }
 
     private static string BuildContextSection(IReadOnlyList<KeyValuePair<string, string>> contextPacks)
