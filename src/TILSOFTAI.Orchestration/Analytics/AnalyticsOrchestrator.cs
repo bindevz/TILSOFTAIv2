@@ -20,11 +20,13 @@ public sealed class AnalyticsOrchestrator
 {
     private readonly IToolCatalogResolver _toolCatalogResolver;
     private readonly IToolHandler _toolHandler;
+    private readonly ToolGovernance _toolGovernance;
     private readonly ILlmClient _llmClient;
     private readonly IInsightAssemblyService _insightAssemblyService;
     private readonly InsightRenderer _renderer;
     private readonly AnalyticsPersistence _persistence;
     private readonly AnalyticsCache _cache;
+    private readonly ICacheWriteQueue _cacheWriteQueue;
     private readonly AnalyticsOptions _options;
     private readonly ILogger<AnalyticsOrchestrator> _logger;
 
@@ -36,21 +38,25 @@ public sealed class AnalyticsOrchestrator
     public AnalyticsOrchestrator(
         IToolCatalogResolver toolCatalogResolver,
         IToolHandler toolHandler,
+        ToolGovernance toolGovernance,
         ILlmClient llmClient,
         IInsightAssemblyService insightAssemblyService,
         InsightRenderer renderer,
         AnalyticsPersistence persistence,
         AnalyticsCache cache,
+        ICacheWriteQueue cacheWriteQueue,
         IOptions<AnalyticsOptions> options,
         ILogger<AnalyticsOrchestrator> logger)
     {
         _toolCatalogResolver = toolCatalogResolver ?? throw new ArgumentNullException(nameof(toolCatalogResolver));
         _toolHandler = toolHandler ?? throw new ArgumentNullException(nameof(toolHandler));
+        _toolGovernance = toolGovernance ?? throw new ArgumentNullException(nameof(toolGovernance));
         _llmClient = llmClient ?? throw new ArgumentNullException(nameof(llmClient));
         _insightAssemblyService = insightAssemblyService ?? throw new ArgumentNullException(nameof(insightAssemblyService));
         _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
         _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+        _cacheWriteQueue = cacheWriteQueue ?? throw new ArgumentNullException(nameof(cacheWriteQueue));
         _options = options?.Value ?? new AnalyticsOptions();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -76,7 +82,8 @@ public sealed class AnalyticsOrchestrator
         try
         {
             // PATCH 29.06: Check cache first
-            var cachedInsight = await _cache.TryGetAsync(context.TenantId, userQuery, ct);
+            // PATCH 30.03: Include roles for security-isolated cache
+            var cachedInsight = await _cache.TryGetAsync(context.TenantId, userQuery, context.Roles, ct);
             if (cachedInsight != null)
             {
                 var cachedOutput = _renderer.Render(cachedInsight, language);
@@ -201,15 +208,17 @@ public sealed class AnalyticsOrchestrator
             toolSequence.Add(ToolExecutePlan);
 
             // Step 6: Assemble Insight
+            // PATCH 30.05: Pass validatedPlan for notes fidelity
             var queryResults = ParseQueryResults(executeResult);
             var taskFrame = BuildTaskFrame(userQuery, intent);
-            var insight = await _insightAssemblyService.AssembleAsync(taskFrame, queryResults, context, ct);
+            var insight = await _insightAssemblyService.AssembleAsync(taskFrame, queryResults, validatedPlan, context, ct);
 
             // Step 7: Render
             var renderedOutput = _renderer.Render(insight, language);
 
-            // PATCH 29.06: Cache the insight
-            _ = _cache.SetAsync(context.TenantId, userQuery, insight, ct);
+            // PATCH 31.05: Safe background cache write via Channel queue
+            _cacheWriteQueue.TryEnqueue(new CacheWriteItem(
+                context.TenantId, userQuery, context.Roles, insight));
 
             sw.Stop();
             var finalPlanHash = ComputePlanHash(validatedPlan ?? "");
@@ -246,6 +255,10 @@ public sealed class AnalyticsOrchestrator
         }
     }
 
+    /// <summary>
+    /// PATCH 31.01: Execute tool through unified governance pipeline.
+    /// All tool calls (LLM-driven or orchestrator-driven) go through same governance.
+    /// </summary>
     private async Task<string> ExecuteToolAsync(
         string toolName,
         string argsJson,
@@ -253,16 +266,31 @@ public sealed class AnalyticsOrchestrator
         TilsoftExecutionContext context,
         CancellationToken ct)
     {
-        if (!toolLookup.TryGetValue(toolName, out var tool))
+        _logger.LogDebug("ExecutingTool | Name: {ToolName} | Governed: true", toolName);
+
+        var govResult = await _toolGovernance.ValidateAndExecuteAsync(
+            toolName, argsJson, toolLookup, context, _toolHandler, ct);
+
+        if (!govResult.IsAllowed)
         {
-            throw new InvalidOperationException($"Tool not found: {toolName}");
+            _logger.LogWarning(
+                "ToolGovernanceDenied | Name: {ToolName} | Reason: {Reason} | Code: {Code}",
+                toolName, govResult.DenialReason, govResult.DenialCode);
+
+            // Return structured error JSON instead of throwing
+            return JsonSerializer.Serialize(new
+            {
+                error = true,
+                code = govResult.DenialCode ?? "GOVERNANCE_DENIED",
+                message = govResult.DenialReason
+            });
         }
 
-        _logger.LogDebug("ExecutingTool | Name: {ToolName}", toolName);
-        var result = await _toolHandler.ExecuteAsync(tool, argsJson, context, ct);
-        _logger.LogDebug("ToolComplete | Name: {ToolName} | ResultLength: {Length}", toolName, result?.Length ?? 0);
-        
-        return result ?? "{}";
+        _logger.LogDebug(
+            "ToolComplete | Name: {ToolName} | ResultLength: {Length} | Governed: true",
+            toolName, govResult.Result?.Length ?? 0);
+
+        return govResult.Result ?? "{}";
     }
 
     private static string ExtractSearchQuery(string userQuery, AnalyticsIntentResult? intent)
@@ -413,8 +441,17 @@ JSON:";
             {
                 if (meta.TryGetProperty("truncated", out var t))
                     truncated = t.GetBoolean();
-                if (meta.TryGetProperty("generatedAtUtc", out var g))
+                
+                // PATCH 30.01: Parse meta.freshness.asOfUtc (preferred) or legacy meta.generatedAtUtc
+                if (meta.TryGetProperty("freshness", out var freshness) && 
+                    freshness.TryGetProperty("asOfUtc", out var asOf))
+                {
+                    DateTime.TryParse(asOf.GetString(), out generatedAt);
+                }
+                else if (meta.TryGetProperty("generatedAtUtc", out var g))
+                {
                     DateTime.TryParse(g.GetString(), out generatedAt);
+                }
             }
 
             if (doc.RootElement.TryGetProperty("warnings", out var w) && w.ValueKind == JsonValueKind.Array)
@@ -569,6 +606,57 @@ JSON:";
         var hash = System.Security.Cryptography.SHA256.HashData(bytes);
         return Convert.ToHexString(hash)[..8].ToLowerInvariant();
     }
+
+    /// <summary>
+    /// PATCH 30.04: Quick catalog_search for borderline intent tie-breaking.
+    /// Returns whether any datasets match the entity hint.
+    /// </summary>
+    public async Task<CatalogSearchResult> TryCatalogSearchAsync(
+        string entityHint, 
+        TilsoftExecutionContext context, 
+        CancellationToken ct)
+    {
+        try
+        {
+            var tools = await _toolCatalogResolver.GetResolvedToolsAsync(ct);
+            var toolLookup = tools.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+            
+            if (!toolLookup.TryGetValue(ToolCatalogSearch, out var tool))
+            {
+                _logger.LogWarning("catalog_search tool not available for tie-breaker");
+                return new CatalogSearchResult { HasResults = false };
+            }
+            
+            var searchArgs = JsonSerializer.Serialize(new { query = entityHint, topK = 3 });
+            var searchResult = await ExecuteToolAsync(ToolCatalogSearch, searchArgs, toolLookup, context, ct);
+            
+            if (string.IsNullOrEmpty(searchResult))
+                return new CatalogSearchResult { HasResults = false };
+            
+            using var doc = JsonDocument.Parse(searchResult);
+            if (doc.RootElement.TryGetProperty("datasets", out var datasets) && 
+                datasets.ValueKind == JsonValueKind.Array &&
+                datasets.GetArrayLength() > 0)
+            {
+                return new CatalogSearchResult { HasResults = true };
+            }
+
+            return new CatalogSearchResult { HasResults = false };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Catalog search tie-breaker failed for entity: {Entity}", entityHint);
+            return new CatalogSearchResult { HasResults = false };
+        }
+    }
+}
+
+/// <summary>
+/// PATCH 30.04: Result of catalog search for intent tie-breaking.
+/// </summary>
+public sealed class CatalogSearchResult
+{
+    public bool HasResults { get; set; }
 }
 
 /// <summary>
@@ -583,3 +671,4 @@ public sealed class AnalyticsOrchestratorResult
     public List<string> ToolSequence { get; set; } = new();
     public long DurationMs { get; set; }
 }
+

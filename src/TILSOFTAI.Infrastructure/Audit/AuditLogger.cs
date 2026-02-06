@@ -73,6 +73,29 @@ public sealed class AuditLogger : IAuditLogger
         EnqueueEvent(auditEvent);
     }
 
+    /// <summary>PATCH 31.06: Log governance decision (allow/deny).</summary>
+    public void LogGovernanceEvent(GovernanceAuditEvent @event)
+    {
+        // Map string EventType to enum
+        var eventTypeEnum = @event.EventType == "governance.allow" 
+            ? AuditEventType.Governance_Allow 
+            : AuditEventType.Governance_Deny;
+        
+        if (!_options.ShouldAudit(eventTypeEnum)) return;
+
+        var auditEvent = new AuditEvent
+        {
+            EventType = eventTypeEnum,
+            TenantId = @event.TenantId,
+            UserId = @event.UserId,
+            CorrelationId = @event.CorrelationId,
+            Details = System.Text.Json.JsonSerializer.SerializeToDocument(@event),
+            Timestamp = @event.Timestamp,
+            Outcome = @event.EventType == "governance.allow" ? AuditOutcome.Success : AuditOutcome.Denied
+        };
+        EnqueueEvent(auditEvent);
+    }
+
     private void EnqueueEvent(AuditEvent evt)
     {
         try

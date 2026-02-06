@@ -1,0 +1,204 @@
+# ============================================================================
+# PATCH 31_07 — RBAC Gate trước Analytics Routing trong ChatPipeline
+# ============================================================================
+# Severity: P0
+# Audit Finding: P0-GOV-01 (phần 2 — prevention tại routing layer)
+# ============================================================================
+
+patch: 31_07
+title: "Fast RBAC check trong ChatPipeline TRƯỚC khi route sang AnalyticsOrchestrator"
+severity: P0
+status: pending
+
+# ============================================================================
+# VẤN ĐỀ HIỆN TẠI
+# ============================================================================
+problem:
+  description: |
+    ChatPipeline route sang AnalyticsOrchestrator dựa trên intent detection,
+    nhưng KHÔNG kiểm tra roles TRƯỚC khi route. Dù 31_01 đã enforce governance
+    bên trong orchestrator, defense-in-depth yêu cầu block sớm nhất có thể.
+    
+    Hiện tại (ChatPipeline lines 170-195):
+    1. Detect analytics intent → IsAnalytics
+    2. Route trực tiếp sang _analyticsOrchestrator.ExecuteAsync() → KHÔNG CHECK ROLES
+    3. Orchestrator chạy tool calls → governance deny (sau khi đã consume compute)
+
+  impact: |
+    - User không có quyền vẫn trigger analytics orchestrator (waste compute)
+    - Intent detection + catalog search chạy trước khi bị deny
+    - Không có early feedback cho user về thiếu quyền
+
+# ============================================================================
+# GIẢI PHÁP
+# ============================================================================
+solution:
+  approach: |
+    THÊM fast RBAC check ngay SAU intent detection, TRƯỚC khi gọi orchestrator.
+    Nếu user thiếu required role → skip analytics, fall through sang normal LLM flow
+    hoặc trả message thân thiện.
+
+  changes:
+
+    - file: "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+      action: THÊM RBAC gate block
+      description: |
+        Thêm role check giữa intent detection và orchestrator call.
+        Role cần thiết: đọc từ AnalyticsOptions.RequiredRole (default "analytics.read").
+
+      location: "Sau dòng: var intent = _intentDetector.Detect(normalized);"
+      
+      insert_after_intent_detection: |
+        // PATCH 31.07: Fast RBAC gate — check analytics role BEFORE routing
+        if (intent.IsAnalytics)
+        {
+            var requiredRole = _analyticsOptions.RequiredRole ?? "analytics.read";
+            var userRoles = new HashSet<string>(
+                ctx.Roles ?? Array.Empty<string>(), 
+                StringComparer.OrdinalIgnoreCase);
+            
+            if (!userRoles.Contains(requiredRole))
+            {
+                _logger.LogWarning(
+                    "AnalyticsRbacDenied | UserId: {UserId} | TenantId: {TenantId} | " +
+                    "RequiredRole: {RequiredRole} | UserRoles: [{UserRoles}] | " +
+                    "Intent was analytics but user lacks required role",
+                    ctx.UserId, ctx.TenantId, requiredRole,
+                    string.Join(", ", ctx.Roles ?? Array.Empty<string>()));
+                
+                _metrics.Increment(MetricNames.GovernanceDenyTotal, 
+                    new[] { "source", "chatpipeline_rbac_gate" });
+                
+                // Fall through to normal LLM flow (do NOT expose analytics denial to LLM)
+                // The LLM will handle the query as a general question
+                _logger.LogInformation(
+                    "AnalyticsRbacFallthrough | Routing to normal LLM flow instead");
+                
+                // Reset intent so we don't try analytics below
+                intent = AnalyticsIntentResult.None();
+            }
+        }
+
+      full_modified_block: |
+        // PATCH 29.02: Detect analytics intent and route to deterministic orchestrator
+        // PATCH 30.04: LLM-first detection with catalog_search tie-breaker
+        if (_analyticsOptions.Enabled && _analyticsOrchestrator != null)
+        {
+            var intent = _intentDetector.Detect(normalized);
+            
+            // ========== PATCH 31.07: RBAC Gate ==========
+            if (intent.IsAnalytics)
+            {
+                var requiredRole = _analyticsOptions.RequiredRole ?? "analytics.read";
+                var userRoles = new HashSet<string>(
+                    ctx.Roles ?? Array.Empty<string>(), 
+                    StringComparer.OrdinalIgnoreCase);
+                
+                if (!userRoles.Contains(requiredRole))
+                {
+                    _logger.LogWarning(
+                        "AnalyticsRbacDenied | UserId: {UserId} | TenantId: {TenantId} | " +
+                        "RequiredRole: {RequiredRole} | UserRoles: [{UserRoles}]",
+                        ctx.UserId, ctx.TenantId, requiredRole,
+                        string.Join(", ", ctx.Roles ?? Array.Empty<string>()));
+                    
+                    // Neutralize intent → fall through to normal LLM flow
+                    intent = AnalyticsIntentResult.None();
+                }
+            }
+            // ========== END PATCH 31.07 ==========
+            
+            if (intent.IsAnalytics)
+            {
+                _logger.LogInformation(
+                    "AnalyticsIntentDetected | Confidence: {Confidence} | Hints: {Hints}",
+                    intent.Confidence, string.Join(", ", intent.Hints));
+
+                var analyticsResult = await _analyticsOrchestrator.ExecuteAsync(
+                    normalized, intent, ctx, ct);
+                
+                // ... rest of existing analytics handling ...
+            }
+        }
+
+    # ----- CHANGE 2: AnalyticsOptions thêm RequiredRole -----
+    - file: "src/TILSOFTAI.Domain/Configuration/AnalyticsOptions.cs"
+      action: THÊM property
+      description: "Configurable required role cho analytics access"
+
+      add_property: |
+        /// <summary>
+        /// PATCH 31.07: Role required to access analytics features.
+        /// Default: "analytics.read". Set in appsettings: Analytics:RequiredRole
+        /// </summary>
+        public string RequiredRole { get; set; } = "analytics.read";
+
+    # ----- CHANGE 3: AnalyticsIntentResult thêm None() factory -----
+    - file: "src/TILSOFTAI.Orchestration/Analytics/AnalyticsIntentDetector.cs"
+      action: KIỂM TRA có None() factory method chưa
+      description: |
+        Đảm bảo AnalyticsIntentResult có static factory None()
+        trả về result với IsAnalytics = false.
+      
+      ensure_exists: |
+        // Nếu chưa có, thêm:
+        public static AnalyticsIntentResult None() => new()
+        {
+            IsAnalytics = false,
+            Confidence = 0,
+            Hints = Array.Empty<string>()
+        };
+
+# ============================================================================
+# DESIGN DECISIONS
+# ============================================================================
+design_decisions:
+  - question: "Khi user thiếu role, trả error hay fall through sang LLM?"
+    answer: |
+      Fall through sang normal LLM flow. Lý do:
+      1. Không expose hệ thống analytics cho unauthorized users
+      2. LLM vẫn có thể trả lời câu hỏi bằng general knowledge
+      3. Tránh information disclosure (user biết analytics tồn tại)
+      4. Consistent UX — user không nhận error lạ
+
+  - question: "Tại sao cần cả 31_01 (governance trong orchestrator) VÀ 31_07 (RBAC gate)?"
+    answer: |
+      Defense-in-depth:
+      - 31_07: Prevent routing (save compute, early rejection)
+      - 31_01: Enforce per-tool governance (nếu vì lý do nào đó bypass gate)
+      Hai layer bổ sung cho nhau, không thừa.
+
+# ============================================================================
+# ACCEPTANCE CRITERIA
+# ============================================================================
+acceptance_criteria:
+  - "context.Roles thiếu analytics.read → ChatPipeline KHÔNG gọi AnalyticsOrchestrator"
+  - "User thiếu role → request fall through sang normal LLM flow (không error)"
+  - "RBAC denial được logged với WARNING level (userId, tenantId, requiredRole)"
+  - "AnalyticsOptions.RequiredRole có thể cấu hình qua appsettings"
+  - "Default RequiredRole = 'analytics.read'"
+  - "User có đầy đủ roles → analytics routing hoạt động bình thường"
+
+# ============================================================================
+# TEST SCENARIOS
+# ============================================================================
+test_scenarios:
+  - name: "User có analytics.read hỏi câu analytics"
+    context: "Roles = ['analytics.read', 'basic_user']"
+    input: "Thống kê số lượng model theo mùa"
+    expect: "Route sang AnalyticsOrchestrator → analytics result returned"
+
+  - name: "User KHÔNG có analytics.read hỏi câu analytics"
+    context: "Roles = ['basic_user']"
+    input: "Thống kê số lượng model theo mùa"
+    expect: "RBAC gate blocks → fall through → LLM handles as general question"
+
+  - name: "User không có role hỏi câu thường"
+    context: "Roles = ['basic_user']"
+    input: "Cho tôi xem thông tin model ABC"
+    expect: "Intent không phải analytics → LLM flow bình thường (không ảnh hưởng)"
+
+  - name: "AnalyticsOptions.RequiredRole custom"
+    config: "Analytics:RequiredRole = 'data_analyst'"
+    context: "Roles = ['analytics.read']"
+    expect: "RBAC gate blocks (vì cần 'data_analyst', không phải 'analytics.read')"

@@ -1,0 +1,264 @@
+# ============================================================================
+# PATCH 31 — Enterprise Governance & Security Hardening
+# ============================================================================
+# Generated: 2026-02-06
+# Timezone: Asia/Ho_Chi_Minh
+# Base: TILSOFTAIv2 (post-Patch 30)
+# Audit Input: enterprise_audit_patch30.yaml
+# ============================================================================
+
+patch_pack: 31
+title: "PATCH 31 — Enterprise Governance, Secret Hygiene & E2E Hardening"
+doc_type: patch_specification
+
+mode:
+  change_strategy: "overwrite_in_place — XÓA/THAY THẾ, KHÔNG nâng version"
+  versioning: "DO_NOT_BUMP (no csproj/package/assembly version changes)"
+  nuget_policy: "KHÔNG thêm NuGet mới; chỉ dùng thư viện đã có trong project"
+  compatibility: "backwards-compatible; breaking changes chỉ trong analytics flow"
+
+# ============================================================================
+# EXECUTIVE SUMMARY
+# ============================================================================
+executive_summary:
+  audit_status: "NOT_ENTERPRISE_READY (3 P0 + 2 P1 + 1 P2 blockers)"
+  patch_goal: "Đưa TILSOFTv2 đạt chuẩn Enterprise Ready bằng cách khắc phục toàn bộ P0/P1/P2"
+  approach: |
+    Patch 31 tập trung vào 7 lĩnh vực cốt lõi:
+    1. Unified ToolGovernance Pipeline — Xóa bypass, mọi tool call đều qua governance
+    2. Secret Hygiene — Xóa credentials khỏi repo, thay bằng env/secret store
+    3. Type-Safe SQL Filtering — TRY_CONVERT cho datetime2/decimal/int
+    4. CI + Integration Tests — SQL container stage, env-guarded tests
+    5. Safe Cache Write — Channel-based background queue thay fire-and-forget
+    6. Observability Enhancement — Structured audit cho governance decisions
+    7. ChatPipeline RBAC Gate — Block analytics routing khi thiếu role
+
+  capability_matrix_target:
+    schema_rag_catalog: 4      # giữ nguyên
+    llm_plan_generation: 4     # giữ nguyên
+    plan_validation: 4         # giữ nguyên
+    metrics_execution: 4       # giữ nguyên
+    deterministic_orchestration: 5  # 4→5: governance enforced
+    governance_rbac: 5             # 2→5: unified pipeline
+    security_context_trust: 5     # 4→5: no secret leakage
+    cache_safety: 5               # 4→5: safe background write
+    type_correct_filters: 4       # 2→4: TRY_CONVERT enforced
+    stable_output_contract: 4     # giữ nguyên
+    observability: 4              # 3→4: governance audit events
+    ci_and_testing: 4             # 2→4: SQL container + env guard
+    secrets_hygiene: 5            # 0→5: zero secrets in repo
+
+# ============================================================================
+# FINDINGS → PATCHES MAPPING
+# ============================================================================
+findings_to_patches:
+  P0-GOV-01:
+    title: "AnalyticsOrchestrator bypasses ToolGovernance"
+    patches: ["31_01_governance_rbac.yaml", "31_07_chatpipeline_rbac_gate.yaml"]
+    strategy: |
+      THAY THẾ: AnalyticsOrchestrator.ExecuteToolAsync() gọi trực tiếp IToolHandler
+      BẰNG: Gọi qua ToolGovernance.ValidateAndExecute() mới — cùng pipeline với LLM calls.
+      THÊM: RBAC gate trong ChatPipeline trước khi route sang analytics.
+
+  P0-SEC-01:
+    title: "Hardcoded credentials + bin artifacts"
+    patches: ["31_02_secrets_hygiene.yaml"]
+    strategy: |
+      XÓA: Credentials trong appsettings.json (thay bằng placeholder).
+      XÓA: Toàn bộ bin/obj/Release artifacts khỏi repo.
+      THÊM: CI secret scanning gate (gitleaks pattern).
+      THÊM: .gitignore hardening cho bin/obj/publish outputs.
+
+  P1-SQL-01:
+    title: "Type-unsafe filtering (JSON_VALUE string comparisons)"
+    patches: ["31_03_type_safe_sql.yaml"]
+    strategy: |
+      THAY THẾ: WHERE clause builder dùng raw JSON_VALUE
+      BẰNG: TRY_CONVERT based trên FieldCatalog.DataType.
+      THÊM: Error code INVALID_FILTER_VALUE khi cast fails.
+
+  P1-TEST-01:
+    title: "Integration tests skipped; CI lacks SQL stage"
+    patches: ["31_04_ci_integration_tests.yaml"]
+    strategy: |
+      THAY THẾ: [Fact(Skip = "...")] bằng custom env-guarded attribute.
+      THÊM: CI job với SQL Server container (mcr.microsoft.com/mssql/server:2022).
+      THÊM: Migration + seed + test pipeline trong GitHub Actions.
+
+  P2-OPS-01:
+    title: "Fire-and-forget cache write hides failures"
+    patches: ["31_05_cache_safe_write.yaml"]
+    strategy: |
+      THAY THẾ: _ = _cache.SetAsync(...) fire-and-forget
+      BẰNG: Channel<T> background queue với error logging.
+      THÊM: Cache write failure counter metric.
+
+# ============================================================================
+# ENHANCEMENT PATCHES (không từ audit, từ research)
+# ============================================================================
+enhancements:
+  observability:
+    patches: ["31_06_observability_governance.yaml"]
+    strategy: |
+      THÊM: Structured audit events cho governance decisions (allow/deny).
+      THÊM: ActivitySource spans cho tool execution pipeline.
+      THÊM: Prometheus counter cho governance_deny_total.
+
+  chatpipeline_rbac:
+    patches: ["31_07_chatpipeline_rbac_gate.yaml"]
+    strategy: |
+      THÊM: Fast RBAC check trong ChatPipeline TRƯỚC analytics routing.
+      Nếu user thiếu analytics.read → không route, trả message thân thiện.
+
+# ============================================================================
+# SUB-PATCHES INDEX
+# ============================================================================
+sub_patches:
+  - file: "31_01_governance_rbac.yaml"
+    title: "Unified ToolGovernance trong AnalyticsOrchestrator"
+    severity: P0
+    files_modified:
+      - "src/TILSOFTAI.Orchestration/Analytics/AnalyticsOrchestrator.cs"
+      - "src/TILSOFTAI.Orchestration/Tools/ToolGovernance.cs"
+      - "src/TILSOFTAI.Api/Tools/ToolHandlerRouter.cs"
+
+  - file: "31_02_secrets_hygiene.yaml"
+    title: "Xóa credentials, env-based config, CI secret scan"
+    severity: P0
+    files_modified:
+      - "src/TILSOFTAI.Api/appsettings.json"
+      - "src/TILSOFTAI.Api/appsettings.Sample.json"
+      - "src/TILSOFTAI.Api/Program.cs"
+      - ".gitignore"
+      - ".github/workflows/ci.yml"
+
+  - file: "31_03_type_safe_sql.yaml"
+    title: "TRY_CONVERT type-safe filtering trong analytics execute"
+    severity: P1
+    files_modified:
+      - "sql/02_modules/analytics/005_sps_ai_analytics_execute.sql"
+
+  - file: "31_04_ci_integration_tests.yaml"
+    title: "SQL container CI stage + env-guarded tests"
+    severity: P1
+    files_modified:
+      - "tests/TILSOFTAI.IntegrationTests/Analytics/DeepAnalyticsE2ETests.cs"
+      - "tests/TILSOFTAI.IntegrationTests/Infrastructure/SqlServerAvailableFactAttribute.cs"
+      - ".github/workflows/ci.yml"
+
+  - file: "31_05_cache_safe_write.yaml"
+    title: "Channel-based safe cache write thay fire-and-forget"
+    severity: P2
+    files_modified:
+      - "src/TILSOFTAI.Orchestration/Analytics/AnalyticsOrchestrator.cs"
+      - "src/TILSOFTAI.Orchestration/Analytics/AnalyticsCache.cs"
+      - "src/TILSOFTAI.Infrastructure/Caching/CacheWriteBackgroundService.cs (NEW)"
+
+  - file: "31_06_observability_governance.yaml"
+    title: "Audit events + metrics cho governance pipeline"
+    severity: P2
+    files_modified:
+      - "src/TILSOFTAI.Domain/Audit/GovernanceAuditEvent.cs (NEW)"
+      - "src/TILSOFTAI.Domain/Metrics/MetricNames.cs"
+      - "src/TILSOFTAI.Orchestration/Tools/ToolGovernance.cs"
+
+  - file: "31_07_chatpipeline_rbac_gate.yaml"
+    title: "RBAC gate trước analytics routing trong ChatPipeline"
+    severity: P0
+    files_modified:
+      - "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+
+# ============================================================================
+# ACCEPTANCE CRITERIA (toàn bộ Patch 31)
+# ============================================================================
+acceptance_criteria:
+  P0_governance:
+    - "Khi context.Roles thiếu analytics.read → ChatPipeline KHÔNG route tới AnalyticsOrchestrator"
+    - "Mọi deterministic tool call trong AnalyticsOrchestrator đều qua ToolGovernance.Validate()"
+    - "Tool call vi phạm schema/roles → denied + logged via AuditLogger"
+    - "Orchestrator dùng CÙNG governance rules với LLM tool-calling loop"
+
+  P0_secrets:
+    - "KHÔNG file nào trong repo chứa 'Password=' hoặc plain-text credentials"
+    - "KHÔNG có /bin hoặc /obj outputs trong repo"
+    - "CI bao gồm secret scanning gate (gitleaks hoặc grep pattern)"
+    - "appsettings.json chỉ chứa placeholders, KHÔNG chứa real values"
+
+  P1_sql:
+    - "Date filters so sánh dưới dạng datetime2 (TRY_CONVERT)"
+    - "Numeric filters so sánh dưới dạng decimal/int theo DataType"
+    - "Invalid filter values trả structured error INVALID_FILTER_VALUE"
+    - "KHÔNG runtime SQL errors do implicit conversion"
+
+  P1_testing:
+    - "CI fails nếu analytics E2E contract bị break"
+    - "Ít nhất 1 happy-path + 1 security negative test chạy trong CI"
+    - "Tests dùng env guard (TEST_SQL_CONNECTION), không dùng Skip"
+
+  P2_cache:
+    - "Cache write failures được logged (không mất silent)"
+    - "Cache write dùng bounded channel, không block request pipeline"
+    - "Prometheus metric cache_write_failures_total tracked"
+
+# ============================================================================
+# IMPLEMENTATION ORDER (phụ thuộc lẫn nhau)
+# ============================================================================
+implementation_order:
+  phase_1_critical:
+    description: "Khắc phục P0 — phải làm trước khi deploy"
+    patches:
+      - "31_02_secrets_hygiene.yaml"    # Xóa secrets trước (an toàn nhất)
+      - "31_01_governance_rbac.yaml"    # Unified governance
+      - "31_07_chatpipeline_rbac_gate.yaml"  # RBAC gate
+
+  phase_2_hardening:
+    description: "Khắc phục P1 — cần cho enterprise claim"
+    patches:
+      - "31_03_type_safe_sql.yaml"      # Type-safe SQL
+      - "31_04_ci_integration_tests.yaml"  # CI gates
+
+  phase_3_polish:
+    description: "Khắc phục P2 + enhancements"
+    patches:
+      - "31_05_cache_safe_write.yaml"   # Safe cache
+      - "31_06_observability_governance.yaml"  # Observability
+
+# ============================================================================
+# RESEARCH REFERENCES
+# ============================================================================
+research_references:
+  semantic_kernel_filters:
+    url: "https://learn.microsoft.com/en-us/semantic-kernel/concepts/enterprise-readiness/filters"
+    pattern: "IFunctionInvocationFilter — unified governance gate cho mọi tool call"
+
+  autogen_intervention:
+    url: "https://microsoft.github.io/autogen/stable/user-guide/core-user-guide/cookbook/tool-use-with-intervention.html"
+    pattern: "InterventionHandler — pre/post execution hooks"
+
+  microsoft_agent_framework:
+    url: "https://learn.microsoft.com/en-us/agent-framework/overview/agent-framework-overview"
+    pattern: "Convergence of SK + AutoGen — filter pipeline architecture"
+
+  dotnet_secret_management:
+    url: "https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets"
+    pattern: "User Secrets (dev) → Environment Variables (staging) → Azure Key Vault (prod)"
+
+  gitleaks_ci:
+    url: "https://github.com/gitleaks/gitleaks"
+    pattern: "Pre-commit hook + CI action cho secret scanning"
+
+  sql_try_convert:
+    url: "https://learn.microsoft.com/en-us/sql/t-sql/functions/try-convert-transact-sql"
+    pattern: "TRY_CONVERT returns NULL on failure — type-safe dynamic SQL"
+
+  testcontainers_dotnet:
+    url: "https://dotnet.testcontainers.org/"
+    pattern: "Code-driven SQL Server container cho integration tests"
+
+  respawn:
+    url: "https://github.com/jbogard/Respawn"
+    pattern: "Intelligent database cleaner cho SP-heavy integration tests"
+
+  channel_background_service:
+    url: "https://learn.microsoft.com/en-us/dotnet/core/extensions/channels"
+    pattern: "Channel<T> + BackgroundService — safe fire-and-forget"

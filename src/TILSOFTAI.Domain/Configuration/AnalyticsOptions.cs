@@ -80,5 +80,18 @@ public sealed class AnalyticsOptions
     /// PATCH 29.02
     /// </summary>
     public int MaxBreakdownTables { get; set; } = 2;
+
+    /// <summary>
+    /// Allow caching of results that contain security-sensitive data (restricted tags).
+    /// When false (default), results with security warnings are not cached.
+    /// PATCH 30.03
+    /// </summary>
+    public bool AllowCachingRestricted { get; set; } = false;
+
+    /// <summary>
+    /// PATCH 31.07: Role required to access analytics features.
+    /// Default: "analytics.read". Set in appsettings: Analytics:RequiredRole
+    /// </summary>
+    public string RequiredRole { get; set; } = "analytics.read";
 }
 

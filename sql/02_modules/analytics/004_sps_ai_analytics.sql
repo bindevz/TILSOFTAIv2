@@ -8,6 +8,8 @@
 *   3. Apply pagination/limit guards
 *
 * PATCH 28: Enhanced validation for metrics/joins/security/time-window
+* PATCH 30.02: SECURITY - _roles is SERVER-INJECTED by C# tool handlers.
+*              Never trust model-provided _roles. Treat missing _roles as empty.
 *******************************************************************************/
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;

@@ -9,6 +9,9 @@
 *   4. Defense-in-depth validation at execution boundary
 *
 * PATCH 29.01: New SP for secure metrics execution
+* PATCH 30.01: Return single scalar JSON envelope (meta/columns/rows/warnings)
+* PATCH 30.02: SECURITY - _roles is SERVER-INJECTED by C# tool handlers.
+*              Never trust model-provided _roles. Treat missing _roles as empty.
 *******************************************************************************/
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
@@ -32,7 +35,7 @@ BEGIN
     
     -- Allowed metric operations (strict whitelist)
     DECLARE @AllowedOps TABLE (Op NVARCHAR(20) PRIMARY KEY);
-    INSERT INTO @AllowedOps (Op) VALUES ('count'), ('countDistinct'), ('sum'), ('avg'), ('min'), ('max');
+    INSERT INTO @AllowedOps (Op) VALUES ('count'), ('countdistinct'), ('sum'), ('avg'), ('min'), ('max');
     
     -- Validate TenantId
     IF @TenantId IS NULL OR @TenantId = ''
@@ -167,6 +170,7 @@ BEGIN
     END
     
     -- PATCH 29.07: Defense-in-depth security tag validation
+    -- Roles are injected by server (PATCH 30.02 will enforce strip+inject at C# level)
     DECLARE @UserRoles TABLE (Role NVARCHAR(100));
     DECLARE @AllowedTags TABLE (Tag NVARCHAR(50));
     
@@ -223,10 +227,10 @@ BEGIN
     FROM OPENJSON(@ArgsJson, '$.metrics') j;
     
     -- Validate metric operations (strict whitelist)
-    IF EXISTS (SELECT 1 FROM @Metrics m WHERE m.Op NOT IN (SELECT Op FROM @AllowedOps))
+    IF EXISTS (SELECT 1 FROM @Metrics m WHERE LOWER(m.Op) NOT IN (SELECT Op FROM @AllowedOps))
     BEGIN
         DECLARE @InvalidOp NVARCHAR(200);
-        SELECT TOP 1 @InvalidOp = Op FROM @Metrics WHERE Op NOT IN (SELECT Op FROM @AllowedOps);
+        SELECT TOP 1 @InvalidOp = Op FROM @Metrics WHERE LOWER(Op) NOT IN (SELECT Op FROM @AllowedOps);
         RAISERROR('Invalid metric operation: %s. Allowed: count, countDistinct, sum, avg, min, max.', 16, 1, @InvalidOp);
         RETURN;
     END
@@ -245,13 +249,16 @@ BEGIN
     -- For count without field, use *
     UPDATE @Metrics SET PhysicalColumn = '*' WHERE PhysicalColumn IS NULL AND Op = 'count';
     
-    -- Validate field-specific aggregation rules
+    -- Validate field-specific aggregation rules (exact match)
     IF EXISTS (
         SELECT 1 FROM @Metrics m
         INNER JOIN @Fields f ON f.FieldKey = m.FieldKey
         WHERE f.AllowedAggregations IS NOT NULL 
           AND f.AllowedAggregations <> ''
-          AND CHARINDEX(m.Op, f.AllowedAggregations) = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM STRING_SPLIT(f.AllowedAggregations, ',') s
+              WHERE LOWER(LTRIM(RTRIM(s.value))) = LOWER(m.Op)
+          )
     )
     BEGIN
         RAISERROR('Aggregation operation not allowed for field.', 16, 1);
@@ -289,18 +296,20 @@ BEGIN
         FieldKey NVARCHAR(200) NOT NULL,
         PhysicalColumn NVARCHAR(200) NOT NULL,
         Op NVARCHAR(20) NOT NULL,
+        DataType NVARCHAR(50) NOT NULL,      -- PATCH 31.03: For type-safe filtering
         ValueText NVARCHAR(MAX) NULL,
         ValuesJson NVARCHAR(MAX) NULL
     );
     
     IF JSON_QUERY(@ArgsJson, '$.where') IS NOT NULL
     BEGIN
-        INSERT INTO @Where (Ordinal, FieldKey, PhysicalColumn, Op, ValueText, ValuesJson)
+        INSERT INTO @Where (Ordinal, FieldKey, PhysicalColumn, Op, DataType, ValueText, ValuesJson)
         SELECT 
             CAST(j.[key] AS INT),
             LTRIM(RTRIM(d.field)),
             f.PhysicalColumn,
             LOWER(LTRIM(RTRIM(d.op))),
+            f.DataType,                       -- PATCH 31.03: Populate DataType from FieldCatalog
             d.value,
             d.[values]
         FROM OPENJSON(@ArgsJson, '$.where') j
@@ -321,13 +330,74 @@ BEGIN
             RETURN;
         END
         
-        -- Validate where operators
+        -- Validate where operators (exact match allowlist)
         IF EXISTS (
             SELECT 1 FROM @Where 
             WHERE Op NOT IN ('eq','ne','gt','gte','lt','lte','like','in','between')
         )
         BEGIN
             RAISERROR('Invalid where operator.', 16, 1);
+            RETURN;
+        END
+        
+        -- PATCH 30.06: Type-aware filter validation
+        -- Validate numeric values for numeric fields
+        IF EXISTS (
+            SELECT 1 FROM @Where w
+            INNER JOIN @Fields f ON f.FieldKey = w.FieldKey
+            WHERE f.DataType IN ('int', 'decimal', 'float', 'money', 'numeric', 'bigint', 'smallint')
+              AND w.Op NOT IN ('in')
+              AND w.ValueText IS NOT NULL
+              AND TRY_CONVERT(DECIMAL(18,4), w.ValueText) IS NULL
+        )
+        BEGIN
+            RAISERROR('INVALID_FILTER_VALUE: Non-numeric value for numeric field.', 16, 1);
+            RETURN;
+        END
+        
+        -- Validate date values for date/datetime fields
+        IF EXISTS (
+            SELECT 1 FROM @Where w
+            INNER JOIN @Fields f ON f.FieldKey = w.FieldKey
+            WHERE f.DataType IN ('date', 'datetime', 'datetime2', 'smalldatetime')
+              AND w.Op NOT IN ('in')
+              AND w.ValueText IS NOT NULL
+              AND TRY_CONVERT(DATETIME2, w.ValueText) IS NULL
+        )
+        BEGIN
+            RAISERROR('INVALID_FILTER_VALUE: Invalid date format for date field.', 16, 1);
+            RETURN;
+        END
+        
+        -- Validate BETWEEN values for numeric fields
+        IF EXISTS (
+            SELECT 1 FROM @Where w
+            INNER JOIN @Fields f ON f.FieldKey = w.FieldKey
+            WHERE w.Op = 'between'
+              AND f.DataType IN ('int', 'decimal', 'float', 'money', 'numeric', 'bigint', 'smallint')
+              AND (
+                  TRY_CONVERT(DECIMAL(18,4), JSON_VALUE(@ArgsJson, '$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[0]')) IS NULL
+                  OR TRY_CONVERT(DECIMAL(18,4), JSON_VALUE(@ArgsJson, '$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[1]')) IS NULL
+              )
+        )
+        BEGIN
+            RAISERROR('INVALID_FILTER_VALUE: Non-numeric value in BETWEEN for numeric field.', 16, 1);
+            RETURN;
+        END
+        
+        -- Validate BETWEEN values for date fields
+        IF EXISTS (
+            SELECT 1 FROM @Where w
+            INNER JOIN @Fields f ON f.FieldKey = w.FieldKey
+            WHERE w.Op = 'between'
+              AND f.DataType IN ('date', 'datetime', 'datetime2', 'smalldatetime')
+              AND (
+                  TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, '$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[0]')) IS NULL
+                  OR TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, '$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[1]')) IS NULL
+              )
+        )
+        BEGIN
+            RAISERROR('INVALID_FILTER_VALUE: Invalid date in BETWEEN for date field.', 16, 1);
             RETURN;
         END
     END
@@ -382,7 +452,7 @@ BEGIN
         CASE WHEN @SelectList = '' THEN '' ELSE ', ' END +
         CASE m.Op
             WHEN 'count' THEN 'COUNT(' + CASE WHEN m.PhysicalColumn = '*' THEN '*' ELSE 'src.' + QUOTENAME(m.PhysicalColumn) END + ')'
-            WHEN 'countDistinct' THEN 'COUNT(DISTINCT src.' + QUOTENAME(m.PhysicalColumn) + ')'
+            WHEN 'countdistinct' THEN 'COUNT(DISTINCT src.' + QUOTENAME(m.PhysicalColumn) + ')'
             WHEN 'sum' THEN 'SUM(src.' + QUOTENAME(m.PhysicalColumn) + ')'
             WHEN 'avg' THEN 'AVG(CAST(src.' + QUOTENAME(m.PhysicalColumn) + ' AS FLOAT))'
             WHEN 'min' THEN 'MIN(src.' + QUOTENAME(m.PhysicalColumn) + ')'
@@ -400,18 +470,110 @@ BEGIN
         SET @WhereSql = ' AND src.[TenantId] = @TenantId';
     END
     
-    -- User filters
+    -- PATCH 31.03: Type-aware WHERE clause builder with TRY_CONVERT
+    -- User filters with proper type casting for numeric/datetime comparisons
     SELECT @WhereSql = @WhereSql +
         CASE w.Op
-            WHEN 'eq' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' = JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
-            WHEN 'ne' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' <> JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
-            WHEN 'gt' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' > JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
-            WHEN 'gte' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' >= JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
-            WHEN 'lt' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' < JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
-            WHEN 'lte' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' <= JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
-            WHEN 'like' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' LIKE JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
-            WHEN 'in' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' IN (SELECT value FROM OPENJSON(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values''))'
-            WHEN 'between' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' BETWEEN JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[0]'') AND JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[1]'')'
+            -- EQ/NE: Use typed comparison
+            WHEN 'eq' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' = ' +
+                CASE 
+                    WHEN w.DataType IN ('int','bigint','smallint','tinyint')
+                        THEN 'TRY_CONVERT(BIGINT, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType IN ('decimal','numeric','float','real','money')
+                        THEN 'TRY_CONVERT(DECIMAL(18,4), JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType IN ('datetime','datetime2','date','smalldatetime')
+                        THEN 'TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType = 'bit'
+                        THEN 'TRY_CONVERT(BIT, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    ELSE 'JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
+                END
+            WHEN 'ne' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' <> ' +
+                CASE 
+                    WHEN w.DataType IN ('int','bigint','smallint','tinyint')
+                        THEN 'TRY_CONVERT(BIGINT, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType IN ('decimal','numeric','float','real','money')
+                        THEN 'TRY_CONVERT(DECIMAL(18,4), JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType IN ('datetime','datetime2','date','smalldatetime')
+                        THEN 'TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType = 'bit'
+                        THEN 'TRY_CONVERT(BIT, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    ELSE 'JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
+                END
+            -- Range operators: GT/GTE/LT/LTE - require typed comparison for correct ordering
+            WHEN 'gt' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' > ' +
+                CASE 
+                    WHEN w.DataType IN ('int','bigint','smallint','tinyint')
+                        THEN 'TRY_CONVERT(BIGINT, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType IN ('decimal','numeric','float','real','money')
+                        THEN 'TRY_CONVERT(DECIMAL(18,4), JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType IN ('datetime','datetime2','date','smalldatetime')
+                        THEN 'TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    ELSE 'JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
+                END
+            WHEN 'gte' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' >= ' +
+                CASE 
+                    WHEN w.DataType IN ('int','bigint','smallint','tinyint')
+                        THEN 'TRY_CONVERT(BIGINT, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType IN ('decimal','numeric','float','real','money')
+                        THEN 'TRY_CONVERT(DECIMAL(18,4), JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType IN ('datetime','datetime2','date','smalldatetime')
+                        THEN 'TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    ELSE 'JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
+                END
+            WHEN 'lt' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' < ' +
+                CASE 
+                    WHEN w.DataType IN ('int','bigint','smallint','tinyint')
+                        THEN 'TRY_CONVERT(BIGINT, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType IN ('decimal','numeric','float','real','money')
+                        THEN 'TRY_CONVERT(DECIMAL(18,4), JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType IN ('datetime','datetime2','date','smalldatetime')
+                        THEN 'TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    ELSE 'JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
+                END
+            WHEN 'lte' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' <= ' +
+                CASE 
+                    WHEN w.DataType IN ('int','bigint','smallint','tinyint')
+                        THEN 'TRY_CONVERT(BIGINT, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType IN ('decimal','numeric','float','real','money')
+                        THEN 'TRY_CONVERT(DECIMAL(18,4), JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    WHEN w.DataType IN ('datetime','datetime2','date','smalldatetime')
+                        THEN 'TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                    ELSE 'JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
+                END
+            -- LIKE: Only for string types
+            WHEN 'like' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + 
+                ' LIKE JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
+            -- IN: Cast each value via subquery
+            WHEN 'in' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' IN (SELECT ' +
+                CASE 
+                    WHEN w.DataType IN ('int','bigint','smallint','tinyint')
+                        THEN 'TRY_CONVERT(BIGINT, value)'
+                    WHEN w.DataType IN ('decimal','numeric','float','real','money')
+                        THEN 'TRY_CONVERT(DECIMAL(18,4), value)'
+                    WHEN w.DataType IN ('datetime','datetime2','date','smalldatetime')
+                        THEN 'TRY_CONVERT(DATETIME2, value)'
+                    ELSE 'value'
+                END + ' FROM OPENJSON(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values''))'
+            -- BETWEEN: Cast both bounds
+            WHEN 'between' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' BETWEEN ' +
+                CASE 
+                    WHEN w.DataType IN ('int','bigint','smallint','tinyint')
+                        THEN 'TRY_CONVERT(BIGINT, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[0]''))'
+                    WHEN w.DataType IN ('decimal','numeric','float','real','money')
+                        THEN 'TRY_CONVERT(DECIMAL(18,4), JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[0]''))'
+                    WHEN w.DataType IN ('datetime','datetime2','date','smalldatetime')
+                        THEN 'TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[0]''))'
+                    ELSE 'JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[0]'')'
+                END + ' AND ' +
+                CASE 
+                    WHEN w.DataType IN ('int','bigint','smallint','tinyint')
+                        THEN 'TRY_CONVERT(BIGINT, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[1]''))'
+                    WHEN w.DataType IN ('decimal','numeric','float','real','money')
+                        THEN 'TRY_CONVERT(DECIMAL(18,4), JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[1]''))'
+                    WHEN w.DataType IN ('datetime','datetime2','date','smalldatetime')
+                        THEN 'TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[1]''))'
+                    ELSE 'JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].values[1]'')'
+                END
         END
     FROM @Where w
     ORDER BY w.Ordinal;
@@ -450,22 +612,17 @@ BEGIN
     -- Create temp table for results
     IF OBJECT_ID('tempdb..#MetricsResults') IS NOT NULL DROP TABLE #MetricsResults;
     
-    -- Build and execute dynamic SQL
+    -- Build and execute dynamic SQL - store results in temp table
     DECLARE @Sql NVARCHAR(MAX) = N'
 SELECT TOP (@Limit) ' + @SelectList + '
 INTO #MetricsResults
 FROM ' + @BaseObjectSql + ' AS src
-WHERE 1 = 1' + @WhereSql + @GroupBySql + @OrderBySql + ';
-
-SELECT * FROM #MetricsResults;';
+WHERE 1 = 1' + @WhereSql + @GroupBySql + @OrderBySql + ';';
 
     DECLARE @ParamDef NVARCHAR(500) = N'@ArgsJson NVARCHAR(MAX), @TenantId NVARCHAR(50), @Limit INT';
     
     -- Execute query
-    DECLARE @ResultRows TABLE (ResultJson NVARCHAR(MAX));
-    
     BEGIN TRY
-        -- Execute the aggregation query
         EXEC sp_executesql @Sql, @ParamDef, 
             @ArgsJson = @ArgsJson, 
             @TenantId = @TenantId, 
@@ -477,69 +634,71 @@ SELECT * FROM #MetricsResults;';
         RETURN;
     END CATCH
     
-    -- Get row count from last execution
-    DECLARE @RowCount INT = @@ROWCOUNT;
+    -- Get row count
+    DECLARE @RowCount INT = (SELECT COUNT(*) FROM #MetricsResults);
     
     -- Calculate duration
     DECLARE @EndTime DATETIME2(3) = SYSUTCDATETIME();
     DECLARE @DurationMs INT = DATEDIFF(MILLISECOND, @StartTime, @EndTime);
     
-    -- Build warnings
-    DECLARE @Warnings TABLE (Warning NVARCHAR(500));
+    -- Build warnings array
+    DECLARE @WarningsJson NVARCHAR(MAX) = '[]';
     IF @Truncated = 1
     BEGIN
-        INSERT INTO @Warnings (Warning) VALUES ('Results truncated to ' + CAST(@MaxRows AS NVARCHAR(10)) + ' rows.');
+        SET @WarningsJson = '[{"warning":"Results truncated to ' + CAST(@MaxRows AS NVARCHAR(10)) + ' rows."}]';
     END
     
-    -- Build column metadata from metrics and groupBy
-    DECLARE @Columns TABLE (
-        Ordinal INT,
-        Name NVARCHAR(200),
-        DataType NVARCHAR(50),
-        IsMetric BIT
+    -- Build columns array from groupBy and metrics
+    DECLARE @ColumnsJson NVARCHAR(MAX);
+    SELECT @ColumnsJson = (
+        SELECT 
+            [name] = FieldKey,
+            [type] = (SELECT DataType FROM @Fields WHERE FieldKey = g.FieldKey),
+            isMetric = CAST(0 AS BIT)
+        FROM @GroupBy g
+        UNION ALL
+        SELECT 
+            [name] = Alias,
+            [type] = CASE WHEN Op IN ('count', 'countdistinct') THEN 'int' ELSE 'decimal' END,
+            isMetric = CAST(1 AS BIT)
+        FROM @Metrics
+        FOR JSON PATH
+    );
+    IF @ColumnsJson IS NULL SET @ColumnsJson = '[]';
+    
+    -- PATCH 30.01: Build rows as array-of-objects using FOR JSON PATH
+    DECLARE @RowsJson NVARCHAR(MAX);
+    SET @RowsJson = (SELECT * FROM #MetricsResults FOR JSON PATH);
+    IF @RowsJson IS NULL SET @RowsJson = '[]';
+    
+    -- Build meta object
+    DECLARE @FreshnessJson NVARCHAR(MAX) = (
+        SELECT 
+            CONVERT(VARCHAR(33), @GeneratedAtUtc, 127) AS asOfUtc,
+            'SQL' AS [source]
+        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     );
     
-    INSERT INTO @Columns (Ordinal, Name, DataType, IsMetric)
-    SELECT Ordinal, FieldKey, 
-           (SELECT DataType FROM @Fields WHERE FieldKey = g.FieldKey),
-           0
-    FROM @GroupBy g;
-    
-    INSERT INTO @Columns (Ordinal, Name, DataType, IsMetric)
-    SELECT Ordinal + 1000, Alias, 
-           CASE WHEN Op IN ('count', 'countDistinct') THEN 'int' ELSE 'decimal' END,
-           1
-    FROM @Metrics;
-    
-    -- Return JSON envelope (note: actual rows were returned by the select above)
-    -- The calling application should combine the metadata with the result set
-    SELECT (
-        SELECT
-            meta = (
-                SELECT
-                    @RowCount AS [rowCount],
-                    @Truncated AS truncated,
-                    @DurationMs AS durationMs,
-                    freshness = (
-                        SELECT
-                            @GeneratedAtUtc AS asOfUtc,
-                            'SQL' AS [source]
-                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-                    )
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-            ),
-            [columns] = (
-                SELECT [Name] AS [name], DataType AS [type], IsMetric AS isMetric
-                FROM @Columns
-                ORDER BY Ordinal
-                FOR JSON PATH
-            ),
-            warnings = (
-                SELECT Warning AS [warning]
-                FROM @Warnings
-                FOR JSON PATH
-            )
+    DECLARE @MetaJson NVARCHAR(MAX) = (
+        SELECT 
+            @RowCount AS rowCount,
+            @Truncated AS truncated,
+            @DurationMs AS durationMs,
+            JSON_QUERY(@FreshnessJson) AS freshness
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-    ) AS MetaJson;
+    );
+    
+    -- PATCH 30.01: Return single scalar JSON envelope with all data
+    SELECT (
+        SELECT 
+            JSON_QUERY(@MetaJson) AS meta,
+            JSON_QUERY(@ColumnsJson) AS [columns],
+            JSON_QUERY(@RowsJson) AS [rows],
+            JSON_QUERY(@WarningsJson) AS warnings
+        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+    ) AS ResultJson;
+    
+    -- Cleanup
+    IF OBJECT_ID('tempdb..#MetricsResults') IS NOT NULL DROP TABLE #MetricsResults;
 END;
 GO

@@ -5,15 +5,18 @@ namespace TILSOFTAI.Orchestration.Analytics;
 
 /// <summary>
 /// Service to assemble query results into structured insight output.
+/// PATCH 30.05: Added validatedPlanJson for accurate notes from executed plan.
 /// </summary>
 public interface IInsightAssemblyService
 {
     /// <summary>
     /// Assemble insight from query results.
+    /// PATCH 30.05: Added validatedPlanJson for notes fidelity.
     /// </summary>
     Task<InsightOutput> AssembleAsync(
         TaskFrame taskFrame,
         IReadOnlyList<QueryResultSet> queryResults,
+        string? validatedPlanJson,
         TilsoftExecutionContext context,
         CancellationToken ct);
 }

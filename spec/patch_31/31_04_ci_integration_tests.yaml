@@ -1,0 +1,227 @@
+# ============================================================================
+# PATCH 31_04 — SQL Container CI Stage + Env-Guarded Integration Tests
+# ============================================================================
+# Severity: P1
+# Audit Finding: P1-TEST-01
+# ============================================================================
+
+patch: 31_04
+title: "SQL Server container CI stage + env-guarded E2E tests"
+severity: P1
+status: pending
+
+# ============================================================================
+# VẤN ĐỀ HIỆN TẠI
+# ============================================================================
+problem:
+  description: |
+    1. DeepAnalyticsE2ETests dùng [Fact(Skip = "Requires test database")]
+       → Tests KHÔNG BAO GIỜ chạy trong CI
+    2. CI workflow không provision SQL Server container
+       → Không có integration test stage
+    3. Enterprise regressions (JSON contract, RBAC, SQL stored procedure) 
+       có thể ship mà không bị detect
+
+  evidence:
+    test_skip:
+      file: "tests/TILSOFTAI.IntegrationTests/Analytics/DeepAnalyticsE2ETests.cs"
+      line: 30
+      code: '[Fact(Skip = "Requires test database - run manually with DB connection")]'
+
+    ci_no_sql:
+      file: ".github/workflows/ci.yml"
+      issue: "Không có service container hoặc SQL provisioning step"
+
+# ============================================================================
+# GIẢI PHÁP
+# ============================================================================
+solution:
+  approach: |
+    1. Tạo custom xUnit attribute SqlServerAvailableFactAttribute
+       → Run khi TEST_SQL_CONNECTION env var có giá trị, skip khi không
+    2. Thêm CI job integration-tests với SQL Server service container
+    3. Job chạy migrations + seeds + integration tests
+
+  changes:
+
+    # ----- CHANGE 1: Custom env-guarded test attribute -----
+    - file: "tests/TILSOFTAI.IntegrationTests/Infrastructure/SqlServerAvailableFactAttribute.cs"
+      action: TẠO MỚI
+      description: "Custom FactAttribute chạy khi SQL Server available"
+
+      content: |
+        using System;
+        using Xunit;
+
+        namespace TILSOFTAI.IntegrationTests.Infrastructure;
+
+        /// <summary>
+        /// PATCH 31.04: Env-guarded test attribute.
+        /// Test runs when TEST_SQL_CONNECTION is set, skips gracefully otherwise.
+        /// </summary>
+        [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+        public sealed class SqlServerAvailableFactAttribute : FactAttribute
+        {
+            public SqlServerAvailableFactAttribute()
+            {
+                var conn = Environment.GetEnvironmentVariable("TEST_SQL_CONNECTION");
+                if (string.IsNullOrWhiteSpace(conn))
+                {
+                    Skip = "SQL Server not available. Set TEST_SQL_CONNECTION environment variable.";
+                }
+            }
+        }
+
+        /// <summary>
+        /// Same as SqlServerAvailableFact but for Theory-based tests.
+        /// </summary>
+        [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+        public sealed class SqlServerAvailableTheoryAttribute : TheoryAttribute
+        {
+            public SqlServerAvailableTheoryAttribute()
+            {
+                var conn = Environment.GetEnvironmentVariable("TEST_SQL_CONNECTION");
+                if (string.IsNullOrWhiteSpace(conn))
+                {
+                    Skip = "SQL Server not available. Set TEST_SQL_CONNECTION environment variable.";
+                }
+            }
+        }
+
+    # ----- CHANGE 2: Update E2E Tests -----
+    - file: "tests/TILSOFTAI.IntegrationTests/Analytics/DeepAnalyticsE2ETests.cs"
+      action: THAY THẾ [Fact(Skip = ...)] bằng [SqlServerAvailableFact]
+      description: "Thay Skip attribute bằng env-guarded attribute"
+
+      before: |
+        [Fact(Skip = "Requires test database - run manually with DB connection")]
+        public async Task AnalyticsWorkflow_VietnameseQuery_ShouldReturnValidInsight()
+
+      after: |
+        [SqlServerAvailableFact]
+        public async Task AnalyticsWorkflow_VietnameseQuery_ShouldReturnValidInsight()
+
+      also_add_test: |
+        /// <summary>
+        /// PATCH 31.04: Security negative test — user without analytics.read
+        /// should not receive analytics results.
+        /// </summary>
+        [SqlServerAvailableFact]
+        public async Task AnalyticsWorkflow_UserWithoutRole_ShouldBeDenied()
+        {
+            // Arrange
+            var context = CreateTestContext(roles: new[] { "basic_user" }); // NO analytics.read
+            var request = new ChatRequest { Input = "số lượng model theo mùa" };
+
+            // Act
+            var result = await _pipeline.RunAsync(request, context, CancellationToken.None);
+
+            // Assert
+            Assert.True(result.Success); // Should succeed but NOT route to analytics
+            // Analytics-specific indicators should be absent
+            Assert.DoesNotContain("📊", result.Content ?? "");
+        }
+
+    # ----- CHANGE 3: CI Workflow — Integration Test Job -----
+    - file: ".github/workflows/ci.yml"
+      action: THÊM job mới 'integration-tests'
+      description: |
+        Job riêng biệt chạy song song với build-and-test.
+        Provision SQL Server 2022 container, chạy migrations, seeds, rồi tests.
+
+      new_job: |
+        integration-tests:
+          runs-on: ubuntu-latest
+          # Chỉ chạy trên main/develop, không chạy cho mọi PR
+          if: github.event_name == 'push' || github.event.pull_request.base.ref == 'main'
+          
+          services:
+            sqlserver:
+              image: mcr.microsoft.com/mssql/server:2022-latest
+              env:
+                ACCEPT_EULA: "Y"
+                MSSQL_SA_PASSWORD: "Integration_Test_P@ss1!"
+                MSSQL_PID: Express
+              ports:
+                - 1433:1433
+              options: >-
+                --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Integration_Test_P@ss1!' -Q 'SELECT 1' -N -C || exit 1"
+                --health-interval 10s
+                --health-timeout 5s
+                --health-retries 10
+                --health-start-period 30s
+
+          steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
+              with:
+                dotnet-version: '10.0.x'
+
+            - name: Install sqlcmd
+              run: |
+                curl https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc
+                sudo add-apt-repository "$(wget -qO- https://packages.microsoft.com/config/ubuntu/22.04/prod.list)"
+                sudo apt-get update
+                sudo apt-get install -y mssql-tools18 unixodbc-dev
+                echo 'export PATH="$PATH:/opt/mssql-tools18/bin"' >> ~/.bashrc
+
+            - name: Create Test Database
+              run: |
+                /opt/mssql-tools18/bin/sqlcmd \
+                  -S localhost -U sa -P 'Integration_Test_P@ss1!' \
+                  -N -C \
+                  -Q "CREATE DATABASE TILSOFTAI_Test;"
+
+            - name: Deploy SQL Migrations
+              shell: pwsh
+              run: |
+                $conn = "Server=localhost;Database=TILSOFTAI_Test;User ID=sa;Password=Integration_Test_P@ss1!;TrustServerCertificate=True;"
+                
+                # Deploy in order: core → atomic → modules → seeds
+                $folders = @(
+                  "sql/01_core",
+                  "sql/02_atomic",
+                  "sql/02_modules/analytics",
+                  "sql/02_modules/model",
+                  "sql/99_seed"
+                )
+                
+                foreach ($folder in $folders) {
+                  if (Test-Path $folder) {
+                    $files = Get-ChildItem -Path $folder -Filter "*.sql" -Recurse | Sort-Object Name
+                    foreach ($file in $files) {
+                      Write-Host "Deploying: $($file.FullName)" -ForegroundColor Cyan
+                      /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Integration_Test_P@ss1!' -N -C -d TILSOFTAI_Test -i $file.FullName -b
+                      if ($LASTEXITCODE -ne 0) {
+                        Write-Error "Failed to deploy: $($file.FullName)"
+                        exit 1
+                      }
+                    }
+                  }
+                }
+                Write-Host "All SQL migrations deployed successfully." -ForegroundColor Green
+
+            - name: Restore dependencies
+              run: dotnet restore
+
+            - name: Build
+              run: dotnet build --no-restore --configuration Release
+
+            - name: Run Integration Tests
+              run: dotnet test tests/TILSOFTAI.IntegrationTests --no-build --configuration Release --verbosity normal
+              env:
+                TEST_SQL_CONNECTION: "Server=localhost;Database=TILSOFTAI_Test;User ID=sa;Password=Integration_Test_P@ss1!;TrustServerCertificate=True;"
+
+# ============================================================================
+# ACCEPTANCE CRITERIA
+# ============================================================================
+acceptance_criteria:
+  - "CI có job integration-tests chạy trên ubuntu-latest với SQL Server container"
+  - "Tests dùng [SqlServerAvailableFact] thay vì [Fact(Skip = ...)]"
+  - "Khi TEST_SQL_CONNECTION không set → tests skip gracefully"
+  - "Khi TEST_SQL_CONNECTION có set → tests chạy đầy đủ"
+  - "CI fails nếu analytics E2E contract bị break"
+  - "Có ít nhất 1 happy-path test + 1 security negative test"
+  - "SQL migrations deploy thành công trước khi chạy tests"

@@ -10,7 +10,28 @@ using TILSOFTAI.Domain.Configuration;
 namespace TILSOFTAI.Orchestration.Analytics;
 
 /// <summary>
+/// PATCH 31.05: Item in the cache write background queue.
+/// </summary>
+public sealed record CacheWriteItem(
+    string TenantId,
+    string NormalizedQuery,
+    IEnumerable<string>? Roles,
+    InsightOutput Insight);
+
+/// <summary>
+/// PATCH 31.05: Queue for background cache writes.
+/// </summary>
+public interface ICacheWriteQueue
+{
+    /// <summary>
+    /// Enqueue a cache write. Non-blocking, returns false if queue is full.
+    /// </summary>
+    bool TryEnqueue(CacheWriteItem item);
+}
+
+/// <summary>
 /// PATCH 29.06: Caches InsightOutput for repeated queries.
+/// PATCH 30.03: Include roles hash in cache key to prevent privilege leakage.
 /// </summary>
 public sealed class AnalyticsCache
 {
@@ -30,8 +51,13 @@ public sealed class AnalyticsCache
 
     /// <summary>
     /// Tries to get a cached insight.
+    /// PATCH 30.03: Requires roles to ensure cache isolation by security context.
     /// </summary>
-    public async Task<InsightOutput?> TryGetAsync(string tenantId, string normalizedQuery, CancellationToken ct)
+    public async Task<InsightOutput?> TryGetAsync(
+        string tenantId, 
+        string normalizedQuery, 
+        IEnumerable<string>? roles,
+        CancellationToken ct)
     {
         if (!_analyticsOptions.EnableInsightCache)
         {
@@ -40,7 +66,7 @@ public sealed class AnalyticsCache
 
         try
         {
-            var queryHash = ComputeHash(tenantId, normalizedQuery);
+            var queryHash = ComputeHash(tenantId, normalizedQuery, roles);
 
             await using var connection = new SqlConnection(_sqlOptions.ConnectionString);
             await connection.OpenAsync(ct);
@@ -75,17 +101,30 @@ public sealed class AnalyticsCache
 
     /// <summary>
     /// Sets a cached insight.
+    /// PATCH 30.03: Requires roles to ensure cache isolation by security context.
     /// </summary>
-    public async Task SetAsync(string tenantId, string normalizedQuery, InsightOutput insight, CancellationToken ct)
+    public async Task SetAsync(
+        string tenantId, 
+        string normalizedQuery, 
+        IEnumerable<string>? roles,
+        InsightOutput insight, 
+        CancellationToken ct)
     {
         if (!_analyticsOptions.EnableInsightCache)
         {
             return;
         }
 
+        // PATCH 30.03: Optional bypass for restricted-tag results
+        if (!_analyticsOptions.AllowCachingRestricted && ContainsSecurityWarning(insight))
+        {
+            _logger.LogDebug("CacheBypass | Security-sensitive result not cached | TenantId: {TenantId}", tenantId);
+            return;
+        }
+
         try
         {
-            var queryHash = ComputeHash(tenantId, normalizedQuery);
+            var queryHash = ComputeHash(tenantId, normalizedQuery, roles);
             var insightJson = JsonSerializer.Serialize(insight);
 
             await using var connection = new SqlConnection(_sqlOptions.ConnectionString);
@@ -111,12 +150,44 @@ public sealed class AnalyticsCache
     }
 
     /// <summary>
-    /// Computes a deterministic hash for the query key.
+    /// PATCH 30.03: Check if insight contains security-related warnings.
     /// </summary>
-    public static string ComputeHash(string tenantId, string normalizedQuery)
+    private static bool ContainsSecurityWarning(InsightOutput insight)
     {
-        var input = $"{tenantId}:{normalizedQuery}";
+        if (insight.Notes == null) return false;
+        
+        var securityTerms = new[] { "restricted", "security", "pii", "sensitive" };
+        return insight.Notes.Any(note => 
+            securityTerms.Any(term => 
+                note.Contains(term, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>
+    /// PATCH 30.03: Computes a deterministic hash including roles for security.
+    /// Key = sha256(tenantId|normalizedQuery|rolesCsv)
+    /// </summary>
+    public static string ComputeHash(string tenantId, string normalizedQuery, IEnumerable<string>? roles)
+    {
+        // Normalize roles: sorted, unique, lowercase, joined
+        var rolesCsv = roles != null
+            ? string.Join(",", roles
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Select(r => r.Trim().ToLowerInvariant())
+                .Distinct()
+                .OrderBy(r => r, StringComparer.Ordinal))
+            : string.Empty;
+        
+        var input = $"{tenantId}|{normalizedQuery}|{rolesCsv}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(bytes);
+    }
+
+    /// <summary>
+    /// Legacy overload for backward compatibility.
+    /// </summary>
+    [Obsolete("Use ComputeHash with roles parameter for security")]
+    public static string ComputeHash(string tenantId, string normalizedQuery)
+    {
+        return ComputeHash(tenantId, normalizedQuery, null);
     }
 }

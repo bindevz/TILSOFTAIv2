@@ -1,0 +1,238 @@
+# ============================================================================
+# PATCH 31_01 — Unified ToolGovernance trong AnalyticsOrchestrator
+# ============================================================================
+# Severity: P0
+# Audit Finding: P0-GOV-01
+# ============================================================================
+
+patch: 31_01
+title: "Unified ToolGovernance — Xóa bypass, enforce RBAC + schema cho deterministic calls"
+severity: P0
+status: pending
+
+# ============================================================================
+# VẤN ĐỀ HIỆN TẠI
+# ============================================================================
+problem:
+  description: |
+    AnalyticsOrchestrator gọi IToolHandler.ExecuteAsync() trực tiếp mà KHÔNG qua
+    ToolGovernance.Validate(). Điều này có nghĩa:
+    - RequiredRoles từ ToolCatalog KHÔNG được enforce cho orchestrator-driven tool calls
+    - Schema validation bị bypass
+    - Input sanitization bị bypass
+    - Governance posture KHÔNG nhất quán: LLM calls → governed, Orchestrator calls → unprotected
+
+  current_code_flow: |
+    AnalyticsOrchestrator.ExecuteToolAsync()
+      → _toolHandler.ExecuteAsync(tool, argsJson, context, ct)  ← TRỰC TIẾP, không governance
+    
+    vs. ChatPipeline LLM flow:
+      → _toolGovernance.Validate(call, toolLookup, context)  ← CÓ governance
+      → _toolHandler.ExecuteAsync(...)
+
+  evidence:
+    file: "src/TILSOFTAI.Orchestration/Analytics/AnalyticsOrchestrator.cs"
+    lines: "257-269"
+    snippet: |
+      private async Task<string> ExecuteToolAsync(
+          string toolName, string argsJson,
+          Dictionary<string, ToolDefinition> toolLookup,
+          TilsoftExecutionContext context, CancellationToken ct)
+      {
+          if (!toolLookup.TryGetValue(toolName, out var tool))
+              throw new InvalidOperationException($"Tool not found: {toolName}");
+          // ← KHÔNG CÓ ToolGovernance.Validate() ở đây
+          var result = await _toolHandler.ExecuteAsync(tool, argsJson, context, ct);
+          return result ?? "{}";
+      }
+
+# ============================================================================
+# GIẢI PHÁP
+# ============================================================================
+solution:
+  approach: "THAY THẾ direct tool execution bằng governed execution"
+  
+  principle: |
+    Theo pattern IFunctionInvocationFilter của Semantic Kernel:
+    MỌI tool call (LLM-driven hay orchestrator-driven) đều phải qua
+    CÙNG MỘT governance checkpoint: RBAC → Schema → Input Sanitization → Execute.
+
+  changes:
+
+    # ----- CHANGE 1: Thêm method ValidateAndExecute vào ToolGovernance -----
+    - file: "src/TILSOFTAI.Orchestration/Tools/ToolGovernance.cs"
+      action: THÊM method mới
+      description: |
+        Thêm ValidateAndExecuteAsync() — kết hợp Validate + Execute trong 1 method.
+        Method này được dùng bởi CẢ ChatPipeline LẪN AnalyticsOrchestrator.
+      
+      new_method: |
+        /// <summary>
+        /// PATCH 31.01: Unified governance + execution.
+        /// Validates RBAC, schema, input sanitization, then executes.
+        /// Used by BOTH LLM tool-calling loop AND deterministic orchestrator.
+        /// </summary>
+        public async Task<GovernedExecutionResult> ValidateAndExecuteAsync(
+            string toolName,
+            string argumentsJson,
+            IReadOnlyDictionary<string, ToolDefinition> toolAllowlist,
+            TilsoftExecutionContext context,
+            IToolHandler toolHandler,
+            CancellationToken ct)
+        {
+            // Build a synthetic LlmToolCall for validation
+            var call = new LlmToolCall(
+                id: Guid.NewGuid().ToString("N"),
+                name: toolName,
+                argumentsJson: argumentsJson);
+
+            var validation = Validate(call, toolAllowlist, context);
+
+            if (!validation.IsValid)
+            {
+                _auditLogger.LogAuthorizationEvent(AuthzAuditEvent.Denied(
+                    context.TenantId,
+                    context.UserId,
+                    context.CorrelationId,
+                    context.IpAddress,
+                    context.UserAgent,
+                    $"tool:{toolName}",
+                    "execute",
+                    context.Roles ?? Array.Empty<string>(),
+                    validation.Tool?.RequiredRoles ?? Array.Empty<string>(),
+                    "ToolGovernance.ValidateAndExecute"));
+
+                return GovernedExecutionResult.Denied(
+                    validation.Error ?? "Governance validation failed.",
+                    validation.Code);
+            }
+
+            // Use sanitized arguments from validation
+            var sanitizedArgs = validation.SanitizedArgumentsJson ?? argumentsJson;
+            var result = await toolHandler.ExecuteAsync(
+                validation.Tool!, sanitizedArgs, context, ct);
+
+            return GovernedExecutionResult.Success(result ?? "{}");
+        }
+
+      new_record: |
+        /// <summary>Result of governed tool execution.</summary>
+        public sealed record GovernedExecutionResult(
+            bool IsAllowed,
+            string? Result,
+            string? DenialReason,
+            string? DenialCode)
+        {
+            public static GovernedExecutionResult Success(string result)
+                => new(true, result, null, null);
+            public static GovernedExecutionResult Denied(string reason, string? code = null)
+                => new(false, null, reason, code);
+        }
+
+    # ----- CHANGE 2: AnalyticsOrchestrator dùng ToolGovernance -----
+    - file: "src/TILSOFTAI.Orchestration/Analytics/AnalyticsOrchestrator.cs"
+      action: THAY THẾ ExecuteToolAsync method
+      description: |
+        Inject ToolGovernance vào constructor.
+        Thay thế ExecuteToolAsync() để gọi qua governance pipeline.
+
+      constructor_change: |
+        // THÊM vào constructor parameters:
+        private readonly ToolGovernance _toolGovernance;
+
+        public AnalyticsOrchestrator(
+            IToolCatalogResolver toolCatalogResolver,
+            IToolHandler toolHandler,
+            ToolGovernance toolGovernance,    // ← PATCH 31.01: THÊM
+            ILlmClient llmClient,
+            IInsightAssemblyService insightAssemblyService,
+            InsightRenderer renderer,
+            AnalyticsPersistence persistence,
+            AnalyticsCache cache,
+            IOptions<AnalyticsOptions> options,
+            ILogger<AnalyticsOrchestrator> logger)
+        {
+            // ... existing assignments ...
+            _toolGovernance = toolGovernance ?? throw new ArgumentNullException(nameof(toolGovernance));
+        }
+
+      method_replacement: |
+        // PATCH 31.01: THAY THẾ toàn bộ ExecuteToolAsync
+        // CŨ: Gọi _toolHandler.ExecuteAsync trực tiếp
+        // MỚI: Gọi qua _toolGovernance.ValidateAndExecuteAsync
+        private async Task<string> ExecuteToolAsync(
+            string toolName,
+            string argsJson,
+            IReadOnlyDictionary<string, ToolDefinition> toolLookup,
+            TilsoftExecutionContext context,
+            CancellationToken ct)
+        {
+            _logger.LogDebug("ExecutingTool | Name: {ToolName} | Governed: true", toolName);
+
+            var govResult = await _toolGovernance.ValidateAndExecuteAsync(
+                toolName, argsJson, toolLookup, context, _toolHandler, ct);
+
+            if (!govResult.IsAllowed)
+            {
+                _logger.LogWarning(
+                    "ToolGovernanceDenied | Name: {ToolName} | Reason: {Reason} | Code: {Code}",
+                    toolName, govResult.DenialReason, govResult.DenialCode);
+
+                // Return structured error JSON instead of throwing
+                return System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    error = true,
+                    code = govResult.DenialCode ?? "GOVERNANCE_DENIED",
+                    message = govResult.DenialReason
+                });
+            }
+
+            _logger.LogDebug(
+                "ToolComplete | Name: {ToolName} | ResultLength: {Length} | Governed: true",
+                toolName, govResult.Result?.Length ?? 0);
+
+            return govResult.Result ?? "{}";
+        }
+
+    # ----- CHANGE 3: DI Registration -----
+    - file: "src/TILSOFTAI.Orchestration/OrchestrationServiceCollectionExtensions.cs"
+      action: KIỂM TRA ToolGovernance đã registered
+      description: |
+        Đảm bảo ToolGovernance được register singleton/scoped.
+        AnalyticsOrchestrator constructor sẽ tự resolve via DI.
+      
+      verify: |
+        // Kiểm tra ToolGovernance đã được register chưa.
+        // Nếu chưa, thêm:
+        services.AddSingleton<ToolGovernance>();
+
+# ============================================================================
+# ACCEPTANCE CRITERIA
+# ============================================================================
+acceptance_criteria:
+  - "AnalyticsOrchestrator.ExecuteToolAsync() gọi ToolGovernance.ValidateAndExecuteAsync()"
+  - "Tool call thiếu RequiredRoles → denied + logged via AuditLogger"
+  - "Tool call vi phạm schema → denied + logged"
+  - "Input sanitization applied trước execution"
+  - "CÙNG governance code path cho LLM calls và orchestrator calls"
+  - "Governance denial trả structured error JSON, không throw exception"
+
+# ============================================================================
+# TEST SCENARIOS
+# ============================================================================
+test_scenarios:
+  - name: "User thiếu analytics.read gọi catalog_search"
+    setup: "context.Roles = ['basic_user'] (không có analytics.read)"
+    expect: "GovernedExecutionResult.Denied + AuditLogger.LogAuthorizationEvent called"
+
+  - name: "User có đủ roles gọi analytics_execute_plan"
+    setup: "context.Roles = ['analytics.read', 'analytics.execute']"
+    expect: "GovernedExecutionResult.Success + tool executed normally"
+
+  - name: "Tool args vi phạm schema (missing required field)"
+    setup: "argsJson thiếu 'datasetKey' required field"
+    expect: "GovernedExecutionResult.Denied với code ToolArgsInvalid"
+
+  - name: "Tool args chứa injection pattern"
+    setup: "argsJson chứa SQL injection attempt"
+    expect: "Input sanitization strips/rejects + GovernedExecutionResult.Denied"

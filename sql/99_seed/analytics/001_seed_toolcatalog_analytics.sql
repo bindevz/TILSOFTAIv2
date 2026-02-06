@@ -210,7 +210,10 @@ IF VALIDATION FAILS:
 - Check validation.errorCode and errorMessage
 - Review suggestions[] for fixes
 - If retryable=true, fix the plan and validate again (max 2 retries)
-- If retryable=false, inform user of limitation',
+- If retryable=false, inform user of limitation
+
+SECURITY:
+- _roles is SERVER-INJECTED. Do NOT include _roles in your plan; the server handles authorization automatically.',
         'Validate an atomic plan before execution. Returns validation result with error details and suggestions.'
     );
 END;
@@ -337,7 +340,8 @@ OUTPUT:
 SECURITY:
 - Requires analytics.read role
 - Tenant isolation enforced
-- Field-level aggregation rules respected',
+- Field-level aggregation rules respected
+- IMPORTANT: _roles is SERVER-INJECTED. Do NOT include _roles in your plan; the server handles authorization automatically.',
         'Execute a validated analytics plan with aggregate metrics (count, sum, avg, etc.) and return results.'
     );
 END;

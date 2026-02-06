@@ -145,42 +145,127 @@ jobs:
           Write-Host "  ✓ $file" -ForegroundColor Green
         }
 
+    # PATCH 31.02: Fixed secret scanning - now includes JSON and fails on detection
     - name: Verify No Hardcoded Credentials
       shell: pwsh
       run: |
         Write-Host "Checking for hardcoded credentials..." -ForegroundColor Cyan
-        $patterns = @(
-          @{ Pattern = 'password\s*=\s*["\u0027][^"\u0027]{1,50}["\u0027]'; Name = "password assignment" },
-          @{ Pattern = 'pwd\s*=\s*["\u0027][^"\u0027]{1,50}["\u0027]'; Name = "pwd assignment" }
-        )
-        
         $issues = @()
-        $ignorePatterns = @("*.md", "*.txt", "*.yaml", "*.yml", "*.json")
         
-        $files = Get-ChildItem -Path . -Recurse -Include "*.ps1", "*.cs", "*.config" -Exclude $ignorePatterns
+        # Scan ALL relevant files including JSON (the previous version excluded *.json)
+        $files = Get-ChildItem -Path ./src -Recurse -Include "*.cs", "*.json", "*.config", "*.ps1", "*.xml" |
+          Where-Object { $_.FullName -notmatch '(\\|/)bin(\\|/)' -and $_.FullName -notmatch '(\\|/)obj(\\|/)' }
         
         foreach ($file in $files) {
           $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
           if (-not $content) { continue }
           
-          foreach ($p in $patterns) {
-            if ($content -match $p.Pattern) {
-              # Exclude environment variable references
-              if ($content -notmatch '\$env:') {
-                $issues += "$($file.Name): potential $($p.Name)"
-              }
+          # Check for real credentials (not placeholders)
+          if ($content -match '(?i)(Password|Pwd)\s*=\s*(?!(__|\\$env:|YOUR_|%%))([^;\\"]{3,})') {
+            # Exclude known safe patterns
+            if ($content -notmatch '__SQL_CONNECTION_STRING_FROM_ENV') {
+              $issues += "$($file.FullName): potential hardcoded credential"
             }
+          }
+          
+          # Check for API keys / tokens
+          if ($content -match '(?i)(api[_-]?key|secret[_-]?key|access[_-]?token)\s*[:=]\s*[\\"''][a-zA-Z0-9+/=]{16,}') {
+            $issues += "$($file.FullName): potential API key/token"
           }
         }
         
         if ($issues.Count -gt 0) {
           Write-Host ""
-          Write-Host "WARNING: Potential hardcoded credentials detected:" -ForegroundColor Yellow
+          Write-Host "ERROR: Hardcoded credentials detected!" -ForegroundColor Red
           foreach ($issue in $issues) {
-            Write-Host "  - $issue" -ForegroundColor Yellow
+            Write-Host "  - $issue" -ForegroundColor Red
           }
-          Write-Host ""
-          Write-Host "This is a warning only - please review these files." -ForegroundColor Yellow
-        } else {
-          Write-Host "No hardcoded credentials detected." -ForegroundColor Green
+          exit 1  # FAIL CI, not just warning
         }
+        
+        Write-Host "No hardcoded credentials detected." -ForegroundColor Green
+
+  # PATCH 31.04: Integration tests with SQL Server container
+  integration-tests:
+    runs-on: ubuntu-latest
+    # Only run on main/develop push or PR to main
+    if: github.event_name == 'push' || github.event.pull_request.base.ref == 'main'
+    
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Integration_Test_P@ss1!"
+          MSSQL_PID: Express
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Integration_Test_P@ss1!' -Q 'SELECT 1' -N -C || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install sqlcmd
+        run: |
+          curl https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc
+          sudo add-apt-repository "$(wget -qO- https://packages.microsoft.com/config/ubuntu/22.04/prod.list)"
+          sudo apt-get update
+          sudo apt-get install -y mssql-tools18 unixodbc-dev
+          echo 'export PATH="$PATH:/opt/mssql-tools18/bin"' >> ~/.bashrc
+
+      - name: Create Test Database
+        run: |
+          /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P 'Integration_Test_P@ss1!' \
+            -N -C \
+            -Q "CREATE DATABASE TILSOFTAI_Test;"
+
+      - name: Deploy SQL Migrations
+        shell: pwsh
+        run: |
+          $conn = "Server=localhost;Database=TILSOFTAI_Test;User ID=sa;Password=Integration_Test_P@ss1!;TrustServerCertificate=True;"
+          
+          # Deploy in order: core → atomic → modules → seeds
+          $folders = @(
+            "sql/01_core",
+            "sql/02_atomic",
+            "sql/02_modules/analytics",
+            "sql/02_modules/model",
+            "sql/99_seed"
+          )
+          
+          foreach ($folder in $folders) {
+            if (Test-Path $folder) {
+              $files = Get-ChildItem -Path $folder -Filter "*.sql" -Recurse | Sort-Object Name
+              foreach ($file in $files) {
+                Write-Host "Deploying: $($file.FullName)" -ForegroundColor Cyan
+                /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Integration_Test_P@ss1!' -N -C -d TILSOFTAI_Test -i $file.FullName -b
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Failed to deploy: $($file.FullName)"
+                  exit 1
+                }
+              }
+            }
+          }
+          Write-Host "All SQL migrations deployed successfully." -ForegroundColor Green
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Run Integration Tests
+        run: dotnet test tests/TILSOFTAI.IntegrationTests --no-build --configuration Release --verbosity normal
+        env:
+          TEST_SQL_CONNECTION: "Server=localhost;Database=TILSOFTAI_Test;User ID=sa;Password=Integration_Test_P@ss1!;TrustServerCertificate=True;"

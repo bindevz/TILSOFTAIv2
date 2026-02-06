@@ -8,6 +8,7 @@ using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Analytics;
 using TILSOFTAI.Orchestration.Llm;
 using TILSOFTAI.Orchestration.Tools;
+using TILSOFTAI.IntegrationTests.Infrastructure;
 using Xunit;
 
 namespace TILSOFTAI.IntegrationTests.Analytics;
@@ -26,8 +27,9 @@ public class DeepAnalyticsE2ETests
     /// <summary>
     /// Tests the complete analytics workflow for a Vietnamese query.
     /// Requires: Test database with model/collection catalog seeded.
+    /// PATCH 31.04: Env-guarded test — runs when TEST_SQL_CONNECTION is set.
     /// </summary>
-    [Fact(Skip = "Requires test database - run manually with DB connection")]
+    [SqlServerAvailableFact]
     public async Task AnalyticsWorkflow_VietnameseQuery_ShouldReturnValidInsight()
     {
         // Arrange
@@ -159,11 +161,13 @@ public class DeepAnalyticsE2ETests
         // Mock all dependencies - this is a structural test
         var toolCatalogResolver = Mock.Of<IToolCatalogResolver>();
         var toolHandler = Mock.Of<IToolHandler>();
+        var toolGovernance = Mock.Of<ToolGovernance>();
         var llmClient = Mock.Of<ILlmClient>();
         var insightAssemblyService = Mock.Of<IInsightAssemblyService>();
         var renderer = new InsightRenderer();
         var persistence = Mock.Of<AnalyticsPersistence>();
         var cache = Mock.Of<AnalyticsCache>();
+        var cacheWriteQueue = Mock.Of<ICacheWriteQueue>();
         var options = Options.Create(new AnalyticsOptions
         {
             MaxPlanRetries = 2,
@@ -176,11 +180,13 @@ public class DeepAnalyticsE2ETests
         return new AnalyticsOrchestrator(
             toolCatalogResolver,
             toolHandler,
+            toolGovernance,
             llmClient,
             insightAssemblyService,
             renderer,
             persistence,
             cache,
+            cacheWriteQueue,
             options,
             logger);
     }

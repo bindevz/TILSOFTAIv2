@@ -1,0 +1,226 @@
+# ============================================================================
+# PATCH 31_03 — Type-Safe SQL Filtering với TRY_CONVERT
+# ============================================================================
+# Severity: P1
+# Audit Finding: P1-SQL-01
+# ============================================================================
+
+patch: 31_03
+title: "TRY_CONVERT type-safe filtering trong ai_analytics_execute_plan"
+severity: P1
+status: pending
+
+# ============================================================================
+# VẤN ĐỀ HIỆN TẠI
+# ============================================================================
+problem:
+  description: |
+    WHERE clause builder trong ai_analytics_execute_plan so sánh column values
+    với JSON_VALUE(...) — luôn trả về NVARCHAR(4000). Điều này gây ra:
+    - Numeric columns (int, decimal): so sánh lexicographic thay vì numeric
+      → '9' > '10' (sai), '2.5' > '10.0' (sai)
+    - DateTime columns: implicit conversion có thể fail hoặc sai format
+    - Không có validation → runtime SQL error khi giá trị không cast được
+
+  example_wrong_behavior: |
+    -- Column ProductionQty là INT, filter value = '9'
+    -- Hiện tại: WHERE src.[ProductionQty] > '9'   ← NVARCHAR comparison
+    -- Kết quả sai: row có ProductionQty = 10 BỊ BỎ QUA vì '10' < '9' (lexicographic)
+    
+    -- Column OrderDate là datetime2, filter value = '2024-01-15'
+    -- Hiện tại: WHERE src.[OrderDate] > '2024-01-15'  ← implicit convert, fragile
+
+  evidence:
+    file: "sql/02_modules/analytics/005_sps_ai_analytics_execute.sql"
+    lines: "472-485"
+
+# ============================================================================
+# GIẢI PHÁP
+# ============================================================================
+solution:
+  approach: |
+    THAY THẾ raw JSON_VALUE comparisons bằng TRY_CONVERT dựa trên DataType
+    từ FieldCatalog. Nếu TRY_CONVERT trả NULL → reject filter với error code.
+
+  changes:
+
+    - file: "sql/02_modules/analytics/005_sps_ai_analytics_execute.sql"
+      action: THAY THẾ WHERE clause builder (lines ~466-485)
+      description: |
+        1. Tra cứu DataType từ FieldCatalog cho mỗi filter column
+        2. Wrap JSON_VALUE trong TRY_CONVERT phù hợp
+        3. Validate trước khi build WHERE — nếu TRY_CONVERT = NULL → lỗi
+
+      # ---- BƯỚC 1: Thêm DataType vào @Where table variable ----
+      add_datatype_to_where_tv: |
+        -- PATCH 31.03: Thêm DataType column vào @Where
+        -- TÌM declaration hiện tại của @Where và THÊM DataType
+        DECLARE @Where TABLE (
+            Ordinal       INT,
+            PhysicalColumn SYSNAME,
+            Op            NVARCHAR(10),
+            DataType      NVARCHAR(50),     -- ← PATCH 31.03: THÊM
+            PRIMARY KEY (Ordinal)
+        );
+
+      # ---- BƯỚC 2: Populate DataType từ FieldCatalog khi INSERT @Where ----
+      populate_datatype: |
+        -- PATCH 31.03: Join FieldCatalog để lấy DataType cho mỗi filter column
+        INSERT INTO @Where (Ordinal, PhysicalColumn, Op, DataType)
+        SELECT 
+            w.Ordinal,
+            w.PhysicalColumn,
+            w.Op,
+            ISNULL(fc.DataType, 'nvarchar')  -- fallback nvarchar nếu không tìm thấy
+        FROM @RawWhere w
+        LEFT JOIN dbo.FieldCatalog fc 
+            ON fc.DatasetKey = @DatasetKey 
+            AND fc.PhysicalColumn = w.PhysicalColumn;
+
+      # ---- BƯỚC 3: Validate filter values với TRY_CONVERT TRƯỚC build WHERE ----
+      pre_validate_filters: |
+        -- PATCH 31.03: Pre-validate filter values before building WHERE
+        -- Check xem mỗi filter value có convert được sang target DataType không
+        DECLARE @InvalidFilter NVARCHAR(500);
+        
+        SELECT TOP 1 @InvalidFilter = 
+            'Column [' + w.PhysicalColumn + '] expects ' + w.DataType + 
+            ' but received invalid value at where[' + CAST(w.Ordinal AS NVARCHAR(10)) + ']'
+        FROM @Where w
+        CROSS APPLY (
+            SELECT JSON_VALUE(@ArgsJson, '$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value') AS FilterValue
+        ) fv
+        WHERE w.Op NOT IN ('in', 'between')  -- in/between validate separately
+          AND fv.FilterValue IS NOT NULL
+          AND (
+            (w.DataType IN ('int', 'bigint', 'smallint', 'tinyint') 
+                AND TRY_CONVERT(BIGINT, fv.FilterValue) IS NULL)
+            OR (w.DataType IN ('decimal', 'numeric', 'float', 'real', 'money') 
+                AND TRY_CONVERT(DECIMAL(18,4), fv.FilterValue) IS NULL)
+            OR (w.DataType IN ('datetime', 'datetime2', 'date', 'smalldatetime') 
+                AND TRY_CONVERT(DATETIME2, fv.FilterValue) IS NULL)
+            OR (w.DataType IN ('bit') 
+                AND TRY_CONVERT(BIT, fv.FilterValue) IS NULL)
+          );
+        
+        IF @InvalidFilter IS NOT NULL
+        BEGIN
+            -- Return structured error
+            SELECT (
+                SELECT 
+                    'INVALID_FILTER_VALUE' AS errorCode,
+                    @InvalidFilter AS [message],
+                    CAST(0 AS BIT) AS retryable
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            ) AS ResultJson;
+            RETURN;
+        END;
+
+      # ---- BƯỚC 4: THAY THẾ WHERE clause builder với type-aware CAST ----
+      replace_where_builder: |
+        -- PATCH 31.03: Type-aware WHERE clause builder
+        -- THAY THẾ toàn bộ block SELECT @WhereSql = @WhereSql + CASE w.Op ...
+        SELECT @WhereSql = @WhereSql +
+            CASE w.Op
+                -- EQ / NE: Cast cả hai sides
+                WHEN 'eq' THEN ' AND ' + 
+                    dbo.fn_TypedCompare(w.PhysicalColumn, '=', w.DataType, w.Ordinal)
+                WHEN 'ne' THEN ' AND ' + 
+                    dbo.fn_TypedCompare(w.PhysicalColumn, '<>', w.DataType, w.Ordinal)
+                
+                -- Range operators: Cast required
+                WHEN 'gt' THEN ' AND ' + 
+                    dbo.fn_TypedCompare(w.PhysicalColumn, '>', w.DataType, w.Ordinal)
+                WHEN 'gte' THEN ' AND ' + 
+                    dbo.fn_TypedCompare(w.PhysicalColumn, '>=', w.DataType, w.Ordinal)
+                WHEN 'lt' THEN ' AND ' + 
+                    dbo.fn_TypedCompare(w.PhysicalColumn, '<', w.DataType, w.Ordinal)
+                WHEN 'lte' THEN ' AND ' + 
+                    dbo.fn_TypedCompare(w.PhysicalColumn, '<=', w.DataType, w.Ordinal)
+                
+                -- LIKE: chỉ cho phép với string types
+                WHEN 'like' THEN 
+                    CASE WHEN w.DataType IN ('nvarchar', 'varchar', 'char', 'nchar', 'text', 'ntext')
+                        THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + 
+                            ' LIKE JSON_VALUE(@ArgsJson, ''$.where[' + 
+                            CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
+                        ELSE '' -- Skip LIKE cho non-string types (đã validate ở trên)
+                    END
+                
+                -- IN: Cast từng giá trị
+                WHEN 'in' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + 
+                    ' IN (SELECT ' + 
+                    dbo.fn_TypedCastExpression('value', w.DataType) + 
+                    ' FROM OPENJSON(@ArgsJson, ''$.where[' + 
+                    CAST(w.Ordinal AS NVARCHAR(10)) + '].values''))'
+                
+                -- BETWEEN: Cast cả hai bounds
+                WHEN 'between' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + 
+                    ' BETWEEN ' + 
+                    dbo.fn_TypedCastJson(w.DataType, w.Ordinal, '0') + 
+                    ' AND ' + 
+                    dbo.fn_TypedCastJson(w.DataType, w.Ordinal, '1')
+            END
+        FROM @Where w
+        ORDER BY w.Ordinal;
+
+      # ---- BƯỚC 5: Helper functions (inline hoặc scalar UDF) ----
+      helper_functions: |
+        -- PATCH 31.03: Inline helper — tạo typed comparison expression
+        -- Có thể implement dưới dạng inline variable hoặc scalar UDF.
+        -- Ưu tiên: implement inline trong SP để tránh UDF performance overhead.
+        
+        -- Pattern cho mỗi DataType:
+        -- INT/BIGINT:    TRY_CONVERT(BIGINT, JSON_VALUE(@ArgsJson, '$.where[N].value'))
+        -- DECIMAL/MONEY: TRY_CONVERT(DECIMAL(18,4), JSON_VALUE(@ArgsJson, '$.where[N].value'))
+        -- DATETIME2:     TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, '$.where[N].value'))
+        -- NVARCHAR/etc:  JSON_VALUE(@ArgsJson, '$.where[N].value') (no cast needed)
+        -- BIT:           TRY_CONVERT(BIT, JSON_VALUE(@ArgsJson, '$.where[N].value'))
+        
+        -- Thực tế: vì SQL Server không cho phép dynamic type trong TRY_CONVERT,
+        -- implement bằng CASE statement inline:
+        
+        -- Ví dụ cho operator '=' với PhysicalColumn = 'OrderDate', DataType = 'datetime2':
+        -- Kết quả: ' AND src.[OrderDate] = TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, ''$.where[0].value''))'
+
+      alternative_simple_approach: |
+        -- NẾU không muốn tạo UDF, dùng CASE inline trực tiếp:
+        SELECT @WhereSql = @WhereSql +
+            CASE w.Op
+                WHEN 'eq' THEN ' AND src.' + QUOTENAME(w.PhysicalColumn) + ' = ' +
+                    CASE 
+                        WHEN w.DataType IN ('int','bigint','smallint','tinyint')
+                            THEN 'TRY_CONVERT(BIGINT, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                        WHEN w.DataType IN ('decimal','numeric','float','real','money')
+                            THEN 'TRY_CONVERT(DECIMAL(18,4), JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                        WHEN w.DataType IN ('datetime','datetime2','date')
+                            THEN 'TRY_CONVERT(DATETIME2, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                        WHEN w.DataType = 'bit'
+                            THEN 'TRY_CONVERT(BIT, JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value''))'
+                        ELSE 'JSON_VALUE(@ArgsJson, ''$.where[' + CAST(w.Ordinal AS NVARCHAR(10)) + '].value'')'
+                    END
+                -- Repeat pattern cho 'ne', 'gt', 'gte', 'lt', 'lte'
+                -- LIKE và IN giữ riêng logic
+            END
+        FROM @Where w
+        ORDER BY w.Ordinal;
+
+# ============================================================================
+# ACCEPTANCE CRITERIA
+# ============================================================================
+acceptance_criteria:
+  - "Numeric filter (gt 9) trên cột INT → row ProductionQty=10 được include (không bị '10' < '9' lexicographic)"
+  - "Date filter (gte '2024-01-15') trên cột datetime2 → compare đúng kiểu datetime2"
+  - "Invalid filter value (text trên cột INT) → trả error INVALID_FILTER_VALUE, không runtime crash"
+  - "BETWEEN trên datetime2 → cả 2 bounds đều TRY_CONVERT"
+  - "LIKE chỉ hoạt động trên string types"
+  - "IN operator → từng value trong array đều được typed cast"
+
+# ============================================================================
+# ROLLBACK
+# ============================================================================
+rollback:
+  strategy: |
+    Nếu cần rollback: Revert stored procedure về version trước (pre-31.03).
+    WHERE clause builder cũ vẫn hoạt động (chỉ sai kiểu so sánh, không crash).
+    Rollback an toàn vì không thay đổi schema tables.

@@ -27,7 +27,11 @@ public enum AuditEventType
     Security_InputValidationFailure = 500,
     Security_RateLimitExceeded = 501,
     Security_SuspiciousActivity = 502,
-    Security_PromptInjectionDetected = 503
+    Security_PromptInjectionDetected = 503,
+
+    // PATCH 31.06: Governance pipeline events
+    Governance_Allow = 600,
+    Governance_Deny = 601
 }
 
 /// <summary>

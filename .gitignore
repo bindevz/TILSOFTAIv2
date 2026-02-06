@@ -365,3 +365,10 @@ FodyWeavers.xsd
 # Local configuration overrides (secrets)
 appsettings.Local.json
 *.Development.local.json
+
+# PATCH 31.02: Additional secret hygiene patterns
+secrets.json
+.env
+.env.*
+!.env.example
+[Pp]ublish/

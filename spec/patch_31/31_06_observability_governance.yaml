@@ -1,0 +1,170 @@
+# ============================================================================
+# PATCH 31_06 — Governance Audit Events + Observability Enhancement
+# ============================================================================
+# Severity: P2
+# Source: Research (Semantic Kernel telemetry patterns)
+# ============================================================================
+
+patch: 31_06
+title: "Structured audit events + ActivitySource spans cho governance pipeline"
+severity: P2
+status: pending
+
+# ============================================================================
+# MỤC TIÊU
+# ============================================================================
+objective: |
+  Hiện tại, governance decisions (allow/deny) không có structured audit trail.
+  Patch này thêm:
+  1. GovernanceAuditEvent — structured event cho mọi governance decision
+  2. ActivitySource spans — cho end-to-end tracing từ request → governance → tool execution
+  3. Prometheus counters — governance_allow_total, governance_deny_total
+
+# ============================================================================
+# CHANGES
+# ============================================================================
+solution:
+  changes:
+
+    # ----- CHANGE 1: GovernanceAuditEvent -----
+    - file: "src/TILSOFTAI.Domain/Audit/GovernanceAuditEvent.cs"
+      action: TẠO MỚI
+      description: "Structured audit event cho governance decisions"
+
+      content: |
+        namespace TILSOFTAI.Domain.Audit;
+
+        /// <summary>
+        /// PATCH 31.06: Audit event for tool governance decisions.
+        /// Covers both allow and deny outcomes across all execution paths.
+        /// </summary>
+        public sealed record GovernanceAuditEvent
+        {
+            public required string EventType { get; init; }       // "governance.allow" | "governance.deny"
+            public required string TenantId { get; init; }
+            public required string UserId { get; init; }
+            public required string CorrelationId { get; init; }
+            public required string ToolName { get; init; }
+            public required string ExecutionSource { get; init; }  // "llm_tool_call" | "orchestrator" | "api"
+            public required string[] UserRoles { get; init; }
+            public required string[] RequiredRoles { get; init; }
+            public string? DenialReason { get; init; }
+            public string? DenialCode { get; init; }
+            public bool SchemaValid { get; init; }
+            public bool InputSanitized { get; init; }
+            public double DurationMs { get; init; }
+            public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+
+            public static GovernanceAuditEvent Allowed(
+                string tenantId, string userId, string correlationId,
+                string toolName, string source, string[] userRoles, string[] requiredRoles,
+                double durationMs) => new()
+            {
+                EventType = "governance.allow",
+                TenantId = tenantId,
+                UserId = userId,
+                CorrelationId = correlationId,
+                ToolName = toolName,
+                ExecutionSource = source,
+                UserRoles = userRoles,
+                RequiredRoles = requiredRoles,
+                SchemaValid = true,
+                InputSanitized = true,
+                DurationMs = durationMs
+            };
+
+            public static GovernanceAuditEvent Denied(
+                string tenantId, string userId, string correlationId,
+                string toolName, string source, string[] userRoles, string[] requiredRoles,
+                string reason, string? code, double durationMs) => new()
+            {
+                EventType = "governance.deny",
+                TenantId = tenantId,
+                UserId = userId,
+                CorrelationId = correlationId,
+                ToolName = toolName,
+                ExecutionSource = source,
+                UserRoles = userRoles,
+                RequiredRoles = requiredRoles,
+                DenialReason = reason,
+                DenialCode = code,
+                DurationMs = durationMs
+            };
+        }
+
+    # ----- CHANGE 2: ToolGovernance emit audit events + spans -----
+    - file: "src/TILSOFTAI.Orchestration/Tools/ToolGovernance.cs"
+      action: THÊM audit event emission trong Validate()
+      description: |
+        Sau mỗi Validate() call, emit GovernanceAuditEvent.
+        Thêm ActivitySource span wrapping validation logic.
+
+      add_to_validate_method: |
+        // PATCH 31.06: Emit governance audit event
+        // Thêm ở cuối method Validate(), trước return:
+        
+        // On SUCCESS path (trước return ToolValidationResult.Success):
+        _auditLogger.LogGovernanceEvent(GovernanceAuditEvent.Allowed(
+            context.TenantId, context.UserId, context.CorrelationId,
+            call.Name, "tool_governance",
+            context.Roles ?? Array.Empty<string>(),
+            tool.RequiredRoles,
+            sw.ElapsedMilliseconds));
+        
+        // On DENY paths (trước mỗi return ToolValidationResult.Fail):
+        _auditLogger.LogGovernanceEvent(GovernanceAuditEvent.Denied(
+            context.TenantId, context.UserId, context.CorrelationId,
+            call.Name, "tool_governance",
+            context.Roles ?? Array.Empty<string>(),
+            tool?.RequiredRoles ?? Array.Empty<string>(),
+            error, code,
+            sw.ElapsedMilliseconds));
+
+    # ----- CHANGE 3: IAuditLogger thêm method -----
+    - file: "src/TILSOFTAI.Domain/Audit/IAuditLogger.cs"
+      action: THÊM method signature
+      description: "Interface method cho governance events"
+
+      add_method: |
+        /// <summary>PATCH 31.06: Log governance decision (allow/deny).</summary>
+        void LogGovernanceEvent(GovernanceAuditEvent @event);
+
+    # ----- CHANGE 4: AuditLogger implement -----
+    - file: "src/TILSOFTAI.Infrastructure/Audit/AuditLogger.cs"
+      action: THÊM implementation
+      description: "Concrete implementation delegates to audit sinks"
+
+      add_implementation: |
+        public void LogGovernanceEvent(GovernanceAuditEvent @event)
+        {
+            var auditEvent = new AuditEvent
+            {
+                EventType = @event.EventType,
+                TenantId = @event.TenantId,
+                UserId = @event.UserId,
+                CorrelationId = @event.CorrelationId,
+                Details = System.Text.Json.JsonSerializer.Serialize(@event),
+                Timestamp = @event.Timestamp
+            };
+            EnqueueEvent(auditEvent);
+        }
+
+    # ----- CHANGE 5: Metrics constants -----
+    - file: "src/TILSOFTAI.Domain/Metrics/MetricNames.cs"
+      action: THÊM governance metrics
+      
+      add_constants: |
+        // PATCH 31.06: Governance pipeline metrics
+        public const string GovernanceAllowTotal = "governance_allow_total";
+        public const string GovernanceDenyTotal = "governance_deny_total";
+        public const string GovernanceValidationDurationSeconds = "governance_validation_duration_seconds";
+
+# ============================================================================
+# ACCEPTANCE CRITERIA
+# ============================================================================
+acceptance_criteria:
+  - "Mọi governance decision (allow/deny) được logged dưới dạng GovernanceAuditEvent"
+  - "Audit event chứa: toolName, executionSource, userRoles, requiredRoles, durationMs"
+  - "Prometheus counters: governance_allow_total, governance_deny_total"
+  - "IAuditLogger có method LogGovernanceEvent() và được implement"
+  - "Governance deny events chứa denialReason và denialCode"

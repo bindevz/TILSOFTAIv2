@@ -171,6 +171,13 @@ public static class AddTilsoftAiExtensions
         // Analytics services (PATCH 28)
         services.AddSingleton<IInsightAssemblyService, InsightAssemblyService>();
         
+        // PATCH 31.05: Background cache write service
+        services.AddSingleton<CacheWriteBackgroundService>();
+        services.AddSingleton<ICacheWriteQueue>(sp => 
+            sp.GetRequiredService<CacheWriteBackgroundService>());
+        services.AddHostedService(sp => 
+            sp.GetRequiredService<CacheWriteBackgroundService>());
+        
         services.AddHttpClient<OpenAiEmbeddingClient>();
         services.AddSingleton<IEmbeddingClient>(sp => sp.GetRequiredService<OpenAiEmbeddingClient>());
         services.AddSingleton<SqlVectorSemanticCache>();

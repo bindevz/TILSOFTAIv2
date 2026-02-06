@@ -1,4 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Sql;
@@ -9,6 +12,7 @@ namespace TILSOFTAI.Modules.Analytics.Tools;
 /// <summary>
 /// Handler for analytics_execute_plan tool - Execute validated analytics plans with metrics.
 /// PATCH 29.01: Metrics Execution Engine
+/// PATCH 30.02: Server-trusted roles injection (strip LLM-provided _roles).
 /// </summary>
 public sealed class AnalyticsExecutePlanToolHandler : AnalyticsToolHandlerBase
 {
@@ -44,18 +48,24 @@ public sealed class AnalyticsExecutePlanToolHandler : AnalyticsToolHandlerBase
             throw new ArgumentException("Invalid arguments for analytics_execute_plan");
         }
 
+        // PATCH 30.02: Strip LLM-provided _roles and inject server-trusted roles
+        var securedArgsJson = InjectServerTrustedRoles(argumentsJson, context);
+
         var startTime = DateTime.UtcNow;
-        var planHash = ComputePlanHash(argumentsJson);
+        var planHash = ComputePlanHash(securedArgsJson);
+        var rolesHash = ComputeRolesHash(context.Roles);
 
         Logger.LogInformation(
-            "AnalyticsExecutePlan | DatasetKey: {DatasetKey} | PlanHash: {PlanHash}",
+            "AnalyticsExecutePlan.ServerTrustedRoles | CorrelationId: {CorrelationId} | DatasetKey: {DatasetKey} | PlanHash: {PlanHash} | RolesHash: {RolesHash}",
+            context.CorrelationId,
             args.DatasetKey ?? "unknown",
-            planHash);
+            planHash,
+            rolesHash);
 
         var parameters = new Dictionary<string, object?>
         {
             ["TenantId"] = context.TenantId,
-            ["ArgsJson"] = argumentsJson
+            ["ArgsJson"] = securedArgsJson  // Use secured JSON with server roles
         };
 
         var result = await ExecuteSpAsync("dbo.ai_analytics_execute_plan", parameters, ct);
@@ -68,6 +78,49 @@ public sealed class AnalyticsExecutePlanToolHandler : AnalyticsToolHandlerBase
             duration.TotalMilliseconds);
 
         return result;
+    }
+
+    /// <summary>
+    /// PATCH 30.02: Strip any _roles from args JSON and inject server-trusted roles.
+    /// This prevents privilege escalation by LLM injecting roles.
+    /// </summary>
+    private static string InjectServerTrustedRoles(string argsJson, TilsoftExecutionContext context)
+    {
+        try
+        {
+            var node = JsonNode.Parse(argsJson);
+            if (node is JsonObject obj)
+            {
+                // Strip any existing _roles (could be LLM-injected)
+                obj.Remove("_roles");
+                
+                // Inject server-trusted roles (sorted, unique)
+                var serverRoles = context.Roles?
+                    .Where(r => !string.IsNullOrWhiteSpace(r))
+                    .Select(r => r.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(r => r, StringComparer.OrdinalIgnoreCase)
+                    .ToArray() ?? Array.Empty<string>();
+                
+                obj["_roles"] = new JsonArray(serverRoles.Select(r => JsonValue.Create(r)).ToArray());
+                
+                // Optional: inject _caller metadata for auditing (no PII)
+                obj["_caller"] = new JsonObject
+                {
+                    ["tenantId"] = context.TenantId,
+                    ["userId"] = context.UserId,
+                    ["correlationId"] = context.CorrelationId
+                };
+                
+                return obj.ToJsonString();
+            }
+        }
+        catch
+        {
+            // If parse fails, return original (SP will handle invalid JSON)
+        }
+        
+        return argsJson;
     }
 
     private static string ComputePlanHash(string json)
@@ -83,6 +136,20 @@ public sealed class AnalyticsExecutePlanToolHandler : AnalyticsToolHandlerBase
             hash &= 0x7FFFFFFF; // Keep positive
         }
         return hash.ToString("X8");
+    }
+
+    /// <summary>
+    /// Compute SHA256 hash of roles for logging (truncated to 8 chars).
+    /// </summary>
+    private static string ComputeRolesHash(IEnumerable<string>? roles)
+    {
+        if (roles == null || !roles.Any())
+            return "empty";
+            
+        var sorted = string.Join(",", roles.OrderBy(r => r, StringComparer.OrdinalIgnoreCase));
+        var bytes = Encoding.UTF8.GetBytes(sorted);
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexString(hash)[..8].ToLowerInvariant();
     }
 
     private sealed class ExecutePlanArgs

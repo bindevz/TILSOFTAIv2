@@ -168,9 +168,50 @@ public sealed class ChatPipeline
         }
 
         // PATCH 29.02: Detect analytics intent and route to deterministic orchestrator
+        // PATCH 30.04: LLM-first detection with catalog_search tie-breaker for borderline
         if (_analyticsOptions.Enabled && _analyticsOrchestrator != null)
         {
-            var intent = _intentDetector.Detect(normalized);
+            var intent = await _intentDetector.DetectAsync(normalized, ct);
+            
+            // ========== PATCH 31.07: RBAC Gate ==========
+            // Fast role check BEFORE routing to analytics orchestrator
+            if (intent.IsAnalytics)
+            {
+                var requiredRole = _analyticsOptions.RequiredRole ?? "analytics.read";
+                var userRoles = new HashSet<string>(
+                    ctx.Roles ?? Array.Empty<string>(), 
+                    StringComparer.OrdinalIgnoreCase);
+                
+                if (!userRoles.Contains(requiredRole))
+                {
+                    _logger.LogWarning(
+                        "AnalyticsRbacDenied | UserId: {UserId} | TenantId: {TenantId} | " +
+                        "RequiredRole: {RequiredRole} | UserRoles: [{UserRoles}]",
+                        ctx.UserId, ctx.TenantId, requiredRole,
+                        string.Join(", ", ctx.Roles ?? Array.Empty<string>()));
+                    
+                    // Neutralize intent → fall through to normal LLM flow
+                    intent = AnalyticsIntentResult.None();
+                }
+            }
+            // ========== END PATCH 31.07 ==========
+            
+            // T02: Borderline tie-breaker via catalog_search (max 1 extra call)
+            if (intent.IsBorderline && !string.IsNullOrEmpty(intent.EntityHint))
+            {
+                _logger.LogInformation(
+                    "AnalyticsIntentBorderline | Confidence: {Confidence} | EntityHint: {EntityHint} | Trying catalog_search",
+                    intent.Confidence, intent.EntityHint);
+                
+                // Quick catalog_search to resolve borderline
+                var catalogResult = await _analyticsOrchestrator.TryCatalogSearchAsync(intent.EntityHint, ctx, ct);
+                if (catalogResult.HasResults)
+                {
+                    intent = intent with { IsAnalytics = true };
+                    intent.Hints.Add("catalog_tiebreaker");
+                }
+            }
+            
             if (intent.IsAnalytics)
             {
                 _logger.LogInformation(
