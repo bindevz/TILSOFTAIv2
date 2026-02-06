@@ -477,10 +477,10 @@ BEGIN
                 THEN 'Invalid operation'
                 -- Check field-specific allowed aggregations  
                 WHEN fc.AllowedAggregations IS NOT NULL 
-                     AND EXISTS (
+                     AND NOT EXISTS (
                          SELECT 1 FROM STRING_SPLIT(fc.AllowedAggregations, ',') allowed
                          WHERE LOWER(LTRIM(RTRIM(allowed.value))) = LOWER(LTRIM(RTRIM(JSON_VALUE(m.value, '$.op'))))
-                     ) = 0
+                     )
                 THEN 'Operation not allowed for this field'
                 ELSE NULL
             END AS Reason,

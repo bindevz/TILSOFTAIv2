@@ -1,8 +1,19 @@
+-- ============================================================================
+-- TEMPLATE FILE - DO NOT DEPLOY
+-- This file is a template for creating new AI stored procedures. Copy this file
+-- to a new module folder and replace <module> with your module name.
+-- ============================================================================
+
+PRINT 'Template file: 90_template_module.002_sps_ai_template.sql - skipping (template only)';
+GO
+
+/*
+-- Template Example - Uncomment and replace <module> when ready
+
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
 GO
 
--- TEMPLATE ONLY: replace <module> and SP names.
 CREATE OR ALTER PROCEDURE dbo.ai_<module>_search
     @TenantId nvarchar(50),
     @Query nvarchar(200) = NULL
@@ -43,3 +54,4 @@ BEGIN
     ) AS ResultJson;
 END;
 GO
+*/

@@ -2,6 +2,27 @@ SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
 GO
 
+-- ============================================================================
+-- Model Enterprise Stored Procedures
+-- Guard: Only create if ERP Model views exist
+--
+-- These stored procedures depend on the model_enterprise views which in turn
+-- depend on ERP database tables. On fresh TILSOFTAI databases without ERP data,
+-- these objects are skipped.
+--
+-- We use sp_executesql with IF guard to fully defer DDL compilation.
+-- ============================================================================
+
+IF NOT EXISTS (SELECT 1 FROM sys.views WHERE name = 'v_Model_Overview' AND schema_id = SCHEMA_ID('dbo'))
+BEGIN
+    PRINT 'Skipping model_enterprise stored procedures: v_Model_Overview view not found.';
+    PRINT 'This is expected on fresh databases without ERP data.';
+END
+ELSE
+BEGIN
+    PRINT 'Creating model_enterprise stored procedures...';
+    
+    EXEC sp_executesql N'
 CREATE OR ALTER PROCEDURE dbo.ai_model_get_overview
     @TenantId nvarchar(50),
     @Language nvarchar(10) = NULL,
@@ -12,7 +33,7 @@ BEGIN
 
     IF @ModelId IS NULL
     BEGIN
-        RAISERROR('modelId is required.', 16, 1);
+        RAISERROR(''modelId is required.'', 16, 1);
         RETURN;
     END;
 
@@ -33,7 +54,7 @@ BEGIN
                     @GeneratedAtUtc AS generatedAtUtc,
                     @RowCount AS [rowCount],
                     @ModelId AS modelId,
-                    NULLIF(LTRIM(RTRIM(@Language)), '') AS language
+                    NULLIF(LTRIM(RTRIM(@Language)), '''') AS language
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
             ),
             columns = (
@@ -42,16 +63,16 @@ BEGIN
                     [type],
                     [descriptionKey]
                 FROM (VALUES
-                    ('ModelId', 'int', NULL),
-                    ('ModelCode', 'nvarchar(4)', NULL),
-                    ('Name', 'nvarchar(255)', 'Model.Name'),
-                    ('Season', 'nvarchar(9)', NULL),
-                    ('PieceCount', 'int', 'Model.PieceCount'),
-                    ('DefaultCbm', 'decimal(18,4)', 'Model.Cbm'),
-                    ('Qnt40HC', 'int', 'Model.Qnt40HC'),
-                    ('BoxInSet', 'int', 'Packaging.BoxInSet'),
-                    ('HasFsc', 'bit', NULL),
-                    ('HasRcs', 'bit', NULL)
+                    (''ModelId'', ''int'', NULL),
+                    (''ModelCode'', ''nvarchar(4)'', NULL),
+                    (''Name'', ''nvarchar(255)'', ''Model.Name''),
+                    (''Season'', ''nvarchar(9)'', NULL),
+                    (''PieceCount'', ''int'', ''Model.PieceCount''),
+                    (''DefaultCbm'', ''decimal(18,4)'', ''Model.Cbm''),
+                    (''Qnt40HC'', ''int'', ''Model.Qnt40HC''),
+                    (''BoxInSet'', ''int'', ''Packaging.BoxInSet''),
+                    (''HasFsc'', ''bit'', NULL),
+                    (''HasRcs'', ''bit'', NULL)
                 ) AS columns([name], [type], [descriptionKey])
                 FOR JSON PATH
             ),
@@ -75,8 +96,10 @@ BEGIN
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     ) AS ResultJson;
 END;
-GO
-
+    ';
+    PRINT '  Created: dbo.ai_model_get_overview';
+    
+    EXEC sp_executesql N'
 CREATE OR ALTER PROCEDURE dbo.ai_model_get_pieces
     @TenantId nvarchar(50),
     @Language nvarchar(10) = NULL,
@@ -87,7 +110,7 @@ BEGIN
 
     IF @ModelId IS NULL
     BEGIN
-        RAISERROR('modelId is required.', 16, 1);
+        RAISERROR(''modelId is required.'', 16, 1);
         RETURN;
     END;
 
@@ -108,7 +131,7 @@ BEGIN
                     @GeneratedAtUtc AS generatedAtUtc,
                     @RowCount AS [rowCount],
                     @ModelId AS modelId,
-                    NULLIF(LTRIM(RTRIM(@Language)), '') AS language
+                    NULLIF(LTRIM(RTRIM(@Language)), '''') AS language
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
             ),
             columns = (
@@ -117,12 +140,12 @@ BEGIN
                     [type],
                     [descriptionKey]
                 FROM (VALUES
-                    ('ModelPieceId', 'int', NULL),
-                    ('ChildModelId', 'int', NULL),
-                    ('ChildModelCode', 'nvarchar(4)', NULL),
-                    ('ChildModelName', 'nvarchar(255)', 'Model.Name'),
-                    ('Quantity', 'int', NULL),
-                    ('RowIndex', 'int', NULL)
+                    (''ModelPieceId'', ''int'', NULL),
+                    (''ChildModelId'', ''int'', NULL),
+                    (''ChildModelCode'', ''nvarchar(4)'', NULL),
+                    (''ChildModelName'', ''nvarchar(255)'', ''Model.Name''),
+                    (''Quantity'', ''int'', NULL),
+                    (''RowIndex'', ''int'', NULL)
                 ) AS columns([name], [type], [descriptionKey])
                 FOR JSON PATH
             ),
@@ -143,8 +166,10 @@ BEGIN
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     ) AS ResultJson;
 END;
-GO
-
+    ';
+    PRINT '  Created: dbo.ai_model_get_pieces';
+    
+    EXEC sp_executesql N'
 CREATE OR ALTER PROCEDURE dbo.ai_model_get_packaging
     @TenantId nvarchar(50),
     @Language nvarchar(10) = NULL,
@@ -155,7 +180,7 @@ BEGIN
 
     IF @ModelId IS NULL
     BEGIN
-        RAISERROR('modelId is required.', 16, 1);
+        RAISERROR(''modelId is required.'', 16, 1);
         RETURN;
     END;
 
@@ -176,7 +201,7 @@ BEGIN
                     @GeneratedAtUtc AS generatedAtUtc,
                     @RowCount AS [rowCount],
                     @ModelId AS modelId,
-                    NULLIF(LTRIM(RTRIM(@Language)), '') AS language
+                    NULLIF(LTRIM(RTRIM(@Language)), '''') AS language
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
             ),
             columns = (
@@ -185,18 +210,18 @@ BEGIN
                     [type],
                     [descriptionKey]
                 FROM (VALUES
-                    ('MethodCode', 'nvarchar(3)', NULL),
-                    ('BoxInSet', 'int', 'Packaging.BoxInSet'),
-                    ('Cbm', 'decimal(18,4)', 'Model.Cbm'),
-                    ('Qnt20DC', 'int', NULL),
-                    ('Qnt40DC', 'int', NULL),
-                    ('Qnt40HC', 'int', 'Model.Qnt40HC'),
-                    ('NetWeight', 'decimal(18,4)', NULL),
-                    ('GrossWeight', 'decimal(18,4)', NULL),
-                    ('CartonBoxDimL', 'varchar(50)', NULL),
-                    ('CartonBoxDimW', 'varchar(50)', NULL),
-                    ('CartonBoxDimH', 'varchar(50)', NULL),
-                    ('PackagingRemark', 'varchar(255)', NULL)
+                    (''MethodCode'', ''nvarchar(3)'', NULL),
+                    (''BoxInSet'', ''int'', ''Packaging.BoxInSet''),
+                    (''Cbm'', ''decimal(18,4)'', ''Model.Cbm''),
+                    (''Qnt20DC'', ''int'', NULL),
+                    (''Qnt40DC'', ''int'', NULL),
+                    (''Qnt40HC'', ''int'', ''Model.Qnt40HC''),
+                    (''NetWeight'', ''decimal(18,4)'', NULL),
+                    (''GrossWeight'', ''decimal(18,4)'', NULL),
+                    (''CartonBoxDimL'', ''varchar(50)'', NULL),
+                    (''CartonBoxDimW'', ''varchar(50)'', NULL),
+                    (''CartonBoxDimH'', ''varchar(50)'', NULL),
+                    (''PackagingRemark'', ''varchar(255)'', NULL)
                 ) AS columns([name], [type], [descriptionKey])
                 FOR JSON PATH
             ),
@@ -222,8 +247,10 @@ BEGIN
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     ) AS ResultJson;
 END;
-GO
-
+    ';
+    PRINT '  Created: dbo.ai_model_get_packaging';
+    
+    EXEC sp_executesql N'
 CREATE OR ALTER PROCEDURE dbo.ai_model_get_materials
     @TenantId nvarchar(50),
     @Language nvarchar(10) = NULL,
@@ -234,7 +261,7 @@ BEGIN
 
     IF @ModelId IS NULL
     BEGIN
-        RAISERROR('modelId is required.', 16, 1);
+        RAISERROR(''modelId is required.'', 16, 1);
         RETURN;
     END;
 
@@ -255,7 +282,7 @@ BEGIN
                     @GeneratedAtUtc AS generatedAtUtc,
                     @RowCount AS [rowCount],
                     @ModelId AS modelId,
-                    NULLIF(LTRIM(RTRIM(@Language)), '') AS language
+                    NULLIF(LTRIM(RTRIM(@Language)), '''') AS language
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
             ),
             columns = (
@@ -264,11 +291,11 @@ BEGIN
                     [type],
                     [descriptionKey]
                 FROM (VALUES
-                    ('ProductWizardSectionID', 'int', NULL),
-                    ('ProductWizardSectionNM', 'nvarchar(255)', 'Material.Section'),
-                    ('MaterialGroupID', 'int', NULL),
-                    ('IsFSCEnabled', 'bit', NULL),
-                    ('IsRCSEnabled', 'bit', NULL)
+                    (''ProductWizardSectionID'', ''int'', NULL),
+                    (''ProductWizardSectionNM'', ''nvarchar(255)'', ''Material.Section''),
+                    (''MaterialGroupID'', ''int'', NULL),
+                    (''IsFSCEnabled'', ''bit'', NULL),
+                    (''IsRCSEnabled'', ''bit'', NULL)
                 ) AS columns([name], [type], [descriptionKey])
                 FOR JSON PATH
             ),
@@ -288,8 +315,10 @@ BEGIN
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     ) AS ResultJson;
 END;
-GO
-
+    ';
+    PRINT '  Created: dbo.ai_model_get_materials';
+    
+    EXEC sp_executesql N'
 CREATE OR ALTER PROCEDURE dbo.ai_model_compare_models
     @TenantId nvarchar(50),
     @Language nvarchar(10) = NULL,
@@ -300,7 +329,7 @@ BEGIN
 
     DECLARE @Ids TABLE (ModelId int NOT NULL);
 
-    IF @ModelIdsJson IS NOT NULL AND LTRIM(RTRIM(@ModelIdsJson)) <> ''
+    IF @ModelIdsJson IS NOT NULL AND LTRIM(RTRIM(@ModelIdsJson)) <> ''''
     BEGIN
         INSERT INTO @Ids (ModelId)
         SELECT DISTINCT TRY_CAST([value] AS int)
@@ -310,7 +339,7 @@ BEGIN
 
     IF NOT EXISTS (SELECT 1 FROM @Ids)
     BEGIN
-        RAISERROR('modelIds are required.', 16, 1);
+        RAISERROR(''modelIds are required.'', 16, 1);
         RETURN;
     END;
 
@@ -341,7 +370,7 @@ BEGIN
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
                     (SELECT COUNT(1) FROM Selected) AS [rowCount],
-                    NULLIF(LTRIM(RTRIM(@Language)), '') AS language
+                    NULLIF(LTRIM(RTRIM(@Language)), '''') AS language
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
             ),
             columns = (
@@ -350,17 +379,17 @@ BEGIN
                     [type],
                     [descriptionKey]
                 FROM (VALUES
-                    ('ModelId', 'int', NULL),
-                    ('ModelCode', 'nvarchar(4)', NULL),
-                    ('Name', 'nvarchar(255)', 'Model.Name'),
-                    ('Season', 'nvarchar(9)', NULL),
-                    ('DefaultCbm', 'decimal(18,4)', 'Model.Cbm'),
-                    ('Qnt40HC', 'int', 'Model.Qnt40HC'),
-                    ('BoxInSet', 'int', 'Packaging.BoxInSet'),
-                    ('CbmPer40HC', 'decimal(18,4)', 'Model.CbmPer40HC'),
-                    ('CbmDeltaFromMax', 'decimal(18,4)', 'Model.CbmDelta'),
-                    ('HasFsc', 'bit', NULL),
-                    ('HasRcs', 'bit', NULL)
+                    (''ModelId'', ''int'', NULL),
+                    (''ModelCode'', ''nvarchar(4)'', NULL),
+                    (''Name'', ''nvarchar(255)'', ''Model.Name''),
+                    (''Season'', ''nvarchar(9)'', NULL),
+                    (''DefaultCbm'', ''decimal(18,4)'', ''Model.Cbm''),
+                    (''Qnt40HC'', ''int'', ''Model.Qnt40HC''),
+                    (''BoxInSet'', ''int'', ''Packaging.BoxInSet''),
+                    (''CbmPer40HC'', ''decimal(18,4)'', ''Model.CbmPer40HC''),
+                    (''CbmDeltaFromMax'', ''decimal(18,4)'', ''Model.CbmDelta''),
+                    (''HasFsc'', ''bit'', NULL),
+                    (''HasRcs'', ''bit'', NULL)
                 ) AS columns([name], [type], [descriptionKey])
                 FOR JSON PATH
             ),
@@ -384,8 +413,10 @@ BEGIN
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     ) AS ResultJson;
 END;
-GO
-
+    ';
+    PRINT '  Created: dbo.ai_model_compare_models';
+    
+    EXEC sp_executesql N'
 CREATE OR ALTER PROCEDURE dbo.ai_model_count
     @TenantId nvarchar(50),
     @Language nvarchar(10) = NULL,
@@ -395,7 +426,7 @@ BEGIN
     SET NOCOUNT ON;
 
     DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();
-    DECLARE @SeasonFilter nvarchar(9) = NULLIF(LTRIM(RTRIM(@Season)), '');
+    DECLARE @SeasonFilter nvarchar(9) = NULLIF(LTRIM(RTRIM(@Season)), '''');
 
     DECLARE @RowCount int = (
         SELECT COUNT(DISTINCT Season)
@@ -411,7 +442,7 @@ BEGIN
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
                     @RowCount AS [rowCount],
-                    NULLIF(LTRIM(RTRIM(@Language)), '') AS language
+                    NULLIF(LTRIM(RTRIM(@Language)), '''') AS language
                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
             ),
             columns = (
@@ -420,8 +451,8 @@ BEGIN
                     [type],
                     [descriptionKey]
                 FROM (VALUES
-                    ('Season', 'nvarchar(9)', NULL),
-                    ('ModelCount', 'int', NULL)
+                    (''Season'', ''nvarchar(9)'', NULL),
+                    (''ModelCount'', ''int'', NULL)
                 ) AS columns([name], [type], [descriptionKey])
                 FOR JSON PATH
             ),
@@ -439,4 +470,9 @@ BEGIN
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     ) AS ResultJson;
 END;
+    ';
+    PRINT '  Created: dbo.ai_model_count';
+    
+    PRINT 'Model enterprise stored procedures created.';
+END
 GO

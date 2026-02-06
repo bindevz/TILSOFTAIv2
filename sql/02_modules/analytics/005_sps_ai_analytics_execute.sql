@@ -649,21 +649,24 @@ WHERE 1 = 1' + @WhereSql + @GroupBySql + @OrderBySql + ';';
     END
     
     -- Build columns array from groupBy and metrics
+    -- Note: UNION ALL inside FOR JSON is not allowed directly, so we use a CTE
     DECLARE @ColumnsJson NVARCHAR(MAX);
-    SELECT @ColumnsJson = (
+    ;WITH ColumnsCTE AS (
         SELECT 
-            [name] = FieldKey,
-            [type] = (SELECT DataType FROM @Fields WHERE FieldKey = g.FieldKey),
-            isMetric = CAST(0 AS BIT)
+            FieldKey AS [name],
+            (SELECT DataType FROM @Fields f WHERE f.FieldKey = g.FieldKey) AS [type],
+            CAST(0 AS BIT) AS isMetric,
+            Ordinal * 10 AS SortOrder
         FROM @GroupBy g
         UNION ALL
         SELECT 
-            [name] = Alias,
-            [type] = CASE WHEN Op IN ('count', 'countdistinct') THEN 'int' ELSE 'decimal' END,
-            isMetric = CAST(1 AS BIT)
+            Alias AS [name],
+            CASE WHEN Op IN ('count', 'countdistinct') THEN 'int' ELSE 'decimal' END AS [type],
+            CAST(1 AS BIT) AS isMetric,
+            1000 + Ordinal AS SortOrder
         FROM @Metrics
-        FOR JSON PATH
-    );
+    )
+    SELECT @ColumnsJson = (SELECT [name], [type], isMetric FROM ColumnsCTE ORDER BY SortOrder FOR JSON PATH);
     IF @ColumnsJson IS NULL SET @ColumnsJson = '[]';
     
     -- PATCH 30.01: Build rows as array-of-objects using FOR JSON PATH
@@ -681,7 +684,7 @@ WHERE 1 = 1' + @WhereSql + @GroupBySql + @OrderBySql + ';';
     
     DECLARE @MetaJson NVARCHAR(MAX) = (
         SELECT 
-            @RowCount AS rowCount,
+            @RowCount AS [rowCount],
             @Truncated AS truncated,
             @DurationMs AS durationMs,
             JSON_QUERY(@FreshnessJson) AS freshness

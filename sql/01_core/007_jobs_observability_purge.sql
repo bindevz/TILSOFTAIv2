@@ -87,3 +87,7 @@ GO
 -- WHERE job_id = (SELECT job_id FROM msdb.dbo.sysjobs WHERE name = N'TILSOFTAI_ObservabilityPurge')
 -- ORDER BY run_date DESC, run_time DESC;
 -- =============================================
+
+-- Switch back to TILSOFTAI for DbUp journal tracking
+USE TILSOFTAI;
+GO

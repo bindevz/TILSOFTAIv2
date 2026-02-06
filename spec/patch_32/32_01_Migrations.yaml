@@ -1,0 +1,50 @@
+---
+role: "Senior .NET Developer & Database Architect"
+task: "Refactor 'TILSOFTAI.Migrations' tool to support a self-healing SQL migration workflow."
+
+context:
+  current_state:
+    - "The 'tools/TILSOFTAI.Migrations' project currently embeds SQL scripts into the assembly using <EmbeddedResource> in the .csproj file."
+    - "The 'Program.cs' uses 'WithScriptsEmbeddedInAssembly' to execute migrations."
+  problem:
+    - "Modifying a broken SQL script requires rebuilding the entire tool, which disrupts the CI/CD pipeline and hinders automated fixing."
+  goal:
+    - "Enable the tool to read SQL scripts directly from the file system so that an Agent can fix a broken .sql file on disk, and the tool can apply the change immediately without recompilation."
+
+requirements:
+  1_switch_to_filesystem:
+    file: "tools/TILSOFTAI.Migrations/Program.cs"
+    action: "Modify the DbUp configuration."
+    details:
+      - "Replace '.WithScriptsEmbeddedInAssembly(...)' with '.WithScriptsFromFileSystem(...)'."
+      - "Set the script path to '../../sql' (relative to the execution folder) to capture all SQL files in the repository."
+      - "Ensure scripts are still executed in alphabetical order."
+
+  2_implement_structured_logging:
+    file: "tools/TILSOFTAI.Migrations/Program.cs"
+    action: "Enhance error reporting for automation."
+    details:
+      - "When 'result.Successful' is false, log the error in a machine-parseable format."
+      - "Required Format:"
+        - "[SQL_ERROR_DETECTED]"
+        - "File: <Filename_causing_error>"
+        - "Error: <Exception_Message>"
+        - "Context: <Failing_SQL_Snippet>"
+
+  3_add_resilience:
+    file: "tools/TILSOFTAI.Migrations/Program.cs"
+    action: "Add retry/interactive logic."
+    details:
+      - "Implement a mechanism (e.g., a simple wait loop or a specific flag) that allows the process to pause or retry a failed script after a short delay."
+      - "This gives an external Agent time to fix the SQL file on disk before the tool attempts to run it again."
+
+  4_cleanup_project_file:
+    file: "tools/TILSOFTAI.Migrations/TILSOFTAI.Migrations.csproj"
+    action: "Remove embedding configuration."
+    details:
+      - "Remove the '<EmbeddedResource Include=\"..\\..\\sql\\**\\*.sql\" ... />' line."
+      - "Ensure the project builds successfully without embedding the SQL files."
+
+constraints:
+  - "Do not change the core logic of how DbUp journals executed scripts."
+  - "Maintain the existing connection string retrieval logic."

@@ -24,7 +24,7 @@ ELSE
 BEGIN
     PRINT '  [FAIL] Procedure does not exist!';
     RAISERROR('Smoke test failed: ai_analytics_execute_plan not found.', 16, 1);
-    GOTO EndTest;
+    RETURN;  -- Cannot use GOTO across batch boundaries
 END
 GO
 
@@ -134,7 +134,7 @@ BEGIN CATCH
 END CATCH
 GO
 
-EndTest:
 PRINT '';
 PRINT '=== Smoke Test Complete ===';
 GO
+
