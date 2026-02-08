@@ -119,22 +119,33 @@ public sealed class ChatPipeline
 
         // Use sanitized input
         var sanitizedInput = validationResult.SanitizedValue ?? request.Input;
-        var normalized = await _normalizationService.NormalizeAsync(sanitizedInput, ctx, ct);
-        if (string.IsNullOrWhiteSpace(normalized))
+
+        // PATCH 33.02: Split promptInput (safe canonicalization) from matchInput (rules, cache)
+        var promptInput = PromptTextCanonicalizer.Canonicalize(sanitizedInput);
+        if (string.IsNullOrWhiteSpace(promptInput))
         {
-            return Fail(request, "Input is empty.");
+            return Fail(request, "Input is required.");
         }
 
-        var userMessage = new ChatMessage(ChatRoles.User, normalized);
+        // matchInput = rules-normalized, used ONLY for cache/matching keys
+        var matchInput = await _normalizationService.NormalizeAsync(promptInput, ctx, ct);
+        if (string.IsNullOrWhiteSpace(matchInput))
+        {
+            matchInput = promptInput; // fallback to safe input
+        }
+
+        // Persist user message with promptInput (not matchInput) — preserves spaces
+        var userMessage = new ChatMessage(ChatRoles.User, promptInput);
         var policy = request.RequestPolicy ?? new RequestPolicy
         {
             ContainsSensitive = request.ContainsSensitive
         };
         await _conversationStore.SaveUserMessageAsync(ctx, userMessage, policy, ct);
 
+        // LLM messages use promptInput (not matchInput)
         var messages = new List<LlmMessage>
         {
-            new(ChatRoles.User, normalized)
+            new(ChatRoles.User, promptInput)
         };
 
         var tools = await _toolCatalogResolver.GetResolvedToolsAsync(ct);
@@ -144,10 +155,11 @@ public sealed class ChatPipeline
 
         if (request.AllowCache && _semanticCache.Enabled && !policy.ShouldBypassCache)
         {
+            // PATCH 33.02: Use matchInput for cache key (stable matching)
             var cacheResult = await _semanticCache.TryGetAnswerAsync(
                 ctx,
                 "chat",
-                normalized,
+                matchInput,
                 tools,
                 null,
                 containsSensitive,
@@ -163,6 +175,10 @@ public sealed class ChatPipeline
 
             if (!string.IsNullOrWhiteSpace(cached))
             {
+                // PATCH 33.03: Persist assistant message even on cache hit
+                var assistantMessage = new ChatMessage(ChatRoles.Assistant, cached);
+                await _conversationStore.SaveAssistantMessageAsync(ctx, assistantMessage, policy, ct);
+
                 request.StreamObserver?.Report(ChatStreamEvent.Final(cached));
                 return ChatResult.Ok(cached);
             }
@@ -172,7 +188,7 @@ public sealed class ChatPipeline
         // PATCH 30.04: LLM-first detection with catalog_search tie-breaker for borderline
         if (_analyticsOptions.Enabled && _analyticsOrchestrator != null)
         {
-            var intent = await _intentDetector.DetectAsync(normalized, ct);
+            var intent = await _intentDetector.DetectAsync(promptInput, ct);
             
             // ========== PATCH 31.07: RBAC Gate ==========
             // Fast role check BEFORE routing to analytics orchestrator
@@ -219,7 +235,7 @@ public sealed class ChatPipeline
                     "AnalyticsIntentDetected | Confidence: {Confidence} | Hints: {Hints}",
                     intent.Confidence, string.Join(", ", intent.Hints));
 
-                var analyticsResult = await _analyticsOrchestrator.ExecuteAsync(normalized, intent, ctx, ct);
+                var analyticsResult = await _analyticsOrchestrator.ExecuteAsync(promptInput, intent, ctx, ct);
                 
                 if (analyticsResult.Success && !string.IsNullOrEmpty(analyticsResult.Content))
                 {
@@ -306,10 +322,11 @@ public sealed class ChatPipeline
 
                 if (request.AllowCache && _semanticCache.Enabled && !policy.ShouldBypassCache)
                 {
+                    // PATCH 33.02: Use matchInput for cache key
                     await _semanticCache.SetAnswerAsync(
                         ctx,
                         "chat",
-                        normalized,
+                        matchInput,
                         tools,
                         null,
                         content,

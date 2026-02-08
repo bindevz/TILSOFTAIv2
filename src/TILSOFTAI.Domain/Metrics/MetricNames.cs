@@ -32,5 +32,11 @@ namespace TILSOFTAI.Domain.Metrics
         // PATCH 31.06: Governance pipeline metrics
         public const string GovernanceAllowTotal = "tilsoftai_governance_allow_total";
         public const string GovernanceDenyTotal = "tilsoftai_governance_deny_total";
+        
+        // PATCH 33.01: Streaming delta coalescing metrics
+        public const string ChatStreamDeltasInTotal = "tilsoftai_chat_stream_deltas_in_total";
+        public const string ChatStreamDeltasOutTotal = "tilsoftai_chat_stream_deltas_out_total";
+        public const string ChatStreamDeltaFlushTotal = "tilsoftai_chat_stream_delta_flush_total";
+        public const string ChatStreamDropTotal = "tilsoftai_chat_stream_drop_total";
     }
 }

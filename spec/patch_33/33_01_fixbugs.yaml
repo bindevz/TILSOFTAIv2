@@ -1,0 +1,328 @@
+patch_pack: 33
+project: TILSOFTAIv2
+scope: "P0 + P1 only (skip P2). Business/data-first."
+delivery_mode: "write-over / no version bump"
+primary_outcomes:
+  - "Stop destructive input normalization that removes spaces (fix: 'messages input chữ bị dính nhau')."
+  - "Make streaming lossless (fix: 'response bị thiếu chữ')."
+  - "Enable DB persistence for Conversation + ErrorLog (end-to-end)."
+
+root_cause_summary:
+  P0.input_glued_words:
+    observation: "Logs show user content reaching LLM as 'phântíchmodelvớiIDlà3' (spaces removed)."
+    likely_cause: "Tenant normalization rules in dbo.NormalizationRule can remove whitespace if a rule uses \\s with empty replacement; ChatPipeline currently feeds normalized text into LLM."
+    fix_strategy:
+      - "Split 'PromptInput' (safe canonicalization only) from 'MatchInput' (rules, cache keys)."
+      - "Add runtime safety filter to skip unsafe whitespace-stripping rules."
+  P0.streaming_missing_chars:
+    observation: "Streaming uses bounded channel with DropOldest; any burst of delta events can drop chunks => missing characters on client."
+    fix_strategy:
+      - "Make streaming channel non-dropping (unbounded) + coalesce delta events to reduce event pressure."
+      - "Add metrics/logging for dropped/coalesced deltas (should be 0 drops)."
+  P1.persistence:
+    observation: "Observability flags are disabled in src/TILSOFTAI.Api/appsettings.json."
+    fix_strategy:
+      - "Enable conversation persistence + error log persistence."
+      - "Ensure cache-hit path also saves assistant message to ConversationMessage (data completeness)."
+      - "Persist orchestrator failures to ErrorLog even when middleware does not catch (because pipeline returns ChatResult.Fail instead of throwing)."
+
+mini_packs:
+  - id: "33.01"
+    priority: "P0"
+    title: "Lossless streaming + delta coalescing (no missing characters)"
+    why: "Prevents SSE delta drops that cause missing letters in UI."
+    files_to_edit:
+      - "src/TILSOFTAI.Orchestration/OrchestrationEngine.cs"
+      - "src/TILSOFTAI.Domain/Configuration/StreamingOptions.cs"
+      - "src/TILSOFTAI.Domain/Metrics/MetricNames.cs"
+      - "src/TILSOFTAI.Api/appsettings.json"
+      - "src/TILSOFTAI.Api/appsettings.Sample.json"
+    change_plan:
+      - step: "Switch from bounded channel (DropOldest) to unbounded channel (never drops)."
+      - step: "Coalesce frequent 'delta' events inside OrchestrationEngine before writing to channel."
+      - step: "Honor terminal events ordering: flush buffered delta before tool_call/tool_result/final/error."
+      - step: "Add metrics: stream_deltas_in_total, stream_deltas_out_total, stream_coalesce_flush_total, stream_drop_total (must remain 0)."
+    code_guidance:
+      OrchestrationEngine_cs:
+        notes:
+          - "Replace Channel.CreateBounded + DropOldest with Channel.CreateUnbounded."
+          - "Implement a delta buffer + periodic flush task (e.g., 30–50ms) and size flush (e.g., 256–512 chars)."
+          - "Never call ChannelWriter.TryWrite for each tiny delta; write coalesced chunks."
+        pseudo_snippet: |
+          // Create unbounded channel (no drops)
+          var channel = Channel.CreateUnbounded<ChatStreamEvent>(new UnboundedChannelOptions
+          {
+              SingleReader = true,
+              SingleWriter = true,
+              AllowSynchronousContinuations = true
+          });
+
+          var flushIntervalMs = Math.Clamp(_streamingOptions.Value?.DeltaFlushIntervalMs ?? 40, 10, 200);
+          var maxDeltaChars = Math.Clamp(_streamingOptions.Value?.MaxDeltaBufferChars ?? 512, 64, 4096);
+
+          var deltaLock = new object();
+          var deltaBuffer = new StringBuilder();
+          void FlushDeltaUnsafe()
+          {
+              if (deltaBuffer.Length == 0) return;
+              var text = deltaBuffer.ToString();
+              deltaBuffer.Clear();
+              channel.Writer.TryWrite(ChatStreamEvent.Delta(text));
+              _metrics.IncrementCounter(MetricNames.ChatStreamDeltasOutTotal);
+              _metrics.IncrementCounter(MetricNames.ChatStreamDeltaFlushTotal);
+          }
+
+          var progress = new Progress<ChatStreamEvent>(evt =>
+          {
+              if (evt.Type == "delta" && evt.Payload is string s && !string.IsNullOrEmpty(s))
+              {
+                  _metrics.IncrementCounter(MetricNames.ChatStreamDeltasInTotal);
+                  lock (deltaLock)
+                  {
+                      deltaBuffer.Append(s);
+                      if (deltaBuffer.Length >= maxDeltaChars) FlushDeltaUnsafe();
+                  }
+                  return;
+              }
+
+              lock (deltaLock) FlushDeltaUnsafe(); // flush before non-delta to preserve order
+              channel.Writer.TryWrite(evt);
+
+              if (IsTerminal(evt.Type)) Interlocked.Exchange(ref terminalEmitted, 1);
+          });
+
+          // background periodic flush
+          var flusher = Task.Run(async () =>
+          {
+              while (!ct.IsCancellationRequested && Interlocked.CompareExchange(ref terminalEmitted, 0, 0) == 0)
+              {
+                  await Task.Delay(flushIntervalMs, ct);
+                  lock (deltaLock) FlushDeltaUnsafe();
+              }
+          }, ct);
+      StreamingOptions_cs:
+        add_properties: |
+          public int DeltaFlushIntervalMs { get; set; } = 40;
+          public int MaxDeltaBufferChars { get; set; } = 512;
+      MetricNames_cs:
+        add_constants: |
+          public const string ChatStreamDeltasInTotal = "tilsoftai_chat_stream_deltas_in_total";
+          public const string ChatStreamDeltasOutTotal = "tilsoftai_chat_stream_deltas_out_total";
+          public const string ChatStreamDeltaFlushTotal = "tilsoftai_chat_stream_delta_flush_total";
+          public const string ChatStreamDropTotal = "tilsoftai_chat_stream_drop_total";
+      appsettings_updates:
+        Streaming:
+          set: |
+            "Streaming": {
+              "ChannelCapacity": 256,
+              "DropDeltaWhenFull": false,
+              "DeltaFlushIntervalMs": 40,
+              "MaxDeltaBufferChars": 512
+            }
+    acceptance_criteria:
+      - "Given a long streaming response, UI output must contain no missing characters vs final content."
+      - "Metrics: tilsoftai_chat_stream_drop_total stays 0 under load."
+      - "Load test: 20 concurrent streaming chats; no warnings about failed to write events."
+      - "No regression: tool_call/tool_result ordering is preserved relative to generated text."
+
+  - id: "33.02"
+    priority: "P0"
+    title: "Prompt integrity: separate PromptInput vs MatchInput + normalization safety filter"
+    why: "Fix glued words by preventing normalization rules from stripping whitespace in LLM prompt."
+    files_to_edit:
+      - "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+      - "src/TILSOFTAI.Orchestration/Normalization/NormalizationService.cs"
+    change_plan:
+      - step: "ChatPipeline: build two strings:"
+      - step: "  (1) promptInput = PromptTextCanonicalizer.Canonicalize(sanitizedInput)  // SAFE"
+      - step: "  (2) matchInput  = NormalizationService.NormalizeAsync(promptInput, ctx, ct) // RULES (but safety-filtered)"
+      - step: "Use promptInput for LLM messages + conversation persistence."
+      - step: "Use matchInput ONLY for semantic cache key (and any non-LLM matching)."
+      - step: "NormalizationService: skip unsafe whitespace-stripping rules + fallback if tokenization collapses."
+    code_guidance:
+      ChatPipeline_cs:
+        replace_pattern: "var normalized = await _normalizationService.NormalizeAsync(sanitizedInput, ctx, ct);"
+        with: |
+          var promptInput = PromptTextCanonicalizer.Canonicalize(sanitizedInput);
+          if (string.IsNullOrWhiteSpace(promptInput))
+          {
+              return Fail(request, "Input is required.");
+          }
+
+          // Used ONLY for cache/matching keys (never feed this into LLM directly)
+          var matchInput = await _normalizationService.NormalizeAsync(promptInput, ctx, ct);
+      ChatPipeline_cs_usage_rules:
+        enforce:
+          - "SaveUserMessageAsync should persist promptInput (not matchInput)."
+          - "LLM request messages should include promptInput (not matchInput)."
+          - "SemanticCache Get/Set must use matchInput (not promptInput) for stable matching."
+      NormalizationService_cs:
+        add_safety_filter:
+          description: "Skip rules that likely strip whitespace globally (\\s -> '')."
+          heuristic: |
+            unsafe if:
+              - Replacement is null/empty
+              - Pattern contains any of: "\\s", "\\p{Z", "[\\s", "\\t", "\\r", "\\n"
+          add_post_guard:
+            description: "If input has >=2 whitespace-separated tokens and output collapses to 1 token, revert to input."
+            rule: |
+              var inTokens = TokenCount(promptInput);
+              var outTokens = TokenCount(output);
+              if (inTokens >= 2 && outTokens <= 1) return promptInput;
+    acceptance_criteria:
+      - "Input 'phân tích model với ID là 3' must arrive at LLM with spaces preserved."
+      - "If DB contains a bad rule (e.g. Pattern='\\s+' Replacement=''), system must ignore it and log a warning."
+      - "No cache regression: cache keys remain stable (matchInput is deterministic)."
+
+  - id: "33.03"
+    priority: "P1 (data completeness) — also requested explicitly"
+    title: "Enable Conversation persistence + fix cache-hit message persistence"
+    why: "Business/audit requires full chat transcript stored, including cache-hit replies."
+    files_to_edit:
+      - "src/TILSOFTAI.Api/appsettings.json"
+      - "src/TILSOFTAI.Api/appsettings.Sample.json"
+      - "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+    change_plan:
+      - step: "Enable Observability flags: EnableConversationPersistence=true; (recommended) EnableSqlToolLog=true."
+      - step: "On semantic cache HIT, also SaveAssistantMessageAsync(...) before returning."
+      - step: "Ensure the saved user message content equals promptInput (from 33.02)."
+    config_patch:
+      Observability: |
+        "Observability": {
+          "EnableSqlErrorLog": true,
+          "EnableSqlToolLog": true,
+          "EnableConversationPersistence": true,
+          "RedactLogs": true,
+          "RedactionMode": "basic",
+          "RetentionDays": 30,
+          "PurgeEnabled": false,
+          "PurgeRunHourUtc": 2,
+          "PurgeBatchSize": 5000
+        }
+    ChatPipeline_cache_hit_fix:
+      locate: "if (request.AllowCache && _semanticCache.Enabled ... TryGetAnswerAsync(...))"
+      add_after_cache_hit: |
+        var assistantMessage = new ChatMessage(ChatRoles.Assistant, cachedAnswer);
+        await _conversationStore.SaveAssistantMessageAsync(ctx, assistantMessage, policy, ct);
+    db_prereq:
+      note: "Tables/SPs already exist in sql/01_core/004_tables_observability.sql and 005_sps_app_observability.sql"
+      verify_queries:
+        - "SELECT TOP 1 * FROM dbo.Conversation ORDER BY CreatedAtUtc DESC;"
+        - "SELECT TOP 10 * FROM dbo.ConversationMessage ORDER BY CreatedAtUtc DESC;"
+        - "SELECT TOP 10 * FROM dbo.ToolExecution ORDER BY CreatedAtUtc DESC;"
+    acceptance_criteria:
+      - "After a chat, dbo.Conversation has 1 row; dbo.ConversationMessage has both user+assistant rows."
+      - "Cache-hit response still creates a new assistant message row (no transcript gaps)."
+      - "Tool executions are persisted (when enabled) and respect sensitive-data policy."
+
+  - id: "33.04"
+    priority: "P1 (requested explicitly)"
+    title: "End-to-end ErrorLog persistence (middleware + orchestrator failures)"
+    why: "Many failures are returned as ChatResult.Fail (no exception) => middleware won’t persist them."
+    files_to_edit:
+      - "src/TILSOFTAI.Api/appsettings.json"
+      - "src/TILSOFTAI.Api/appsettings.Sample.json"
+      - "src/TILSOFTAI.Orchestration/OrchestrationEngine.cs"
+    change_plan:
+      - step: "Enable Observability.EnableSqlErrorLog=true (config)."
+      - step: "Inject ISqlErrorLogWriter + ObservabilityOptions into OrchestrationEngine."
+      - step: "If pipeline returns ChatResult.Fail, write ErrorLog (unless cancelled)."
+      - step: "If pipeline throws, catch and write ErrorLog with safe detail (no raw exception leakage)."
+    persistence_rules:
+      - "Do not persist raw exception messages/details to clients; DB ErrorLog may store structured, redacted detail."
+      - "Respect ObservabilityOptions.RedactLogs (already in SqlErrorLogWriter)."
+    verify_queries:
+      - "SELECT TOP 50 * FROM dbo.ErrorLog ORDER BY CreatedAtUtc DESC;"
+    acceptance_criteria:
+      - "Trigger LLM timeout -> ErrorLog row exists with ErrorCode='LLM_TIMEOUT' and matching ConversationId/CorrelationId."
+      - "Trigger tool failure -> ErrorLog row exists (even if no exception bubbles)."
+      - "Redaction remains enabled (no sensitive leaks in Message/DetailJson)."
+
+  - id: "33.05"
+    priority: "P1"
+    title: "Normalization rule lint + operator workflow (prevent recurrence)"
+    why: "Enterprise ops needs a supported way to detect/disable unsafe normalization rules per tenant."
+    files_to_add:
+      - "sql/01_core/012_sps_app_normalization_lint.sql"
+    sql_script_content: |
+      SET ANSI_NULLS ON;
+      SET QUOTED_IDENTIFIER ON;
+      GO
+
+      CREATE OR ALTER PROCEDURE dbo.app_normalizationrule_lint
+          @TenantId nvarchar(50)
+      AS
+      BEGIN
+          SET NOCOUNT ON;
+
+          ;WITH Candidate AS
+          (
+              SELECT
+                  Id, RuleKey, TenantId, Priority, Pattern, Replacement, IsEnabled, UpdatedAtUtc,
+                  CASE
+                      WHEN IsEnabled = 1
+                       AND (Replacement IS NULL OR LTRIM(RTRIM(Replacement)) = N'')
+                       AND (
+                            Pattern LIKE N'%\s%' ESCAPE N'\'
+                         OR Pattern LIKE N'%\p{Z%' ESCAPE N'\'
+                         OR Pattern LIKE N'%[\s%' ESCAPE N'\'
+                         OR Pattern LIKE N'%\t%' ESCAPE N'\'
+                         OR Pattern LIKE N'%\r%' ESCAPE N'\'
+                         OR Pattern LIKE N'%\n%' ESCAPE N'\'
+                       )
+                      THEN 1 ELSE 0
+                  END AS IsUnsafeWhitespaceStrip
+              FROM dbo.NormalizationRule
+              WHERE IsEnabled = 1 AND (TenantId = @TenantId OR TenantId IS NULL)
+          )
+          SELECT
+              Id, RuleKey, TenantId, Priority, Pattern, Replacement, UpdatedAtUtc,
+              IsUnsafeWhitespaceStrip
+          FROM Candidate
+          WHERE IsUnsafeWhitespaceStrip = 1
+          ORDER BY CASE WHEN TenantId = @TenantId THEN 0 ELSE 1 END, Priority ASC;
+      END;
+      GO
+    operator_runbook:
+      - "Run: EXEC dbo.app_normalizationrule_lint @TenantId='YOUR_TENANT';"
+      - "If rows returned, disable them (recommended): UPDATE dbo.NormalizationRule SET IsEnabled=0 WHERE Id IN (...);"
+      - "Then clear normalization rule cache (Redis key normrules:tenant or restart API)."
+    acceptance_criteria:
+      - "Lint SP returns unsafe rules for a tenant if present."
+      - "After disabling unsafe rules, user prompts no longer lose spaces."
+
+test_checklist:
+  unit_tests_to_add_or_update:
+    - name: "NormalizationService should ignore whitespace-strip rules"
+      path: "tests/TILSOFTAI.Tests/Normalization/NormalizationServiceSafetyTests.cs"
+      assertions:
+        - "Input: 'phân tích model với ID là 3'"
+        - "Rules: Pattern='\\s+' Replacement=''"
+        - "NormalizeAsync returns string containing spaces (>=2 tokens)"
+    - name: "Streaming coalescer does not drop content"
+      path: "tests/TILSOFTAI.Tests/Streaming/ChatStreamCoalescingTests.cs"
+      assertions:
+        - "Given 1000 delta events 'a', output combined length == 1000"
+        - "Order preserved with interleaved tool_result/final"
+  manual_e2e:
+    - step: "Enable streaming; ask a long question; compare final server content vs client-rendered content (must match)."
+    - step: "Enable conversation persistence; confirm Conversation/ConversationMessage rows created."
+    - step: "Force LLM timeout (low timeout); confirm ErrorLog row created."
+    - step: "Insert a bad normalization rule for tenant; confirm LLM still receives spaced prompt; lint SP detects rule."
+
+deployment_steps:
+  - "1) Apply code changes (33.01–33.04) and config changes (Observability + Streaming)."
+  - "2) Add SQL file (33.05) into repo."
+  - "3) Run migrations:"
+  - "   dotnet run --project tools/TILSOFTAI.Migrations migrate --environment Production --connection \"<conn>\""
+  - "4) Restart API service (to clear in-memory normalization rule cache if Redis disabled)."
+  - "5) Run smoke tests + verify DB rows."
+
+rollback_plan:
+  - "Revert the edited C# files to pre-33 state."
+  - "Set Observability flags back to false if needed."
+  - "SQL rollback: keep lint SP (harmless) or drop it if required."
+
+notes:
+  - "This pack intentionally prioritizes correctness over micro-optimizations. Coalescing reduces event pressure while remaining lossless."
+  - "We do NOT implement P2 items in patch_33 (explicitly deferred)."
