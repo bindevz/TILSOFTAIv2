@@ -26,15 +26,11 @@ public sealed class ModelCompareModelsToolHandler : ModelToolHandlerBase, IToolH
             throw new InvalidOperationException("Tool SP name is required.");
         }
 
+        // Validate arguments (modelIds array with at least 2 items required)
         using var args = ParseArguments(argumentsJson);
-        RequireIntArray(args.RootElement, "modelIds", 2);
-        var modelIdsJson = args.RootElement.GetProperty("modelIds").GetRawText();
+        _ = RequireIntArray(args.RootElement, "modelIds", 2);
 
-        var parameters = new Dictionary<string, object?>
-        {
-            ["@ModelIdsJson"] = modelIdsJson
-        };
-
-        return ExecuteAsync(tool.SpName, context, parameters, cancellationToken);
+        // Pass raw argumentsJson to SP - it expects @TenantId and @ArgsJson
+        return ExecuteToolAsync(tool.SpName, context, argumentsJson, cancellationToken);
     }
 }

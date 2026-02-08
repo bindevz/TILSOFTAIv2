@@ -26,14 +26,11 @@ public sealed class ModelGetPackagingToolHandler : ModelToolHandlerBase, IToolHa
             throw new InvalidOperationException("Tool SP name is required.");
         }
 
+        // Validate arguments (modelId required)
         using var args = ParseArguments(argumentsJson);
-        var modelId = RequireInt(args.RootElement, "modelId");
+        _ = RequireInt(args.RootElement, "modelId");
 
-        var parameters = new Dictionary<string, object?>
-        {
-            ["@ModelId"] = modelId
-        };
-
-        return ExecuteAsync(tool.SpName, context, parameters, cancellationToken);
+        // Pass raw argumentsJson to SP - it expects @TenantId and @ArgsJson
+        return ExecuteToolAsync(tool.SpName, context, argumentsJson, cancellationToken);
     }
 }

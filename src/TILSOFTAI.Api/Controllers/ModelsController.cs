@@ -30,7 +30,7 @@ public sealed class ModelsController : ControllerBase
     public IActionResult List()
     {
         var created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var modelId = string.IsNullOrWhiteSpace(_llmOptions.Model) ? "gpt-oss:20b" : _llmOptions.Model;
+        var modelId = string.IsNullOrWhiteSpace(_llmOptions.Model) ? "qwen3:14b" : _llmOptions.Model;
 
         var response = new ModelsListResponse
         {
@@ -59,7 +59,7 @@ public sealed class ModelsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public IActionResult Retrieve(string modelId)
     {
-        var configuredModelId = string.IsNullOrWhiteSpace(_llmOptions.Model) ? "gpt-oss:20b" : _llmOptions.Model;
+        var configuredModelId = string.IsNullOrWhiteSpace(_llmOptions.Model) ? "qwen3:14b" : _llmOptions.Model;
         
         // For simplicity, we only have one model configured
         // Return 404 if requesting a different model

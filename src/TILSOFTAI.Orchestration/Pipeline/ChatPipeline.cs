@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -253,9 +254,43 @@ public sealed class ChatPipeline
                 "LlmRequestSent | Step: {Step} | MessageCount: {MessageCount} | ToolCount: {ToolCount}",
                 step, messages.Count, tools.Count);
 
-            var response = request.Stream
-                ? await CompleteViaStreamAsync(llmRequest, request, ct)
-                : await _llmClient.CompleteAsync(llmRequest, ct);
+            LlmResponse response;
+            try
+            {
+                response = request.Stream
+                    ? await CompleteViaStreamAsync(llmRequest, request, ct)
+                    : await _llmClient.CompleteAsync(llmRequest, ct);
+            }
+            catch (HttpRequestException ex) when (ex.Message.Contains("504") || ex.Message.Contains("Gateway"))
+            {
+                _logger.LogError(ex, "LLM server timeout (504 Gateway). The AI service is temporarily unavailable.");
+                var errorMessage = "Xin lỗi, máy chủ AI đang bận. Vui lòng thử lại sau vài giây. (AI server is busy. Please try again in a few seconds.)";
+                request.StreamObserver?.Report(ChatStreamEvent.Final(errorMessage));
+                return Fail(request, errorMessage, "LLM_TIMEOUT");
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "LLM server error: {Message}", ex.Message);
+                var errorMessage = "Xin lỗi, không thể kết nối đến máy chủ AI. (Cannot connect to AI server.)";
+                request.StreamObserver?.Report(ChatStreamEvent.Final(errorMessage));
+                return Fail(request, errorMessage, "LLM_ERROR");
+            }
+            catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+            {
+                // TaskCanceledException when ct is not cancelled means HTTP timeout
+                _logger.LogError(ex, "LLM request timed out.");
+                var errorMessage = "Xin lỗi, yêu cầu AI bị hết thời gian. Vui lòng thử lại. (AI request timed out. Please try again.)";
+                request.StreamObserver?.Report(ChatStreamEvent.Final(errorMessage));
+                return Fail(request, errorMessage, "LLM_TIMEOUT");
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // User cancelled the request
+                _logger.LogInformation("LLM request was cancelled by user.");
+                var errorMessage = "Yêu cầu đã bị hủy. (Request was cancelled.)";
+                request.StreamObserver?.Report(ChatStreamEvent.Final(errorMessage));
+                return Fail(request, errorMessage, "REQUEST_CANCELLED");
+            }
 
             llmStopwatch.Stop();
             _logger.LogInformation(

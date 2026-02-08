@@ -104,4 +104,32 @@ public abstract class ModelToolHandlerBase
 
         return _sqlExecutor.ExecuteAsync(storedProcedure, sqlParams, cancellationToken);
     }
+
+    /// <summary>
+    /// Executes a tool SP using the standard @TenantId/@ArgsJson contract.
+    /// This is the preferred method for all model tool handlers.
+    /// </summary>
+    protected Task<string> ExecuteToolAsync(
+        string storedProcedure,
+        TilsoftExecutionContext context,
+        string argumentsJson,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(storedProcedure))
+        {
+            throw new ArgumentException("Stored procedure name is required.", nameof(storedProcedure));
+        }
+
+        if (context is null)
+        {
+            throw new ArgumentNullException(nameof(context));
+        }
+
+        if (string.IsNullOrWhiteSpace(context.TenantId))
+        {
+            throw new InvalidOperationException("Execution context TenantId is required.");
+        }
+
+        return _sqlExecutor.ExecuteToolAsync(storedProcedure, context.TenantId, argumentsJson, cancellationToken);
+    }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -24,11 +25,14 @@ public class PollyRetryPolicy : TILSOFTAI.Domain.Resilience.IRetryPolicy
         _logger = logger;
         _metrics = metrics;
 
-        // Exponential backoff with jitter
-        var delay = Polly.Contrib.WaitAndRetry.Backoff.DecorrelatedJitterBackoffV2(
+        // Exponential backoff with jitter, capped at MaxDelay
+        var baseDelays = Polly.Contrib.WaitAndRetry.Backoff.DecorrelatedJitterBackoffV2(
             medianFirstRetryDelay: options.InitialDelay,
             retryCount: options.MaxRetries
         );
+        
+        // Cap delays at MaxDelay to prevent excessively long waits
+        var delay = baseDelays.Select(d => d > options.MaxDelay ? options.MaxDelay : d);
 
         _policy = Policy
             .Handle<Exception>(ex => TransientExceptionClassifier.IsTransient(ex))

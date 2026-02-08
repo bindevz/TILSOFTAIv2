@@ -45,14 +45,17 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         using var activity = _instrumentation.StartRequest(_options.Model);
         
         var requestPayload = BuildRequest(req, stream: false);
-        using var httpRequest = BuildHttpRequest(requestPayload);
 
         var sw = Stopwatch.StartNew();
         using var timer = _metrics.CreateTimer(MetricNames.LlmRequestDurationSeconds, new Dictionary<string, string> { { "model", _options.Model }, { "streaming", "false" } });
         
         _metrics.IncrementCounter(MetricNames.LlmRequestsTotal, new Dictionary<string, string> { { "model", _options.Model }, { "streaming", "false" } });
 
-        using var response = await _retryPolicy.ExecuteAsync<HttpResponseMessage>(async ct0 => await _httpClient.SendAsync(httpRequest, ct0), ct);
+        using var response = await _retryPolicy.ExecuteAsync<HttpResponseMessage>(async ct0 =>
+        {
+            using var httpRequest = BuildHttpRequest(requestPayload);
+            return await _httpClient.SendAsync(httpRequest, ct0);
+        }, ct);
         sw.Stop();
 
         if (!response.IsSuccessStatusCode)
@@ -83,14 +86,16 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         using var activity = _instrumentation.StartRequest(_options.Model);
 
         var requestPayload = BuildRequest(req, stream: true);
-        using var httpRequest = BuildHttpRequest(requestPayload);
 
         var sw = Stopwatch.StartNew();
         using var timer = _metrics.CreateTimer(MetricNames.LlmRequestDurationSeconds, new Dictionary<string, string> { { "model", _options.Model }, { "streaming", "true" } });
         _metrics.IncrementCounter(MetricNames.LlmRequestsTotal, new Dictionary<string, string> { { "model", _options.Model }, { "streaming", "true" } });
 
-        using var response = await _retryPolicy.ExecuteAsync<HttpResponseMessage>(async ct0 => 
-            await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, ct0), ct);
+        using var response = await _retryPolicy.ExecuteAsync<HttpResponseMessage>(async ct0 =>
+        {
+            using var httpRequest = BuildHttpRequest(requestPayload);
+            return await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, ct0);
+        }, ct);
         sw.Stop();
 
         LogResponse(response.StatusCode, sw.Elapsed, req.Messages.Count, req.Tools.Count, isStreaming: true);

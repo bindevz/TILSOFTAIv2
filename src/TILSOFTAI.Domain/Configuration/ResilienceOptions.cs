@@ -27,8 +27,14 @@ public class ResilienceOptions
 
     /// <summary>
     /// Retry options for LLM clients.
+    /// LLM servers often need longer recovery time (504 Gateway Timeout).
     /// </summary>
-    public RetryOptions LlmRetry { get; set; } = new();
+    public RetryOptions LlmRetry { get; set; } = new()
+    {
+        MaxRetries = 1,                            // Single retry; persistent failures should fail fast
+        InitialDelay = TimeSpan.FromSeconds(2),    // Short delay for transient blips
+        MaxDelay = TimeSpan.FromSeconds(10),       // Cap wait to avoid amplifying load
+    };
 
     /// <summary>
     /// Retry options for SQL database execution.
