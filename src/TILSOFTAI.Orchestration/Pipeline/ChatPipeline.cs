@@ -127,6 +127,11 @@ public sealed class ChatPipeline
             return Fail(request, "Input is required.");
         }
 
+        // PATCH 33 FIX: Apply safe season expansion to promptInput (24/25 → 2024/2025)
+        // This is additive and safe, unlike rule-based normalization which may strip content
+        var seasonNormalizer = new SeasonNormalizer();
+        promptInput = seasonNormalizer.ExpandSeasonsDirect(promptInput);
+
         // matchInput = rules-normalized, used ONLY for cache/matching keys
         var matchInput = await _normalizationService.NormalizeAsync(promptInput, ctx, ct);
         if (string.IsNullOrWhiteSpace(matchInput))
