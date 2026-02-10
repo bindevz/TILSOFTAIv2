@@ -1,4 +1,5 @@
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Orchestration.Conversations;
 
 namespace TILSOFTAI.Orchestration.Pipeline;
 
@@ -24,4 +25,11 @@ public sealed class ChatRequest
     /// Server-computed request policy for sensitive handling.
     /// </summary>
     public RequestPolicy? RequestPolicy { get; set; }
+
+    /// <summary>
+    /// Full conversation history (user + assistant turns).
+    /// When provided, ChatPipeline injects these into the LLM messages list.
+    /// The last message should be the current user query.
+    /// </summary>
+    public IReadOnlyList<ChatMessage>? MessageHistory { get; set; }
 }

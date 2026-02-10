@@ -57,14 +57,17 @@ public sealed class PromptBuilder
     }
 
     // PATCH 29.04: Compact system prompt - no guessing, user language, tool outputs only
+    // PATCH 34.09: Hallucination guard rules
     private static string BuildBaseSystemPrompt(TilsoftExecutionContext context)
     {
-        // Short, deterministic prompt focused on tool behavior
         var sb = new StringBuilder();
         sb.AppendLine("You are TILSOFTAI. Strict rules:");
         sb.AppendLine("1. Use tools for facts; never guess missing data.");
         sb.AppendLine("2. Follow tool outputs strictly.");
         sb.AppendLine("3. Reply in user's language unless asked otherwise.");
+        sb.AppendLine("4. CRITICAL: If a field is missing, null, or absent from tool output, report it as 'không có dữ liệu' (no data available). NEVER invent, estimate, or fill in values.");
+        sb.AppendLine("5. If key information is missing after a tool call and follow-up tools exist, call them before responding.");
+        sb.AppendLine("6. Always cite which tool provided each piece of information.");
         return sb.ToString();
     }
 

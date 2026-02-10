@@ -30,6 +30,17 @@ public sealed class ContextPackBudgeter
         return $"{trimmed}...";
     }
 
+    // Priority map: lower number = higher priority = removed LAST
+    // Critical packs are trimmed (content shortened) rather than dropped entirely
+    private static readonly Dictionary<string, int> PackPriority = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["tool_catalog"] = 0,        // Highest: LLM needs tool instructions
+        ["atomic_catalog"] = 1,      // High: schema for analytics
+        ["metadata_dictionary"] = 2  // Can be trimmed
+    };
+
+    private const int DefaultPriority = 50;
+
     public IReadOnlyList<KeyValuePair<string, string>> Budget(IReadOnlyDictionary<string, string> packs)
     {
         if (packs is null || packs.Count == 0)
@@ -37,8 +48,10 @@ public sealed class ContextPackBudgeter
             return Array.Empty<KeyValuePair<string, string>>();
         }
 
+        // Sort by priority (critical first), then alphabetically
         var ordered = packs
-            .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(pair => PackPriority.GetValueOrDefault(pair.Key, DefaultPriority))
+            .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var totalChars = ordered.Sum(pair => EstimatePackChars(pair.Key, pair.Value));
@@ -47,6 +60,22 @@ public sealed class ContextPackBudgeter
         {
             var lastIndex = ordered.Count - 1;
             var last = ordered[lastIndex];
+            var priority = PackPriority.GetValueOrDefault(last.Key, DefaultPriority);
+
+            if (priority <= 1)
+            {
+                // Critical pack: trim content instead of dropping
+                var maxCharsPerPack = Math.Max(200, PromptBudget.MaxContextPacksChars / ordered.Count);
+                if (last.Value.Length > maxCharsPerPack)
+                {
+                    totalChars -= EstimatePackChars(last.Key, last.Value);
+                    var trimmed = last.Value[..maxCharsPerPack] + "\n[...truncated]";
+                    ordered[lastIndex] = new KeyValuePair<string, string>(last.Key, trimmed);
+                    totalChars += EstimatePackChars(last.Key, trimmed);
+                }
+                break; // Stop removing — all remaining packs are critical
+            }
+
             totalChars -= EstimatePackChars(last.Key, last.Value);
             ordered.RemoveAt(lastIndex);
         }

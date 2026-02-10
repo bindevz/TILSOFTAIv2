@@ -57,13 +57,13 @@ public sealed class ToolGovernance
                 call.Name, "tool_governance",
                 (context.Roles ?? Array.Empty<string>()).ToArray(),
                 Array.Empty<string>(),
-                "Tool not in allowlist", ErrorCode.ToolValidationFailed,
+                "Tool not in allowlist", ErrorCode.ToolNotFound,
                 sw.ElapsedMilliseconds));
             _metrics.IncrementCounter(MetricNames.GovernanceDenyTotal);
 
             return ToolValidationResult.Fail(
                 ToolValidationLocalizer.ToolNotEnabled(call.Name, language),
-                ErrorCode.ToolValidationFailed);
+                ErrorCode.ToolNotFound);
         }
 
         if (tool.RequiredRoles.Length > 0)

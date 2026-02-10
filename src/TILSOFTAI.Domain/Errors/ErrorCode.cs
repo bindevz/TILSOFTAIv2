@@ -12,6 +12,7 @@ public static class ErrorCode
     public const string ToolValidationFailed = "TOOL_VALIDATION_FAILED";
     public const string ToolExecutionFailed = "TOOL_EXECUTION_FAILED";
     public const string ToolArgsInvalid = "TOOL_ARGS_INVALID";
+    public const string ToolNotFound = "TOOL_NOT_FOUND";
     
     // Auth-related errors
     public const string TenantMismatch = "TENANT_MISMATCH";

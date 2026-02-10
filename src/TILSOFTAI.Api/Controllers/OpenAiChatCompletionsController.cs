@@ -8,13 +8,13 @@ using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Sensitivity;
 using TILSOFTAI.Orchestration;
+using TILSOFTAI.Orchestration.Conversations;
 using TILSOFTAI.Orchestration.Pipeline;
 
 namespace TILSOFTAI.Api.Controllers;
 
 [ApiController]
 [Route("v1/chat/completions")]
-[AllowAnonymous]
 public sealed class OpenAiChatCompletionsController : ControllerBase
 {
     private readonly IOrchestrationEngine _engine;
@@ -66,13 +66,9 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
         }
         
         
-        var context = _contextAccessor.Current ?? new TilsoftExecutionContext
-        {
-            TenantId = "guest",
-            UserId = "anonymous", 
-            Roles = new[] { "guest" },
-            CorrelationId = Guid.NewGuid().ToString("N")
-        };
+        var context = _contextAccessor.Current
+            ?? throw new InvalidOperationException(
+                "ExecutionContext is required. Ensure authentication middleware is configured.");
         var created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var id = $"chatcmpl_{Guid.NewGuid():N}";
         var model = string.IsNullOrWhiteSpace(_llmOptions.Model) ? request.Model ?? "unknown" : _llmOptions.Model;
@@ -92,6 +88,7 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
             var chatRequest = new ChatRequest
             {
                 Input = joinedInput,
+                MessageHistory = BuildMessageHistory(request.Messages),
                 AllowCache = true,
                 ContainsSensitive = sensitivityResult.ContainsSensitive,
                 SensitivityReasons = sensitivityResult.Reasons
@@ -143,6 +140,7 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
         var chatRequestNonStream = new ChatRequest
         {
             Input = joinedInput,
+            MessageHistory = BuildMessageHistory(request.Messages),
             AllowCache = true,
             ContainsSensitive = sensitivityResultNonStream.ContainsSensitive,
             SensitivityReasons = sensitivityResultNonStream.Reasons
@@ -194,17 +192,44 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
             throw new ArgumentException("The last message must be a user message.");
         }
 
-        var userMessages = messages
-            .Where(message => string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))
-            .Select(message => message.Content ?? string.Empty)
-            .ToList();
+        return last.Content ?? string.Empty;
+    }
 
-        if (userMessages.Count == 0)
+    /// <summary>
+    /// Builds conversation history from OpenAI-format messages.
+    /// Includes user and assistant turns, limited to maxTurns most recent pairs.
+    /// The last user message is excluded (it becomes Input).
+    /// </summary>
+    private static IReadOnlyList<ChatMessage> BuildMessageHistory(
+        IReadOnlyList<OpenAiChatMessage> messages, int maxTurns = 10)
+    {
+        if (messages is null || messages.Count <= 1)
         {
-            throw new ArgumentException("At least one user message is required.");
+            return Array.Empty<ChatMessage>();
         }
 
-        return string.Join("\n", userMessages);
+        var relevantMessages = messages
+            .Where(m => string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase)
+                      || string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        // Remove the last message (current input) — it's handled by BuildUserInput
+        if (relevantMessages.Count > 0
+            && string.Equals(relevantMessages[^1].Role, "user", StringComparison.OrdinalIgnoreCase))
+        {
+            relevantMessages.RemoveAt(relevantMessages.Count - 1);
+        }
+
+        // Take last N turns
+        var history = new List<ChatMessage>();
+        var startIndex = Math.Max(0, relevantMessages.Count - (maxTurns * 2));
+        for (var i = startIndex; i < relevantMessages.Count; i++)
+        {
+            var msg = relevantMessages[i];
+            history.Add(new ChatMessage(msg.Role!, msg.Content ?? string.Empty));
+        }
+
+        return history;
     }
 
     private static bool IsTerminal(string? eventType)

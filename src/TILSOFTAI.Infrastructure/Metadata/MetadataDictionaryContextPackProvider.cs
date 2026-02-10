@@ -13,6 +13,13 @@ public sealed class MetadataDictionaryContextPackProvider : IContextPackProvider
     private readonly ISqlExecutor _sqlExecutor;
     private readonly LocalizationOptions _localizationOptions;
 
+    /// <summary>
+    /// Current module scope. When set, metadata is filtered by module.
+    /// Set by ChatPipeline before calling GetContextPacksAsync.
+    /// Thread-safety: ChatPipeline creates new scope per request via DI scoping.
+    /// </summary>
+    public IReadOnlyList<string>? CurrentScope { get; set; }
+
     public MetadataDictionaryContextPackProvider(
         ISqlExecutor sqlExecutor,
         IOptions<LocalizationOptions> localizationOptions)
@@ -41,7 +48,25 @@ public sealed class MetadataDictionaryContextPackProvider : IContextPackProvider
             ["@DefaultLanguage"] = _localizationOptions.DefaultLanguage
         };
 
-        var rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_metadatadictionary_list", parameters, cancellationToken);
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;
+
+        if (CurrentScope is { Count: > 0 })
+        {
+            // Scoped: use module-filtered SP
+            var scopedParams = new Dictionary<string, object?>
+            {
+                ["@TenantId"] = string.IsNullOrWhiteSpace(context.TenantId) ? null : context.TenantId,
+                ["@Language"] = resolvedLanguage,
+                ["@DefaultLanguage"] = _localizationOptions.DefaultLanguage,
+                ["@ModulesJson"] = System.Text.Json.JsonSerializer.Serialize(CurrentScope)
+            };
+            rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_metadatadictionary_list_scoped", scopedParams, cancellationToken);
+        }
+        else
+        {
+            // Unscoped: backward compatible
+            rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_metadatadictionary_list", parameters, cancellationToken);
+        }
 
         if (rows.Count == 0)
         {

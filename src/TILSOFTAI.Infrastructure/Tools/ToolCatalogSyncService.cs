@@ -8,7 +8,7 @@ using TILSOFTAI.Orchestration.Tools;
 
 namespace TILSOFTAI.Infrastructure.Tools;
 
-public sealed class ToolCatalogSyncService : IToolCatalogResolver
+public sealed class ToolCatalogSyncService : IScopedToolCatalogResolver
 {
     private readonly SqlOptions _sqlOptions;
     private readonly GovernanceOptions _governanceOptions;
@@ -191,5 +191,96 @@ public sealed class ToolCatalogSyncService : IToolCatalogResolver
         }
 
         return roles.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    public async Task<IReadOnlyList<ToolDefinition>> GetScopedToolsAsync(
+        IReadOnlyList<string> moduleKeys,
+        CancellationToken cancellationToken = default)
+    {
+        if (moduleKeys is null || moduleKeys.Count == 0)
+        {
+            _logger.LogWarning("GetScopedToolsAsync called with empty moduleKeys. Falling back to global.");
+            return await GetResolvedToolsAsync(cancellationToken);
+        }
+
+        var tenantId = _contextAccessor.Current.TenantId;
+        if (string.IsNullOrWhiteSpace(tenantId))
+        {
+            throw new InvalidOperationException("Execution context TenantId is required.");
+        }
+
+        var language = string.IsNullOrWhiteSpace(_contextAccessor.Current.Language)
+            ? _localizationOptions.DefaultLanguage
+            : _contextAccessor.Current.Language;
+
+        var modulesJson = System.Text.Json.JsonSerializer.Serialize(moduleKeys);
+
+        var sqlTools = await LoadScopedSqlToolsAsync(tenantId, language, _localizationOptions.DefaultLanguage, modulesJson, cancellationToken);
+        var registryTools = _toolRegistry.ListEnabled();
+
+        var resolved = new List<ToolDefinition>();
+        foreach (var tool in registryTools)
+        {
+            if (!sqlTools.TryGetValue(tool.Name, out var sqlTool))
+            {
+                continue; // Tool not in scoped set — skip
+            }
+
+            var merged = Merge(tool, sqlTool);
+            if (merged is not null)
+            {
+                resolved.Add(merged);
+            }
+        }
+
+        _logger.LogInformation(
+            "ScopedToolsResolved | Modules: [{Modules}] | ToolCount: {ToolCount}",
+            string.Join(", ", moduleKeys), resolved.Count);
+
+        return resolved;
+    }
+
+    private async Task<Dictionary<string, ToolCatalogEntry>> LoadScopedSqlToolsAsync(
+        string tenantId,
+        string language,
+        string defaultLanguage,
+        string modulesJson,
+        CancellationToken cancellationToken)
+    {
+        var results = new Dictionary<string, ToolCatalogEntry>(StringComparer.OrdinalIgnoreCase);
+
+        await using var connection = new SqlConnection(_sqlOptions.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = new SqlCommand("dbo.app_toolcatalog_list_scoped", connection)
+        {
+            CommandType = CommandType.StoredProcedure,
+            CommandTimeout = _sqlOptions.CommandTimeoutSeconds
+        };
+
+        command.Parameters.Add(new SqlParameter("@TenantId", SqlDbType.NVarChar, 50) { Value = tenantId });
+        command.Parameters.Add(new SqlParameter("@Language", SqlDbType.NVarChar, 10) { Value = language });
+        command.Parameters.Add(new SqlParameter("@DefaultLanguage", SqlDbType.NVarChar, 10) { Value = string.IsNullOrWhiteSpace(defaultLanguage) ? "en" : defaultLanguage });
+        command.Parameters.Add(new SqlParameter("@ModulesJson", SqlDbType.NVarChar, -1) { Value = modulesJson });
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var toolName = reader["ToolName"] as string;
+            if (string.IsNullOrWhiteSpace(toolName)) continue;
+
+            results[toolName] = new ToolCatalogEntry
+            {
+                ToolName = toolName,
+                SpName = reader["SpName"] as string ?? string.Empty,
+                IsEnabled = reader["IsEnabled"] != DBNull.Value && Convert.ToBoolean(reader["IsEnabled"]),
+                RequiredRoles = reader["RequiredRoles"] as string,
+                JsonSchema = reader["JsonSchema"] as string,
+                Instruction = reader["Instruction"] as string,
+                Description = reader["Description"] as string
+            };
+        }
+
+        return results;
     }
 }

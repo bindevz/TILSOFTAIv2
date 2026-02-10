@@ -153,6 +153,8 @@ public static class AddTilsoftAiExtensions
         });
         services.AddSingleton<ToolCatalogSyncService>();
         services.AddSingleton<IToolCatalogResolver>(sp => sp.GetRequiredService<ToolCatalogSyncService>());
+        services.AddSingleton<IScopedToolCatalogResolver>(sp => sp.GetRequiredService<ToolCatalogSyncService>());
+        services.AddSingleton<Orchestration.Modules.IModuleScopeResolver, Orchestration.Modules.ModuleScopeResolver>();
         services.AddSingleton<IJsonSchemaValidator, RealJsonSchemaValidator>();
         services.AddSingleton<ToolGovernance>();
         services.AddSingleton<ToolResultCompactor>();

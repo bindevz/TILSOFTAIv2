@@ -44,7 +44,7 @@ BEGIN
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
                     (SELECT COUNT(1) FROM dbo.vw_ModelSemantic WHERE ModelId = @modelId) AS [rowCount]
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
             ),
             columns = (
                 SELECT [name], [type], [descriptionKey]
@@ -64,7 +64,7 @@ BEGIN
                     ('CartonCbm', 'decimal(18,6)', 'model.cartonCbm'),
                     ('CartonWeightKg', 'decimal(18,6)', 'model.cartonWeight')
                 ) AS cols([name], [type], [descriptionKey])
-                FOR JSON PATH
+                FOR JSON PATH, INCLUDE_NULL_VALUES
             ),
             rows = (
                 SELECT 
@@ -74,7 +74,7 @@ BEGIN
                 FROM dbo.vw_ModelSemantic
                 WHERE ModelId = @modelId
                   AND (TenantId = @TenantId OR TenantId IS NULL)
-                FOR JSON PATH
+                FOR JSON PATH, INCLUDE_NULL_VALUES
             )
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     ) AS ResultJson;
@@ -121,7 +121,7 @@ BEGIN
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
                     @RowCount AS [rowCount]
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
             ),
             columns = (
                 SELECT [name], [type], [descriptionKey]
@@ -137,7 +137,7 @@ BEGIN
                     ('BoxInSet', 'int', 'model.boxInSet'),
                     ('PackagingName', 'nvarchar(100)', 'model.packaging')
                 ) AS cols([name], [type], [descriptionKey])
-                FOR JSON PATH
+                FOR JSON PATH, INCLUDE_NULL_VALUES
             ),
             rows = (
                 SELECT 
@@ -146,7 +146,7 @@ BEGIN
                 FROM dbo.vw_ModelSemantic v
                 WHERE v.ModelId IN (SELECT TRY_CONVERT(int, value) FROM OPENJSON(@modelIdsJson))
                   AND (v.TenantId = @TenantId OR v.TenantId IS NULL)
-                FOR JSON PATH
+                FOR JSON PATH, INCLUDE_NULL_VALUES
             )
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     ) AS ResultJson;
@@ -192,7 +192,7 @@ BEGIN
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
                     @RowCount AS [rowCount]
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
             ),
             columns = (
                 SELECT [name], [type], [descriptionKey]
@@ -204,7 +204,7 @@ BEGIN
                     ('ChildModelId', 'int', 'piece.childModel'),
                     ('Sequence', 'int', 'piece.sequence')
                 ) AS cols([name], [type], [descriptionKey])
-                FOR JSON PATH
+                FOR JSON PATH, INCLUDE_NULL_VALUES
             ),
             rows = (
                 SELECT 
@@ -213,7 +213,7 @@ BEGIN
                 WHERE mp.ModelId = @modelId
                   AND (mp.TenantId = @TenantId OR mp.TenantId IS NULL)
                 ORDER BY mp.Sequence
-                FOR JSON PATH
+                FOR JSON PATH, INCLUDE_NULL_VALUES
             )
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     ) AS ResultJson;
@@ -257,7 +257,7 @@ BEGIN
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
                     @RowCount AS [rowCount]
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
             ),
             columns = (
                 SELECT [name], [type], [descriptionKey]
@@ -272,7 +272,7 @@ BEGIN
                     ('Category', 'nvarchar(100)', 'material.category'),
                     ('DensityKgPerM3', 'decimal(18,4)', 'material.density')
                 ) AS cols([name], [type], [descriptionKey])
-                FOR JSON PATH
+                FOR JSON PATH, INCLUDE_NULL_VALUES
             ),
             rows = (
                 SELECT 
@@ -288,7 +288,7 @@ BEGIN
                 FROM dbo.ModelMaterial mm
                 JOIN dbo.Material mat ON mm.MaterialId = mat.MaterialId
                 WHERE mm.ModelId = @modelId
-                FOR JSON PATH
+                FOR JSON PATH, INCLUDE_NULL_VALUES
             )
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     ) AS ResultJson;
@@ -332,7 +332,7 @@ BEGIN
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
                     @RowCount AS [rowCount]
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
             ),
             columns = (
                 SELECT [name], [type], [descriptionKey]
@@ -346,7 +346,7 @@ BEGIN
                     ('LoadabilityIndex', 'decimal(10,4)', 'packaging.loadability'),
                     ('Qnt40HC', 'int', 'packaging.qnt40hc')
                 ) AS cols([name], [type], [descriptionKey])
-                FOR JSON PATH
+                FOR JSON PATH, INCLUDE_NULL_VALUES
             ),
             rows = (
                 SELECT 
@@ -355,7 +355,7 @@ BEGIN
                     LoadabilityIndex, Qnt40HC
                 FROM dbo.ModelPackagingOption
                 WHERE ModelId = @modelId
-                FOR JSON PATH
+                FOR JSON PATH, INCLUDE_NULL_VALUES
             )
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     ) AS ResultJson;
@@ -390,7 +390,7 @@ BEGIN
                     @TenantId AS tenantId,
                     @GeneratedAtUtc AS generatedAtUtc,
                     1 AS [rowCount]
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
             ),
             columns = (
                 SELECT [name], [type], [descriptionKey]
@@ -398,7 +398,7 @@ BEGIN
                     ('Season', 'nvarchar(50)', 'model.season'),
                     ('Count', 'int', 'model.count')
                 ) AS cols([name], [type], [descriptionKey])
-                FOR JSON PATH
+                FOR JSON PATH, INCLUDE_NULL_VALUES
             ),
             rows = (
                 SELECT 
@@ -407,7 +407,7 @@ BEGIN
                 FROM dbo.Model m
                 WHERE (m.TenantId = @TenantId OR m.TenantId IS NULL)
                 -- Season filter would go here if Model table had Season column
-                FOR JSON PATH
+                FOR JSON PATH, INCLUDE_NULL_VALUES
             )
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
     ) AS ResultJson;

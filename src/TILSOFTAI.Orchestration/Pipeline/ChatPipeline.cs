@@ -36,6 +36,7 @@ public sealed class ChatPipeline
     private readonly AnalyticsOptions _analyticsOptions;
     private readonly AnalyticsIntentDetector _intentDetector;
     private readonly AnalyticsOrchestrator? _analyticsOrchestrator;
+    private readonly Modules.IModuleScopeResolver? _moduleScopeResolver;
     private readonly ILogger<ChatPipeline> _logger;
 
     public ChatPipeline(
@@ -54,6 +55,7 @@ public sealed class ChatPipeline
         IOptions<AnalyticsOptions> analyticsOptions,
         AnalyticsIntentDetector intentDetector,
         AnalyticsOrchestrator? analyticsOrchestrator,
+        Modules.IModuleScopeResolver? moduleScopeResolver,
         ILogger<ChatPipeline> logger,
         Observability.ChatPipelineInstrumentation instrumentation,
         IMetricsService metrics)
@@ -73,6 +75,7 @@ public sealed class ChatPipeline
         _analyticsOptions = analyticsOptions?.Value ?? new AnalyticsOptions();
         _intentDetector = intentDetector ?? throw new ArgumentNullException(nameof(intentDetector));
         _analyticsOrchestrator = analyticsOrchestrator; // Optional, null if not registered
+        _moduleScopeResolver = moduleScopeResolver; // Optional, null if module scoping not enabled
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _instrumentation = instrumentation ?? throw new ArgumentNullException(nameof(instrumentation));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
@@ -148,12 +151,52 @@ public sealed class ChatPipeline
         await _conversationStore.SaveUserMessageAsync(ctx, userMessage, policy, ct);
 
         // LLM messages use promptInput (not matchInput)
-        var messages = new List<LlmMessage>
-        {
-            new(ChatRoles.User, promptInput)
-        };
+        var messages = new List<LlmMessage>();
 
-        var tools = await _toolCatalogResolver.GetResolvedToolsAsync(ct);
+        // Inject conversation history if provided (user + assistant turns from previous exchanges)
+        if (request.MessageHistory is { Count: > 0 })
+        {
+            foreach (var hist in request.MessageHistory)
+            {
+                messages.Add(new LlmMessage(hist.Role, hist.Content));
+            }
+        }
+
+        // Current user message (sanitized + normalized)
+        messages.Add(new LlmMessage(ChatRoles.User, promptInput));
+
+        // Module scope resolution (if enabled)
+        IReadOnlyList<string>? resolvedModules = null;
+        if (_moduleScopeResolver is not null)
+        {
+            var scopeResult = await _moduleScopeResolver.ResolveAsync(promptInput, ctx, ct);
+            resolvedModules = scopeResult.Modules;
+
+            _logger.LogInformation(
+                "ModuleScopeApplied | Modules: [{Modules}] | Confidence: {Confidence}",
+                string.Join(", ", scopeResult.Modules), scopeResult.Confidence);
+
+            // Audit log for module scope decisions (structured for observability pipeline)
+            _logger.LogInformation(
+                "ModuleScopeAudit | ConversationId: {ConversationId} | TenantId: {TenantId} | UserId: {UserId} | Modules: [{ResolvedModules}] | Confidence: {Confidence} | Reasons: {Reasons}",
+                ctx.ConversationId,
+                ctx.TenantId,
+                ctx.UserId,
+                System.Text.Json.JsonSerializer.Serialize(scopeResult.Modules),
+                scopeResult.Confidence,
+                scopeResult.Reasons.Count > 0 ? string.Join("; ", scopeResult.Reasons) : "none");
+        }
+
+        // Load tools: scoped if resolver available, otherwise global
+        IReadOnlyList<ToolDefinition> tools;
+        if (resolvedModules is { Count: > 0 } && _toolCatalogResolver is IScopedToolCatalogResolver scopedResolver)
+        {
+            tools = await scopedResolver.GetScopedToolsAsync(resolvedModules, ct);
+        }
+        else
+        {
+            tools = await _toolCatalogResolver.GetResolvedToolsAsync(ct);
+        }
         var toolLookup = tools.ToDictionary(tool => tool.Name, StringComparer.OrdinalIgnoreCase);
 
         var containsSensitive = policy.ContainsSensitive;
@@ -364,19 +407,51 @@ public sealed class ChatPipeline
                 var validation = _toolGovernance.Validate(call, toolLookup, ctx);
                 if (!validation.IsValid || validation.Tool is null)
                 {
-                    if (string.Equals(validation.Code, ErrorCode.ToolArgsInvalid, StringComparison.OrdinalIgnoreCase))
+                    // Scope fallback: if tool not in scoped set, try widening scope
+                    if (resolvedModules is { Count: > 0 }
+                        && _moduleScopeResolver is not null
+                        && string.Equals(validation.Code, ErrorCode.ToolNotFound, StringComparison.OrdinalIgnoreCase))
                     {
-                        throw new TilsoftApiException(
-                            ErrorCode.ToolArgsInvalid,
-                            400,
-                            detail: validation.Detail);
+                        _logger.LogWarning(
+                            "ScopeFallback | ToolName: {ToolName} not in scoped set [{Modules}]. Re-resolving scope.",
+                            call.Name, string.Join(", ", resolvedModules));
+
+                        // Re-resolve with hint
+                        var fallbackScope = await _moduleScopeResolver.ResolveAsync(
+                            $"{promptInput} [tool_requested: {call.Name}]", ctx, ct);
+
+                        if (fallbackScope.Modules.Count > resolvedModules.Count)
+                        {
+                            // Widen scope: reload tools with expanded modules
+                            if (_toolCatalogResolver is IScopedToolCatalogResolver scopedFallback)
+                            {
+                                tools = await scopedFallback.GetScopedToolsAsync(fallbackScope.Modules, ct);
+                                toolLookup = tools.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+                                resolvedModules = fallbackScope.Modules;
+
+                                // Re-validate with widened scope
+                                validation = _toolGovernance.Validate(call, toolLookup, ctx);
+                            }
+                        }
                     }
 
-                    return Fail(
-                        request,
-                        validation.Error ?? "Tool validation failed.",
-                        validation.Code ?? ErrorCode.ToolValidationFailed,
-                        validation.Detail);
+                    // If still invalid after fallback, proceed with original error handling
+                    if (!validation.IsValid || validation.Tool is null)
+                    {
+                        if (string.Equals(validation.Code, ErrorCode.ToolArgsInvalid, StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new TilsoftApiException(
+                                ErrorCode.ToolArgsInvalid,
+                                400,
+                                detail: validation.Detail);
+                        }
+
+                        return Fail(
+                            request,
+                            validation.Error ?? "Tool validation failed.",
+                            validation.Code ?? ErrorCode.ToolValidationFailed,
+                            validation.Detail);
+                    }
                 }
 
                 var tool = validation.Tool;
