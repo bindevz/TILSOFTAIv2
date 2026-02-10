@@ -37,7 +37,9 @@ public sealed class SqlReActFollowUpRuleProvider : IReActFollowUpRuleProvider
         string? appKey = null,
         CancellationToken ct = default)
     {
-        var cacheKey = $"followup_rules:{tenantId}:{string.Join(",", moduleKeys)}:{appKey}";
+        // PATCH 36.05: Canonical cache key — sort module keys for determinism
+        var sortedModules = moduleKeys.OrderBy(m => m, StringComparer.OrdinalIgnoreCase).ToList();
+        var cacheKey = $"followup_rules:{tenantId}:{string.Join(",", sortedModules)}:{appKey}";
 
         if (_cache.TryGetValue<IReadOnlyList<ReActFollowUpRule>>(cacheKey, out var cached) && cached is not null)
         {
@@ -46,7 +48,7 @@ public sealed class SqlReActFollowUpRuleProvider : IReActFollowUpRuleProvider
 
         try
         {
-            var moduleKeysJson = JsonSerializer.Serialize(moduleKeys);
+            var moduleKeysJson = JsonSerializer.Serialize(sortedModules);
             var parameters = new Dictionary<string, object?>
             {
                 ["@TenantId"] = tenantId,

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -7,6 +8,7 @@ namespace TILSOFTAI.Orchestration.Policies;
 /// Stateless evaluator for ReAct follow-up rules.
 /// Evaluates rules against tool result JSON and returns matched rules.
 /// Supports operators: exists, ==, !=, &gt;, &gt;=, &lt;, &lt;=, contains.
+/// PATCH 36.01: Supports tool output envelopes ({meta, columns, rows:[{...}]}).
 /// </summary>
 public sealed class ReActFollowUpEvaluator
 {
@@ -32,6 +34,8 @@ public sealed class ReActFollowUpEvaluator
             return Array.Empty<ReActFollowUpRule>();
         }
 
+        var effectiveRoot = GetEffectiveRoot(root);
+
         var matched = new List<ReActFollowUpRule>();
 
         foreach (var rule in rules)
@@ -43,7 +47,7 @@ public sealed class ReActFollowUpEvaluator
                 continue;
             }
 
-            if (EvaluateCondition(root, rule.JsonPath, rule.Operator, rule.CompareValue))
+            if (EvaluateCondition(effectiveRoot, rule.JsonPath, rule.Operator, rule.CompareValue))
             {
                 matched.Add(rule);
             }
@@ -55,6 +59,7 @@ public sealed class ReActFollowUpEvaluator
     /// <summary>
     /// Resolve argument template placeholders from tool result JSON.
     /// Replaces {{$.PropertyName}} with actual values from the JSON.
+    /// Uses effective root (rows[0]) when available.
     /// </summary>
     public string? ResolveArgsTemplate(string? argsTemplate, string toolResultJson)
     {
@@ -72,12 +77,55 @@ public sealed class ReActFollowUpEvaluator
             return null;
         }
 
+        var effectiveRoot = GetEffectiveRoot(root);
+        var isUnwrapped = root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("rows", out _);
+
         return Regex.Replace(argsTemplate, @"\{\{\$\.(\w+)\}\}", match =>
         {
             var propName = match.Groups[1].Value;
-            var value = ExtractValue(root, "$." + propName);
+            // Try effective root first, fall back to original root
+            var value = ExtractValue(effectiveRoot, "$." + propName);
+            if (value is null && isUnwrapped)
+            {
+                value = ExtractValue(root, "$." + propName);
+            }
             return value ?? match.Value; // Keep original placeholder if not found
         });
+    }
+
+    /// <summary>
+    /// PATCH 36.01: Extract effective root from tool output envelope.
+    /// If payload is object with "rows" array where rows[0] is object, use rows[0].
+    /// This handles the standard {meta, columns, rows:[{...}]} envelope shape.
+    /// </summary>
+    public static JsonElement GetEffectiveRoot(JsonElement root)
+    {
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("rows", out var rowsProp))
+        {
+            if (rowsProp.ValueKind == JsonValueKind.Array
+                && rowsProp.GetArrayLength() > 0)
+            {
+                var firstRow = rowsProp[0];
+                if (firstRow.ValueKind == JsonValueKind.Object)
+                {
+                    return firstRow;
+                }
+            }
+        }
+
+        // Fallback: if root is a plain array, try first element
+        if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0)
+        {
+            var first = root[0];
+            if (first.ValueKind == JsonValueKind.Object)
+            {
+                return first;
+            }
+        }
+
+        return root;
     }
 
     private static bool EvaluateCondition(JsonElement root, string jsonPath, string op, string? compareValue)
@@ -114,12 +162,6 @@ public sealed class ReActFollowUpEvaluator
         var propName = jsonPath[2..];
         var target = root;
 
-        // Handle nested JSON: if root is a wrapper array, try first element
-        if (target.ValueKind == JsonValueKind.Array && target.GetArrayLength() > 0)
-        {
-            target = target[0];
-        }
-
         if (target.ValueKind != JsonValueKind.Object)
             return null;
 
@@ -152,7 +194,8 @@ public sealed class ReActFollowUpEvaluator
 
     private static bool TryCompareNumeric(string? value, string? compareValue, Func<decimal, decimal, bool> comparison)
     {
-        if (decimal.TryParse(value, out var a) && decimal.TryParse(compareValue, out var b))
+        if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+            && decimal.TryParse(compareValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
         {
             return comparison(a, b);
         }

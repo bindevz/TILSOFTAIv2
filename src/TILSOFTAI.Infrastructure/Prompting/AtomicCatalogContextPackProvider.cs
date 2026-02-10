@@ -9,7 +9,7 @@ namespace TILSOFTAI.Infrastructure.Prompting;
 
 public sealed class AtomicCatalogContextPackProvider : IContextPackProvider
 {
-    private const string ContextPackKey = "dataset_catalog";
+    private const string ContextPackKey = "atomic_catalog";
     private const int MaxDatasets = 20;
     private const int MaxFieldsPerDataset = 10;
 

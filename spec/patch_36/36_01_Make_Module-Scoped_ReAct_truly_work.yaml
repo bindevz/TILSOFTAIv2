@@ -1,0 +1,318 @@
+patch_pack: 36
+project: TILSOFTAIv2
+mode: "enterprise-grade remediation / write-over / no version bump"
+theme: "Make Module-Scoped ReAct truly work (follow-up triggers), remove remaining scale hazards, enforce deterministic policy"
+baseline: "Patch 35 applied (Policy-as-Data + Module-Scoped ReAct scaffolding)"
+
+primary_objectives:
+  P0:
+    - "FollowUpRules must actually trigger against real tool output envelopes (meta/columns/rows)."
+    - "ToolCatalogContextPack must be policy-driven and built from scoped toolset only (or disabled by default)."
+    - "MetadataDictionary must be module/app scoped without mutable singleton state (no cross-request leakage)."
+    - "Policy resolution must be deterministic and precedence-correct (specificity > priority > updated)."
+  P1:
+    - "Canonical cache keys (module list order independent)."
+    - "Align context pack keys (budgeter priority vs provider keys)."
+    - "Language fallback for scoped metadata."
+    - "Add enterprise tests proving ModelId=3 ReAct depth end-to-end."
+
+guiding_principles:
+  - "LLM decides; C# orchestrates + enforces guardrails."
+  - "No global context injection when scoped is available."
+  - "No mutable state on singleton services."
+  - "Determinism: same inputs → same effective policy and same scoped packs."
+  - "Observability: log effective policy hash + rule triggers + pack sizes."
+
+mini_packs:
+
+  - id: "36.01"
+    priority: "P0"
+    title: "ReActFollowUpEvaluator — support tool output envelopes (rows[0] as effective root)"
+    why: >
+      Current FollowUpRules often use JsonPath '$.PieceCount' but tool outputs are in an envelope
+      { meta, columns, rows:[{...}] }, so rules never match. This prevents ReAct depth from working.
+    files_to_edit:
+      - "src/TILSOFTAI.Orchestration/Policies/ReActFollowUpEvaluator.cs"
+      - "src/TILSOFTAI.Orchestration/Policies/ReActFollowUpRule.cs"
+    change_plan:
+      - step: "Introduce 'EffectiveRoot' extraction: if payload has rows as array and rows[0] is object, use rows[0] for JsonPath resolution."
+      - step: "Apply EffectiveRoot to both condition evaluation and ArgsTemplate rendering."
+      - step: "Keep JsonPath grammar simple (only '$.Property' and '$' supported)."
+      - step: "Add robust numeric parsing for operators >, >=, <, <= (invariant culture)."
+      - step: "Add 'exists' semantics: exists AND not null."
+    implementation_notes:
+      effective_root_rules:
+        - "If payload is object and has property 'rows' that is array:"
+        - "  - If array length > 0 and rows[0] is object → effectiveRoot = rows[0]"
+        - "  - Else effectiveRoot = payload (do not fail)"
+      args_template_tokens:
+        - "Support {{$.X}} resolved against effectiveRoot (and fall back to original payload if not found)."
+      guardrails:
+        - "If JsonPath resolves to missing → treat as null."
+        - "If operator requires numeric but parse fails → no match (do not throw)."
+    acceptance_criteria:
+      - "Given payload {rows:[{PieceCount:5, ModelId:3}]} and rule JsonPath='$.PieceCount' operator '>' compare '0' → matches."
+      - "ArgsTemplateJson {\"modelId\":\"{{$.ModelId}}\"} resolves to '3'."
+      - "No exceptions thrown on unexpected payload shapes."
+
+  - id: "36.02"
+    priority: "P0"
+    title: "ToolCatalogContextPack — policy-driven + scoped-toolset only (no global tool leak)"
+    why: >
+      ToolCatalogContextPack currently risks token explosion and can leak non-scoped tool hints that are not present in tools[].
+      Enterprise requirement: build pack strictly from scoped tools (the same set actually sent to LLM), and control via RuntimePolicy.
+    files_to_edit:
+      - "src/TILSOFTAI.Infrastructure/Prompting/ToolCatalogContextPackProvider.cs"
+      - "src/TILSOFTAI.Orchestration/Prompting/PromptBuildContext.cs"
+      - "src/TILSOFTAI.Orchestration/Prompting/PromptBuilder.cs"
+      - "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+      - "src/TILSOFTAI.Domain/Configuration/ToolCatalogContextPackOptions.cs"
+      - "src/TILSOFTAI.Domain/Configuration/RuntimePolicySystemOptions.cs"
+    change_plan:
+      - step: "Introduce PromptBuildContext.ScopedTools (resolved tool defs) and RuntimePolicySnapshot into prompt build."
+      - step: "Modify ToolCatalogContextPackProvider to accept PromptBuildContext and generate pack from ScopedTools only."
+      - step: "Read runtime policy key 'tool_catalog_context_pack' for enabled/maxTools/maxTotalTokens/orderStrategy."
+      - step: "Deprecate appsettings ToolCatalogContextPack.Enabled as system ceiling only (fallback)."
+      - step: "Default runtime policy: enabled=false unless specifically needed (recommended)."
+    policies:
+      runtime_policy_key: "tool_catalog_context_pack"
+      fields:
+        - "enabled"
+        - "maxTools"
+        - "maxTotalTokens"
+        - "orderStrategy: core_then_scope_order"
+        - "maxInstructionTokensPerTool"
+        - "maxDescriptionTokensPerTool"
+    ordering:
+      - "Core tools first: tool.list, diagnostics_run, action_request_write"
+      - "Then remaining ScopedTools order by (modulePriority, toolSortOrder, toolName)"
+    acceptance_criteria:
+      - "tool_catalog pack never contains tools outside tools[] payload."
+      - "Changing RuntimePolicy toggles pack without redeploy."
+      - "No PreferTools remains anywhere in code path."
+
+  - id: "36.03"
+    priority: "P0"
+    title: "MetadataDictionary — scoped loading with no mutable singleton state"
+    why: >
+      Current provider design risks cross-request leakage if scope is stored on singleton.
+      Enterprise-grade requires scoped context injection without shared mutable state.
+    files_to_edit:
+      - "src/TILSOFTAI.Infrastructure/Prompting/MetadataDictionaryContextPackProvider.cs"
+      - "src/TILSOFTAI.Orchestration/Prompting/PromptBuildContext.cs"
+      - "src/TILSOFTAI.Orchestration/Prompting/PromptBuilder.cs"
+      - "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+      - "src/TILSOFTAI.Infrastructure/Metadata/SqlMetadataDictionaryProvider.cs"
+    change_plan:
+      - step: "Remove any 'CurrentScope' mutable property from provider (or stop using it)."
+      - step: "Extend provider method signature to accept PromptBuildContext (tenant/modules/apps/language)."
+      - step: "Provider calls dbo.app_metadatadictionary_list_scoped using context.ModuleKeysJson and context.AppKey."
+      - step: "Apply per-pack caps from runtime policy key 'metadata_dictionary_pack' (entries/tokens)."
+    runtime_policy:
+      key: "metadata_dictionary_pack"
+      default_json: |
+        {
+          "enabled": true,
+          "maxEntries": 400,
+          "maxTotalTokens": 800,
+          "namespaceMode": "keys_only",
+          "languageFallback": true
+        }
+    language_fallback:
+      - "If @Language has no rows, fallback to NULL (neutral) or 'en' depending on tenant policy."
+    acceptance_criteria:
+      - "No shared mutable scope state exists in singleton providers."
+      - "metadata_dictionary pack contains only keys scoped to module/app."
+      - "Language fallback works (vi -> en) when vi is missing."
+
+  - id: "36.04"
+    priority: "P0"
+    title: "SQL — app_policy_resolve deterministic precedence (specificity > priority > updated)"
+    why: >
+      Current policy resolution can be non-deterministic and ignores specificity precedence.
+      At scale (multi-tenant, multi-env), this becomes a correctness and governance risk.
+    files_to_edit:
+      - "sql/01_core/075_sps_app_policy.sql"
+    change_plan:
+      - step: "Add specificity scoring in ORDER BY."
+      - step: "Tie-break deterministically using UpdatedAtUtc DESC then PolicyId DESC."
+      - step: "Ensure module match requires membership in @ModuleKeys when ModuleKey is not NULL."
+    sql_patch: |
+      CREATE OR ALTER PROCEDURE dbo.app_policy_resolve
+          @TenantId        nvarchar(50),
+          @ModuleKeysJson  nvarchar(max) = NULL,
+          @AppKey          nvarchar(50) = NULL,
+          @Environment     nvarchar(50) = NULL,
+          @Language        nvarchar(10) = NULL
+      AS
+      BEGIN
+          SET NOCOUNT ON;
+
+          DECLARE @ModuleKeys TABLE (ModuleKey nvarchar(50));
+          IF (@ModuleKeysJson IS NOT NULL AND ISJSON(@ModuleKeysJson) = 1)
+          BEGIN
+              INSERT INTO @ModuleKeys (ModuleKey)
+              SELECT value FROM OPENJSON(@ModuleKeysJson);
+          END
+
+          ;WITH Candidates AS
+          (
+              SELECT
+                  PolicyId,
+                  PolicyKey,
+                  JsonValue,
+                  Priority,
+                  UpdatedAtUtc,
+                  -- specificity: higher is more specific
+                  (CASE WHEN TenantId = @TenantId THEN 16 ELSE 0 END) +
+                  (CASE WHEN ModuleKey IS NOT NULL THEN 8 ELSE 0 END) +
+                  (CASE WHEN AppKey IS NOT NULL THEN 4 ELSE 0 END) +
+                  (CASE WHEN Environment IS NOT NULL THEN 2 ELSE 0 END) +
+                  (CASE WHEN Language IS NOT NULL THEN 1 ELSE 0 END) AS SpecificityScore
+              FROM dbo.RuntimePolicy
+              WHERE
+                  IsEnabled = 1
+                  AND (TenantId IS NULL OR TenantId = @TenantId)
+                  AND (@AppKey IS NULL OR AppKey IS NULL OR AppKey = @AppKey)
+                  AND (@Environment IS NULL OR Environment IS NULL OR Environment = @Environment)
+                  AND (@Language IS NULL OR Language IS NULL OR Language = @Language)
+                  AND (
+                      ModuleKey IS NULL
+                      OR EXISTS (SELECT 1 FROM @ModuleKeys mk WHERE mk.ModuleKey = ModuleKey)
+                  )
+          ),
+          Ranked AS
+          (
+              SELECT
+                  PolicyKey,
+                  JsonValue,
+                  ROW_NUMBER() OVER
+                  (
+                      PARTITION BY PolicyKey
+                      ORDER BY
+                          SpecificityScore DESC,
+                          Priority ASC,
+                          UpdatedAtUtc DESC,
+                          PolicyId DESC
+                  ) AS rn
+              FROM Candidates
+          )
+          SELECT PolicyKey, JsonValue
+          FROM Ranked
+          WHERE rn = 1
+          ORDER BY PolicyKey;
+      END
+    acceptance_criteria:
+      - "Given both tenant-specific and global policies for same key, tenant-specific wins regardless of Priority."
+      - "If two policies have same scope and Priority, the newer one wins deterministically."
+
+  - id: "36.05"
+    priority: "P1"
+    title: "Providers — canonical cache keys + module list normalization"
+    why: "Avoid cache misses caused by module order differences; reduce SQL load under concurrency."
+    files_to_edit:
+      - "src/TILSOFTAI.Infrastructure/Policies/SqlRuntimePolicyProvider.cs"
+      - "src/TILSOFTAI.Infrastructure/Policies/SqlReActFollowUpRuleProvider.cs"
+    change_plan:
+      - step: "Sort moduleKeys before building cache key and ModulesJson parameter."
+      - step: "Hash long module lists (SHA256) to keep key size bounded."
+      - step: "Include environment + language in cache key."
+    acceptance_criteria:
+      - "Same module set in different orders hits same cache entry."
+      - "Cache key size stays bounded."
+
+  - id: "36.06"
+    priority: "P1"
+    title: "Context pack key alignment + budgeting priority correctness"
+    why: "Budgeter priority map must match provider keys; otherwise critical packs can be trimmed incorrectly."
+    files_to_edit:
+      - "src/TILSOFTAI.Orchestration/Prompting/ContextPackKeys.cs"
+      - "src/TILSOFTAI.Orchestration/Prompting/ContextPackBudgeter.cs"
+      - "src/TILSOFTAI.Infrastructure/Prompting/AtomicCatalogContextPackProvider.cs"
+    change_plan:
+      - step: "Define canonical keys: tool_catalog, metadata_dictionary, atomic_catalog, react_followup_rules, system_policy."
+      - step: "Ensure providers emit these exact keys."
+      - step: "Update budgeter priority list to put tool_catalog/react_followup_rules above metadata_dictionary."
+    acceptance_criteria:
+      - "atomic catalog pack uses key 'atomic_catalog' (not 'dataset_catalog')."
+      - "Budgeter prioritizes tool_catalog and react_followup_rules."
+
+  - id: "36.07"
+    priority: "P1"
+    title: "Observability — persist effective policy hash + triggered follow-up rules"
+    why: "Enterprise ops needs to debug why a tool was (not) called and which policy applied."
+    files_to_edit:
+      - "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+      - "src/TILSOFTAI.Infrastructure/Observability/SqlConversationStore.cs"
+      - "sql/01_core/077_tables_conversation_extensions.sql"
+    change_plan:
+      - step: "Add Conversation metadata columns or a side table: ConversationPolicySnapshot (ConversationId, PolicyHash, PolicyJson, CreatedAtUtc)."
+      - step: "Log fired FollowUpRules: ConversationReActTrace (ConversationId, Step, RuleKey, ToolName, FollowUpToolName)."
+      - step: "Hash effective policy JSON (stable serialization) for quick correlation."
+    acceptance_criteria:
+      - "Each conversation stores effective policy snapshot."
+      - "Each triggered follow-up rule is recorded with step number."
+
+  - id: "36.08"
+    priority: "P1"
+    title: "Enterprise tests — prove ModelId=3 ReAct depth and scoping integrity"
+    why: "Prevent regressions; ensure follow-up triggers and scoped pack integrity."
+    files_to_add:
+      - "tests/TILSOFTAI.Tests/ReAct/ReActFollowUpEnvelopeTests.cs"
+      - "tests/TILSOFTAI.Tests/Prompting/ToolCatalogPackScopedTests.cs"
+      - "tests/TILSOFTAI.Tests/E2E/ModelId3ReactEndToEndTests.cs"
+    test_matrix:
+      envelope_followup:
+        - "payload has rows[0].PieceCount=5 -> triggers pieces follow-up"
+        - "payload has rows[0].PackagingMethodId exists -> triggers packaging follow-up"
+      scoped_pack_integrity:
+        - "tool_catalog pack contains only tools[] payload entries"
+        - "metadata pack contains only module-scoped keys"
+      e2e_modelid3:
+        - "Chat: 'Phân tích model với ID 3' -> tool calls include overview + at least one follow-up via nudges"
+        - "Final answer includes pieces/materials/packaging when data available; otherwise 'unknown' with next tool suggestions"
+    acceptance_criteria:
+      - "dotnet test passes."
+      - "No flakiness: deterministic policy resolution and rule triggering."
+
+system_config_changes:
+  appsettings_policy:
+    principle: "Appsettings only contains stable system ceilings and provider settings; operational knobs live in SQL RuntimePolicy."
+  appsettings_edits:
+    remove:
+      - "Any PreferTools remnants"
+      - "Any ReActPolicy rule blocks"
+    keep_as_ceilings_only:
+      - "RuntimePolicy: Provider/Environment/CacheTtlSeconds"
+      - "ToolCatalogContextPack: ceiling limits only (fallback)"
+      - "ReAct: ceiling limits only (fallback)"
+    recommended_defaults:
+      ToolCatalogContextPack:
+        Enabled: false   # prefer not duplicating tool catalog; use scoped tools[] + follow-up nudges
+      ReAct:
+        EnableFollowUpNudges: true
+
+acceptance_criteria_global:
+  - "FollowUpRules trigger reliably on real tool payload shapes (meta/columns/rows envelope)."
+  - "ToolCatalogContextPack is never global; if enabled, it is generated from scoped tools only."
+  - "MetadataDictionary pack is module/app scoped without singleton mutable state."
+  - "Policy resolution is deterministic and specificity-correct."
+  - "Adding a new module requires only SQL seed (scope + policies + follow-up rules) with no appsettings edits."
+  - "ModelId=3 scenario demonstrates multi-step ReAct with follow-up nudges."
+
+rollout_plan:
+  - "1) Apply SQL change for deterministic policy resolve (36.04) and optional observability tables (36.07)."
+  - "2) Deploy C# changes (36.01–36.03, 36.05–36.06)."
+  - "3) Run tests (36.08) and execute manual E2E with ModelId=3."
+  - "4) Set runtime policy defaults in SQL (tool_catalog_context_pack.enabled=false unless needed)."
+  - "5) Monitor: fired rules, effective policy hash, pack sizes, token usage."
+
+rollback_plan:
+  - "Disable follow-up nudges: update RuntimePolicy react_nudge.enabled=false."
+  - "Disable scoped metadata pack: update RuntimePolicy metadata_dictionary_pack.enabled=false."
+  - "Fallback to appsettings ceilings by disabling RuntimePolicy rows (IsEnabled=0) temporarily."
+  - "Revert C# commits if needed; SQL additions are backward-compatible."
+
+notes:
+  - "This patch is intentionally 'triệt để': it removes the last sources of non-scalable hardcoding and makes ReAct follow-ups operational against the actual data shape."
+  - "No intent detection is moved into C#; C# only evaluates deterministic follow-up conditions and nudges LLM to call tools."

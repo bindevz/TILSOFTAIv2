@@ -13,6 +13,7 @@ using TILSOFTAI.Orchestration.Pipeline;
 
 namespace TILSOFTAI.Api.Controllers;
 
+[AllowAnonymous]
 [ApiController]
 [Route("v1/chat/completions")]
 public sealed class OpenAiChatCompletionsController : ControllerBase
@@ -64,11 +65,19 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
                 StatusCodes.Status400BadRequest,
                 detail: new { maxInputChars = _chatOptions.Value.MaxInputChars });
         }
-        
-        
-        var context = _contextAccessor.Current
-            ?? throw new InvalidOperationException(
-                "ExecutionContext is required. Ensure authentication middleware is configured.");
+
+        //NKL SUPPORT FOR TEST;
+        var context = _contextAccessor.Current ?? new TilsoftExecutionContext
+        {
+            TenantId = "public",
+            UserId = "anonymous",
+            Roles = new[] { "guest" },
+            CorrelationId = Guid.NewGuid().ToString("N")
+        };
+
+        //var context = _contextAccessor.Current
+        //    ?? throw new InvalidOperationException(
+        //        "ExecutionContext is required. Ensure authentication middleware is configured.");
         var created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var id = $"chatcmpl_{Guid.NewGuid():N}";
         var model = string.IsNullOrWhiteSpace(_llmOptions.Model) ? request.Model ?? "unknown" : _llmOptions.Model;

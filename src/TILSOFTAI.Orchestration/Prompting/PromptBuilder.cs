@@ -26,14 +26,29 @@ public sealed class PromptBuilder
         _contextPackBudgeter = contextPackBudgeter ?? throw new ArgumentNullException(nameof(contextPackBudgeter));
     }
 
+    /// <summary>
+    /// PATCH 36.02: BuildAsync now accepts optional PromptBuildContext for scoped packs.
+    /// </summary>
     public async Task<LlmRequest> BuildAsync(
         IReadOnlyList<LlmMessage> messages,
         IReadOnlyList<ToolDefinition> tools,
         TilsoftExecutionContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        PromptBuildContext? buildContext = null)
     {
         var basePrompt = BuildBaseSystemPrompt(context);
-        var contextPacks = await _contextPackProvider.GetContextPacksAsync(context, cancellationToken);
+
+        // Use scoped interface if build context is available
+        IReadOnlyDictionary<string, string> contextPacks;
+        if (buildContext is not null && _contextPackProvider is IScopedContextPackProvider scopedProvider)
+        {
+            contextPacks = await scopedProvider.GetContextPacksAsync(context, buildContext, cancellationToken);
+        }
+        else
+        {
+            contextPacks = await _contextPackProvider.GetContextPacksAsync(context, cancellationToken);
+        }
+
         var budgetedPacks = _contextPackBudgeter.Budget(contextPacks);
         var contextSection = BuildContextSection(budgetedPacks);
         var systemPrompt = basePrompt + contextSection;

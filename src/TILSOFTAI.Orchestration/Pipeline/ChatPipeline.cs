@@ -232,6 +232,12 @@ public sealed class ChatPipeline
         }
         var toolLookup = tools.ToDictionary(tool => tool.Name, StringComparer.OrdinalIgnoreCase);
 
+        // PATCH 36.02: Build prompt context for scoped packs
+        var promptBuildContext = new Prompting.PromptBuildContext(
+            scopedTools: tools,
+            resolvedModules: resolvedModules ?? (IReadOnlyList<string>)Array.Empty<string>(),
+            policies: runtimePolicies);
+
         var containsSensitive = policy.ContainsSensitive;
 
         if (request.AllowCache && _semanticCache.Enabled && !policy.ShouldBypassCache)
@@ -351,7 +357,7 @@ public sealed class ChatPipeline
 
         for (var step = 0; step < _chatOptions.MaxSteps; step++)
         {
-            var llmRequest = await _promptBuilder.BuildAsync(messages, tools, ctx, ct);
+            var llmRequest = await _promptBuilder.BuildAsync(messages, tools, ctx, ct, promptBuildContext);
             llmRequest.Stream = request.Stream;
 
             var llmStopwatch = Stopwatch.StartNew();

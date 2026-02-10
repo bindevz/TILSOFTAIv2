@@ -41,7 +41,9 @@ public sealed class SqlRuntimePolicyProvider : IRuntimePolicyProvider
         CancellationToken ct = default)
     {
         var env = environment ?? _options.Environment;
-        var cacheKey = $"policy:{tenantId}:{string.Join(",", moduleKeys)}:{appKey}:{env}:{language}";
+        // PATCH 36.05: Canonical cache key — sort module keys for determinism
+        var sortedModules = moduleKeys.OrderBy(m => m, StringComparer.OrdinalIgnoreCase).ToList();
+        var cacheKey = $"policy:{tenantId}:{string.Join(",", sortedModules)}:{appKey}:{env}:{language}";
 
         if (_cache.TryGetValue<RuntimePolicySnapshot>(cacheKey, out var cached) && cached is not null)
         {
@@ -50,7 +52,7 @@ public sealed class SqlRuntimePolicyProvider : IRuntimePolicyProvider
 
         try
         {
-            var moduleKeysJson = JsonSerializer.Serialize(moduleKeys);
+            var moduleKeysJson = JsonSerializer.Serialize(sortedModules);
             var parameters = new Dictionary<string, object?>
             {
                 ["@TenantId"] = tenantId,

@@ -7,7 +7,11 @@ using TILSOFTAI.Orchestration.Tools;
 
 namespace TILSOFTAI.Infrastructure.Prompting;
 
-public sealed class ToolCatalogContextPackProvider : IContextPackProvider
+/// <summary>
+/// PATCH 36.02: Implements IScopedContextPackProvider — builds tool catalog pack
+/// from scoped tools only (never global). Policy-driven via tool_catalog_context_pack.
+/// </summary>
+public sealed class ToolCatalogContextPackProvider : IScopedContextPackProvider
 {
     private const string ContextPackKey = "tool_catalog";
 
@@ -25,37 +29,62 @@ public sealed class ToolCatalogContextPackProvider : IContextPackProvider
         _budgeter = budgeter ?? throw new ArgumentNullException(nameof(budgeter));
     }
 
+    /// <summary>
+    /// Legacy IContextPackProvider — falls back to global tools (backward compat).
+    /// </summary>
     public async Task<IReadOnlyDictionary<string, string>> GetContextPacksAsync(
         TilsoftExecutionContext context,
         CancellationToken cancellationToken)
     {
-        if (context is null)
-        {
-            throw new ArgumentNullException(nameof(context));
-        }
-
-        // PATCH 29.04: When disabled, return empty to avoid tool instruction duplication
         if (!_options.Enabled)
-        {
             return new Dictionary<string, string>();
-        }
 
         var tools = await _toolCatalogResolver.GetResolvedToolsAsync(cancellationToken);
-        if (tools.Count == 0)
-        {
+        return BuildPack(tools, _options.Enabled, _options.MaxTools, _options.MaxTotalTokens,
+            _options.MaxInstructionTokensPerTool, _options.MaxDescriptionTokensPerTool);
+    }
+
+    /// <summary>
+    /// PATCH 36.02: Scoped provider — uses buildContext.ScopedTools and reads RuntimePolicy.
+    /// </summary>
+    public Task<IReadOnlyDictionary<string, string>> GetContextPacksAsync(
+        TilsoftExecutionContext context,
+        PromptBuildContext buildContext,
+        CancellationToken cancellationToken)
+    {
+        // Read effective limits from runtime policy (with system ceilings as fallback)
+        var policies = buildContext.Policies;
+        var enabled = policies.GetValueOrDefault("tool_catalog_context_pack", "enabled", _options.Enabled);
+        var maxTools = policies.GetValueOrDefault("tool_catalog_context_pack", "maxTools", _options.MaxTools);
+        var maxTokens = policies.GetValueOrDefault("tool_catalog_context_pack", "maxTotalTokens", _options.MaxTotalTokens);
+        var maxInstructionTokens = policies.GetValueOrDefault("tool_catalog_context_pack", "maxInstructionTokensPerTool", _options.MaxInstructionTokensPerTool);
+        var maxDescriptionTokens = policies.GetValueOrDefault("tool_catalog_context_pack", "maxDescriptionTokensPerTool", _options.MaxDescriptionTokensPerTool);
+
+        // Use scoped tools — never global
+        var tools = buildContext.ScopedTools;
+
+        return Task.FromResult(BuildPack(tools, enabled, maxTools, maxTokens, maxInstructionTokens, maxDescriptionTokens));
+    }
+
+    private IReadOnlyDictionary<string, string> BuildPack(
+        IReadOnlyList<ToolDefinition> tools,
+        bool enabled,
+        int maxTools,
+        int maxTotalTokens,
+        int maxInstructionTokens,
+        int maxDescriptionTokens)
+    {
+        if (!enabled || tools.Count == 0)
             return new Dictionary<string, string>();
-        }
 
         var orderedTools = OrderTools(tools);
-        var entries = BuildEntries(orderedTools);
+        var entries = BuildEntries(orderedTools, maxDescriptionTokens, maxInstructionTokens);
 
         if (entries.Count == 0)
-        {
             return new Dictionary<string, string>();
-        }
 
-        TrimToToolCount(entries);
-        TrimToTokenBudget(entries);
+        TrimToToolCount(entries, maxTools);
+        TrimToTokenBudget(entries, maxTotalTokens);
 
         var builder = new StringBuilder();
         builder.AppendLine("Available Tools:");
@@ -72,14 +101,14 @@ public sealed class ToolCatalogContextPackProvider : IContextPackProvider
         };
     }
 
-    private List<ToolEntry> BuildEntries(IEnumerable<ToolDefinition> tools)
+    private List<ToolEntry> BuildEntries(IEnumerable<ToolDefinition> tools, int maxDescTokens, int maxInstrTokens)
     {
         var entries = new List<ToolEntry>();
 
         foreach (var tool in tools)
         {
-            var description = TrimText(tool.Description, _options.MaxDescriptionTokensPerTool);
-            var instruction = TrimText(tool.Instruction, _options.MaxInstructionTokensPerTool);
+            var description = TrimText(tool.Description, maxDescTokens);
+            var instruction = TrimText(tool.Instruction, maxInstrTokens);
 
             var text = BuildEntryText(tool.Name, description, instruction);
             if (string.IsNullOrWhiteSpace(text))
@@ -93,22 +122,20 @@ public sealed class ToolCatalogContextPackProvider : IContextPackProvider
         return entries;
     }
 
-    private void TrimToToolCount(List<ToolEntry> entries)
+    private static void TrimToToolCount(List<ToolEntry> entries, int maxTools)
     {
-        if (entries.Count <= _options.MaxTools)
-        {
+        if (entries.Count <= maxTools)
             return;
-        }
 
-        entries.RemoveRange(_options.MaxTools, entries.Count - _options.MaxTools);
+        entries.RemoveRange(maxTools, entries.Count - maxTools);
     }
 
-    private void TrimToTokenBudget(List<ToolEntry> entries)
+    private void TrimToTokenBudget(List<ToolEntry> entries, int maxTotalTokens)
     {
         var headerTokens = _budgeter.EstimateTokens("Available Tools:");
         var totalTokens = headerTokens + entries.Sum(entry => entry.Tokens);
 
-        while (entries.Count > 0 && totalTokens > _options.MaxTotalTokens)
+        while (entries.Count > 0 && totalTokens > maxTotalTokens)
         {
             var lastIndex = entries.Count - 1;
             totalTokens -= entries[lastIndex].Tokens;
@@ -119,9 +146,7 @@ public sealed class ToolCatalogContextPackProvider : IContextPackProvider
     private string TrimText(string? text, int maxTokens)
     {
         if (string.IsNullOrWhiteSpace(text))
-        {
             return string.Empty;
-        }
 
         return _budgeter.TrimToTokens(text, maxTokens);
     }
@@ -129,33 +154,25 @@ public sealed class ToolCatalogContextPackProvider : IContextPackProvider
     private static string BuildEntryText(string name, string description, string instruction)
     {
         if (string.IsNullOrWhiteSpace(name))
-        {
             return string.Empty;
-        }
 
         var builder = new StringBuilder();
         builder.Append("- ").Append(name.Trim());
 
         if (!string.IsNullOrWhiteSpace(description))
-        {
             builder.Append(": ").Append(description.Trim());
-        }
 
         if (!string.IsNullOrWhiteSpace(instruction))
-        {
             builder.Append(" - ").Append(instruction.Trim());
-        }
 
         return builder.ToString();
     }
 
     /// <summary>
     /// PATCH 35: core_then_scope_order — core tools first, then by (Module, Name).
-    /// PreferTools is deprecated; ordering is now deterministic by design.
     /// </summary>
-    private IReadOnlyList<ToolDefinition> OrderTools(IReadOnlyList<ToolDefinition> tools)
+    private static IReadOnlyList<ToolDefinition> OrderTools(IReadOnlyList<ToolDefinition> tools)
     {
-        // Core tools always surface first (stable order)
         var coreToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "tool.list",
@@ -169,16 +186,11 @@ public sealed class ToolCatalogContextPackProvider : IContextPackProvider
         foreach (var tool in tools)
         {
             if (coreToolNames.Contains(tool.Name))
-            {
                 coreTools.Add(tool);
-            }
             else
-            {
                 scopeTools.Add(tool);
-            }
         }
 
-        // Sort scope tools by (Module, Name) for deterministic ordering
         scopeTools.Sort((a, b) =>
         {
             var moduleCompare = string.Compare(

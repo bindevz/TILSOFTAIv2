@@ -1,5 +1,11 @@
+using TILSOFTAI.Orchestration.Prompting;
+
 namespace TILSOFTAI.Orchestration.Prompting;
 
+/// <summary>
+/// PATCH 36.06: ContextPackBudgeter — updated priority map with canonical keys.
+/// Budgets context packs by priority: critical packs are trimmed rather than dropped.
+/// </summary>
 public sealed class ContextPackBudgeter
 {
     public int EstimateTokens(string text)
@@ -32,11 +38,13 @@ public sealed class ContextPackBudgeter
 
     // Priority map: lower number = higher priority = removed LAST
     // Critical packs are trimmed (content shortened) rather than dropped entirely
+    // PATCH 36.06: Uses canonical keys; added react_followup_rules
     private static readonly Dictionary<string, int> PackPriority = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["tool_catalog"] = 0,        // Highest: LLM needs tool instructions
-        ["atomic_catalog"] = 1,      // High: schema for analytics
-        ["metadata_dictionary"] = 2  // Can be trimmed
+        [ContextPackKeys.ToolCatalog] = 0,           // Highest: LLM needs tool instructions
+        [ContextPackKeys.ReactFollowUpRules] = 1,    // High: nudge instructions
+        [ContextPackKeys.AtomicCatalog] = 1,          // High: schema for analytics
+        [ContextPackKeys.MetadataDictionary] = 2      // Can be trimmed
     };
 
     private const int DefaultPriority = 50;

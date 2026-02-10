@@ -131,6 +131,9 @@ public static class AddTilsoftAiExtensions
             builder.Services.AddSingleton<ILoggerProvider>(sp => sp.GetRequiredService<StructuredLoggerProvider>());
         });
 
+        // PATCH 36: IMemoryCache required by SqlRuntimePolicyProvider / SqlReActFollowUpRuleProvider
+        services.AddMemoryCache();
+
         services.AddSingleton<ISensitivityClassifier, BasicSensitivityClassifier>();
         services.AddSingleton<ISqlErrorLogWriter, SqlErrorLogWriter>();
         services.AddSingleton<ChatStreamEnvelopeFactory>();

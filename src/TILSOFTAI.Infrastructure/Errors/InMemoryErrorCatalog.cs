@@ -134,6 +134,11 @@ public sealed class InMemoryErrorCatalog : IErrorCatalog
             {
                 ["en"] = "An unexpected error occurred.",
                 ["vi"] = "Da xay ra loi khong xac dinh."
+            },
+            [ErrorCode.ToolNotFound] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Tool not found.",
+                ["vi"] = "Khong tim thay cong cu."
             }
         };
 
