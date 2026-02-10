@@ -155,6 +155,9 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<IToolCatalogResolver>(sp => sp.GetRequiredService<ToolCatalogSyncService>());
         services.AddSingleton<IScopedToolCatalogResolver>(sp => sp.GetRequiredService<ToolCatalogSyncService>());
         services.AddSingleton<Orchestration.Modules.IModuleScopeResolver, Orchestration.Modules.ModuleScopeResolver>();
+        services.AddSingleton<Orchestration.Policies.IRuntimePolicyProvider, Infrastructure.Policies.SqlRuntimePolicyProvider>();
+        services.AddSingleton<Orchestration.Policies.IReActFollowUpRuleProvider, Infrastructure.Policies.SqlReActFollowUpRuleProvider>();
+        services.AddSingleton<Orchestration.Policies.ReActFollowUpEvaluator>();
         services.AddSingleton<IJsonSchemaValidator, RealJsonSchemaValidator>();
         services.AddSingleton<ToolGovernance>();
         services.AddSingleton<ToolResultCompactor>();
@@ -422,6 +425,9 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.MaxInstructionTokensPerTool > 0, "ToolCatalogContextPack:MaxInstructionTokensPerTool must be > 0.")
             .Validate(options => options.MaxDescriptionTokensPerTool > 0, "ToolCatalogContextPack:MaxDescriptionTokensPerTool must be > 0.")
             .ValidateOnStart();
+
+        services.AddOptions<RuntimePolicySystemOptions>()
+            .Bind(configuration.GetSection("RuntimePolicy"));
 
         services.AddOptions<OpenTelemetryOptions>()
             .Bind(configuration.GetSection(ConfigurationSectionNames.OpenTelemetry))

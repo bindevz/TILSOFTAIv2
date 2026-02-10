@@ -12,5 +12,10 @@ public sealed class ToolCatalogContextPackOptions
     public int MaxTotalTokens { get; set; } = 900;
     public int MaxInstructionTokensPerTool { get; set; } = 60;
     public int MaxDescriptionTokensPerTool { get; set; } = 30;
+    /// <summary>
+    /// DEPRECATED (Patch 35): Tool ordering is now driven by core_then_scope_order strategy.
+    /// Retained for backward compatibility with existing config files.
+    /// </summary>
+    [Obsolete("Use RuntimePolicy 'tool_catalog_context_pack' with orderStrategy instead. PreferTools will be removed in a future patch.")]
     public string[] PreferTools { get; set; } = Array.Empty<string>();
 }

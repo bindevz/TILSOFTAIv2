@@ -1,0 +1,415 @@
+patch_pack: 35
+project: TILSOFTAIv2
+mode: "enterprise remediation / write-over / no version bump"
+theme: "Policy-as-Data + Module-Scoped ReAct (stable, scalable, no appsettings hardcode)"
+assumptions:
+  - "Patch 34 (Module Scope Routing + Scoped Loading + Priority Budgeter + MessageHistory) has been applied."
+  - "ToolCatalog and MetadataDictionary already exist and are populated in SQL."
+  - "Goal is to remove expansion-risk hardcoding (PreferTools, ReActPolicy) from appsettings; appsettings remains system-level only."
+non_goals:
+  - "P2 security hardening beyond what was already done (e.g., advanced WAF, rate-limits)."
+  - "Large refactor of module tool implementations."
+
+outcomes:
+  P0:
+    - "No hard-coded PreferTools / ReActPolicy in appsettings."
+    - "Tool ordering + tool catalog prompt injection controlled by SQL runtime policy (per tenant/module/app/env)."
+    - "ReAct FollowUpRules are explicit, scoped, versionable, and enforceable (nudges) without C# 'deciding intent'."
+  P1:
+    - "Module scale: adding a new module requires only SQL seed (module + scope + policies + follow-up rules), not redeploy."
+    - "Deterministic/observable behavior: effective policy snapshot & follow-up triggers are logged and persisted."
+
+enterprise_principles:
+  - "LLM decides; C# orchestrates & enforces guardrails."
+  - "Least capability exposure: tools + metadata are module-scoped."
+  - "Policy-as-data: operational knobs live in SQL, not in appsettings."
+  - "ReAct depth is driven by explicit FollowUpRules (data), not hidden heuristics."
+  - "Observability first: every scope/policy/rule decision is auditable."
+
+mini_packs:
+
+  - id: "35.01"
+    priority: "P0"
+    title: "SQL — RuntimePolicy + ReActFollowUpRule catalogs (scoped, tenant-aware)"
+    why: >
+      Remove expansion-risk hardcoding from appsettings and provide an enterprise-grade policy layer
+      that supports per-tenant and per-module behavior without redeploy.
+    files_to_add:
+      - "sql/01_core/073_tables_runtime_policy.sql"
+      - "sql/01_core/074_tables_react_followup_rule.sql"
+      - "sql/01_core/075_sps_app_policy.sql"
+      - "sql/01_core/076_sps_app_react_followup.sql"
+      - "sql/99_seed/012_seed_runtime_policy_defaults.sql"
+      - "sql/99_seed/013_seed_react_followup_rules_model.sql"
+    sql_design:
+      tables:
+
+        RuntimePolicy:
+          ddl: |
+            IF OBJECT_ID('dbo.RuntimePolicy', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.RuntimePolicy
+                (
+                    PolicyId        bigint IDENTITY(1,1) NOT NULL,
+                    PolicyKey       nvarchar(100) NOT NULL,          -- e.g. 'tool_catalog_context_pack', 'react_nudge'
+                    TenantId        nvarchar(50) NULL,
+                    ModuleKey       nvarchar(50) NULL,
+                    AppKey          nvarchar(50) NULL,
+                    Environment     nvarchar(50) NULL,               -- 'dev'/'staging'/'prod' (optional)
+                    Language        nvarchar(10) NULL,               -- optional
+                    Priority        int NOT NULL CONSTRAINT DF_RuntimePolicy_Priority DEFAULT (100),
+                    IsEnabled       bit NOT NULL CONSTRAINT DF_RuntimePolicy_IsEnabled DEFAULT (1),
+                    JsonValue       nvarchar(max) NOT NULL,          -- effective settings in JSON
+                    UpdatedAtUtc    datetime2(3) NOT NULL CONSTRAINT DF_RuntimePolicy_UpdatedAtUtc DEFAULT sysutcdatetime(),
+                    UpdatedBy       nvarchar(100) NULL,
+                    CONSTRAINT PK_RuntimePolicy PRIMARY KEY (PolicyId)
+                );
+
+                CREATE INDEX IX_RuntimePolicy_Lookup
+                    ON dbo.RuntimePolicy (PolicyKey, TenantId, ModuleKey, AppKey, Environment, Language, IsEnabled, Priority);
+            END
+      follow_up_rules:
+
+        ReActFollowUpRule:
+          ddl: |
+            IF OBJECT_ID('dbo.ReActFollowUpRule', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.ReActFollowUpRule
+                (
+                    RuleId              bigint IDENTITY(1,1) NOT NULL,
+                    RuleKey             nvarchar(120) NOT NULL,      -- stable identifier for audit
+                    TenantId            nvarchar(50) NULL,
+                    ModuleKey           nvarchar(50) NOT NULL,
+                    AppKey              nvarchar(50) NULL,
+                    ToolName            nvarchar(200) NULL,          -- trigger tool (optional)
+                    Priority            int NOT NULL CONSTRAINT DF_ReActFollowUpRule_Priority DEFAULT (100),
+                    IsEnabled           bit NOT NULL CONSTRAINT DF_ReActFollowUpRule_IsEnabled DEFAULT (1),
+
+                    -- Condition evaluation (kept intentionally simple & deterministic)
+                    JsonPath            nvarchar(300) NOT NULL,      -- e.g. '$.PieceCount'
+                    Operator            nvarchar(20)  NOT NULL,      -- 'exists' | '==' | '!=' | '>' | '>=' | '<' | '<=' | 'contains'
+                    CompareValue        nvarchar(200) NULL,          -- numeric or string (nullable when Operator='exists')
+
+                    -- Action for LLM (still LLM calls tools; C# only nudges)
+                    FollowUpToolName    nvarchar(200) NOT NULL,
+                    ArgsTemplateJson    nvarchar(max) NULL,          -- e.g. '{"modelId":"{{$.ModelId}}"}'
+                    PromptHint          nvarchar(800) NOT NULL,      -- injected/nudged instruction text
+                    UpdatedAtUtc        datetime2(3) NOT NULL CONSTRAINT DF_ReActFollowUpRule_UpdatedAtUtc DEFAULT sysutcdatetime(),
+                    UpdatedBy           nvarchar(100) NULL,
+
+                    CONSTRAINT PK_ReActFollowUpRule PRIMARY KEY (RuleId)
+                );
+
+                CREATE INDEX IX_ReActFollowUpRule_Scope
+                    ON dbo.ReActFollowUpRule (TenantId, ModuleKey, AppKey, ToolName, IsEnabled, Priority);
+            END
+    stored_procedures:
+
+      app_policy_resolve:
+        ddl: |
+          CREATE OR ALTER PROCEDURE dbo.app_policy_resolve
+              @TenantId        nvarchar(50),
+              @ModuleKeysJson  nvarchar(max) = NULL,      -- JSON array
+              @AppKey          nvarchar(50) = NULL,
+              @Environment     nvarchar(50) = NULL,
+              @Language        nvarchar(10) = NULL
+          AS
+          BEGIN
+              SET NOCOUNT ON;
+
+              DECLARE @ModuleKeys TABLE (ModuleKey nvarchar(50));
+              IF (@ModuleKeysJson IS NOT NULL AND ISJSON(@ModuleKeysJson) = 1)
+              BEGIN
+                  INSERT INTO @ModuleKeys (ModuleKey)
+                  SELECT value FROM OPENJSON(@ModuleKeysJson);
+              END
+
+              ;WITH Candidates AS
+              (
+                  SELECT
+                      PolicyKey,
+                      JsonValue,
+                      Priority,
+                      ROW_NUMBER() OVER (
+                          PARTITION BY PolicyKey
+                          ORDER BY Priority ASC
+                      ) AS rn
+                  FROM dbo.RuntimePolicy
+                  WHERE
+                      IsEnabled = 1
+                      AND (TenantId IS NULL OR TenantId = @TenantId)
+                      AND (@AppKey IS NULL OR AppKey IS NULL OR AppKey = @AppKey)
+                      AND (@Environment IS NULL OR Environment IS NULL OR Environment = @Environment)
+                      AND (@Language IS NULL OR Language IS NULL OR Language = @Language)
+                      AND (
+                          ModuleKey IS NULL
+                          OR EXISTS (SELECT 1 FROM @ModuleKeys mk WHERE mk.ModuleKey = ModuleKey)
+                      )
+              )
+              SELECT PolicyKey, JsonValue
+              FROM Candidates
+              WHERE rn = 1
+              ORDER BY PolicyKey;
+          END
+
+      app_react_followup_list_scoped:
+        ddl: |
+          CREATE OR ALTER PROCEDURE dbo.app_react_followup_list_scoped
+              @TenantId        nvarchar(50),
+              @ModuleKeysJson  nvarchar(max),
+              @AppKey          nvarchar(50) = NULL
+          AS
+          BEGIN
+              SET NOCOUNT ON;
+
+              DECLARE @ModuleKeys TABLE (ModuleKey nvarchar(50));
+              INSERT INTO @ModuleKeys (ModuleKey)
+              SELECT value FROM OPENJSON(@ModuleKeysJson);
+
+              SELECT
+                  RuleId,
+                  RuleKey,
+                  TenantId,
+                  ModuleKey,
+                  AppKey,
+                  ToolName,
+                  Priority,
+                  JsonPath,
+                  Operator,
+                  CompareValue,
+                  FollowUpToolName,
+                  ArgsTemplateJson,
+                  PromptHint,
+                  UpdatedAtUtc
+              FROM dbo.ReActFollowUpRule
+              WHERE
+                  IsEnabled = 1
+                  AND (TenantId IS NULL OR TenantId = @TenantId)
+                  AND (AppKey IS NULL OR @AppKey IS NULL OR AppKey = @AppKey)
+                  AND EXISTS (SELECT 1 FROM @ModuleKeys mk WHERE mk.ModuleKey = ModuleKey)
+              ORDER BY Priority ASC, RuleId ASC;
+          END
+
+    seeds:
+      runtime_policy_defaults:
+        description: "Provide safe defaults without appsettings hardcoding; can be overridden per tenant/module."
+        examples:
+          tool_catalog_context_pack: |
+            {
+              "enabled": true,
+              "maxTools": 20,
+              "maxTotalTokens": 1200,
+              "maxInstructionTokensPerTool": 80,
+              "maxDescriptionTokensPerTool": 40,
+              "orderStrategy": "core_then_scope_order"
+            }
+          react_nudge: |
+            {
+              "enabled": true,
+              "maxNudgesPerTurn": 2,
+              "maxTotalNudges": 6,
+              "dedupeWindowTurns": 6
+            }
+      model_followup_rules_seed:
+        description: "Concrete ReAct FollowUpRules for Model module (ModelId=3 scenario)."
+        rules:
+          - ruleKey: "model.overview.pieces"
+            moduleKey: "model"
+            toolName: "model_get_overview"
+            jsonPath: "$.PieceCount"
+            operator: ">"
+            compareValue: "0"
+            followUpToolName: "model_get_pieces"
+            argsTemplateJson: "{\"modelId\":\"{{$.ModelId}}\"}"
+            promptHint: "If PieceCount > 0, call model_get_pieces(modelId) before final answer to list pieces summary."
+            priority: 10
+          - ruleKey: "model.overview.materials"
+            moduleKey: "model"
+            toolName: "model_get_overview"
+            jsonPath: "$.HasMaterials"
+            operator: "=="
+            compareValue: "true"
+            followUpToolName: "model_get_materials"
+            argsTemplateJson: "{\"modelId\":\"{{$.ModelId}}\"}"
+            promptHint: "If materials exist, call model_get_materials(modelId) and include materials in analysis."
+            priority: 20
+          - ruleKey: "model.overview.packaging"
+            moduleKey: "model"
+            toolName: "model_get_overview"
+            jsonPath: "$.PackagingMethodId"
+            operator: "exists"
+            compareValue: null
+            followUpToolName: "model_get_packaging"
+            argsTemplateJson: "{\"packagingMethodId\":\"{{$.PackagingMethodId}}\"}"
+            promptHint: "If PackagingMethodId is present, call model_get_packaging(packagingMethodId) and include packaging details."
+            priority: 30
+    acceptance_criteria:
+      - "dbo.RuntimePolicy and dbo.ReActFollowUpRule exist and are queryable."
+      - "app_policy_resolve returns JSON for tool_catalog_context_pack + react_nudge for a tenant/module set."
+      - "app_react_followup_list_scoped returns seeded Model rules when ModuleKeys=['model']."
+
+  - id: "35.02"
+    priority: "P0"
+    title: "C# — RuntimePolicyProvider + ReActFollowUpRuleProvider (cached, scoped)"
+    why: "Move operational behavior out of appsettings; support per-tenant/module policy resolution."
+    files_to_add:
+      - "src/TILSOFTAI.Orchestration/Policies/RuntimePolicySnapshot.cs"
+      - "src/TILSOFTAI.Orchestration/Policies/IRuntimePolicyProvider.cs"
+      - "src/TILSOFTAI.Orchestration/Policies/IReActFollowUpRuleProvider.cs"
+      - "src/TILSOFTAI.Orchestration/Policies/ReActFollowUpRule.cs"
+      - "src/TILSOFTAI.Orchestration/Policies/ReActFollowUpEvaluator.cs"
+      - "src/TILSOFTAI.Infrastructure/Policies/SqlRuntimePolicyProvider.cs"
+      - "src/TILSOFTAI.Infrastructure/Policies/SqlReActFollowUpRuleProvider.cs"
+      - "src/TILSOFTAI.Domain/Configuration/RuntimePolicySystemOptions.cs"
+    files_to_edit:
+      - "src/TILSOFTAI.Api/Extensions/AddTilsoftAiExtensions.cs"
+    implementation_notes:
+      - "Providers must be safe under Redis disabled: use IMemoryCache with TTL."
+      - "RuntimePolicySnapshot is immutable and attached to request scope (avoid re-query per step)."
+      - "FollowUp rule evaluator supports only the small operator set defined in SQL (deterministic)."
+    DI_wiring:
+      add_singletons:
+        - "IRuntimePolicyProvider -> SqlRuntimePolicyProvider"
+        - "IReActFollowUpRuleProvider -> SqlReActFollowUpRuleProvider"
+        - "ReActFollowUpEvaluator (stateless helper)"
+      add_options:
+        - "RuntimePolicySystemOptions (system-level TTL, environment label)"
+    acceptance_criteria:
+      - "dotnet build passes."
+      - "With Redis disabled, policies still resolve with IMemoryCache TTL."
+      - "Policy resolution is tenant-aware and module-aware."
+
+  - id: "35.03"
+    priority: "P0"
+    title: "Orchestration — Enforce ReAct depth via scoped FollowUpRules (LLM nudged, not overridden)"
+    why: >
+      ReAct must be deep and stable. FollowUpRules must be explicit and enforced without turning C# into an intent engine.
+    files_to_edit:
+      - "src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs"
+      - "src/TILSOFTAI.Orchestration/Prompting/PromptBuilder.cs"
+    change_plan:
+      - step: "After ModuleScopeResolver returns modules/apps, resolve effective policies via IRuntimePolicyProvider."
+      - step: "Load FollowUpRules via IReActFollowUpRuleProvider for that module scope."
+      - step: "Inject 'react_followup_rules' as a high-priority context pack (short, scoped rules only)."
+      - step: "After each tool result, evaluate FollowUpRules triggered by that tool output."
+      - step: "If a rule matches and follow-up tool was not called yet, add a brief SYSTEM nudge message (not user-visible) instructing LLM to call follow-up tool next."
+      - step: "Deduplicate nudges: track fired RuleIds + tool call history; enforce max nudges per turn from policy."
+      - step: "Do not auto-execute tools in C#; only LLM can choose to call tools."
+    safety_guards:
+      - "If rule args template cannot be resolved -> nudge without args, asking LLM to call tool with the correct identifier."
+      - "Never nudge for write tools; FollowUpRules must only reference read-only tools unless explicitly approved by HITL."
+      - "Hard cap: MaxTotalNudges per request; never infinite loop."
+    acceptance_criteria:
+      - "ModelId=3 conversation triggers: model_get_overview -> nudges to call pieces/materials/packaging when conditions match."
+      - "If LLM refuses to call follow-up tools, final answer must explicitly state missing data and suggest calling those tools."
+      - "FollowUpRules are module-scoped (analytics rules do not appear for model scope)."
+
+  - id: "35.04"
+    priority: "P0"
+    title: "Prompting — Remove PreferTools hardcode; tool ordering comes from scope/policy/SQL"
+    why: "PreferTools in appsettings is not scalable; ordering must follow module scope and SQL-driven priorities."
+    files_to_edit:
+      - "src/TILSOFTAI.Infrastructure/Prompting/ToolCatalogContextPackProvider.cs"
+      - "src/TILSOFTAI.Domain/Configuration/ToolCatalogContextPackOptions.cs"
+      - "src/TILSOFTAI.Infrastructure/Tools/ToolCatalogSyncService.cs"
+    design:
+      tool_ordering:
+        strategy: "core_then_scope_order"
+        definition:
+          - "Core tools first: tool.list, diagnostics_run, action_request_write"
+          - "Then tools in selected modules ordered by (modulePriority, toolSortOrder, toolName)"
+      prefer_tools_removal:
+        - "Deprecate PreferTools option; keep property for backward compatibility but ignore it."
+        - "Ordering uses scope resolver outputs + SQL sortOrder (from module tool mapping) where available."
+      budgeting_source:
+        - "Use RuntimePolicy 'tool_catalog_context_pack' JSON for MaxTools/MaxTotalTokens etc."
+        - "ToolCatalogContextPackOptions becomes a 'system ceiling' only (upper bounds); runtime policy clamps within ceilings."
+    acceptance_criteria:
+      - "ToolCatalogContextPackProvider no longer reads PreferTools."
+      - "Adding a new module requires no appsettings edits to prioritize its tools."
+      - "Tool ordering is consistent between tools[] payload and tool_catalog pack."
+
+  - id: "35.05"
+    priority: "P0"
+    title: "Config cleanup — appsettings holds only stable system settings (no PreferTools, no ReActPolicy)"
+    why: "Prevent configuration drift and scaling bottlenecks; ops policy belongs in SQL."
+    files_to_edit:
+      - "src/TILSOFTAI.Api/appsettings.json"
+      - "src/TILSOFTAI.Api/appsettings.Development.json"
+    remove_sections_or_fields:
+      - path: "ToolCatalogContextPack.PreferTools"
+        action: "remove"
+      - path: "ReActPolicy"
+        action: "remove entirely (if exists from patch 34)"
+    add_or_keep_system_level_only:
+      RuntimePolicy:
+        description: "Stable system-level knobs (provider, caching TTL, env label)."
+        json: |
+          "RuntimePolicy": {
+            "Provider": "Sql",
+            "Environment": "prod",
+            "CacheTtlSeconds": 120
+          }
+      ToolCatalogContextPack:
+        description: "Ceilings only; runtime policy controls actual values."
+        json: |
+          "ToolCatalogContextPack": {
+            "Enabled": true,
+            "MaxTools": 50,
+            "MaxTotalTokens": 2000,
+            "MaxInstructionTokensPerTool": 120,
+            "MaxDescriptionTokensPerTool": 60
+          }
+      ReAct:
+        description: "System-level safety caps only (no per-tool rules)."
+        json: |
+          "ReAct": {
+            "EnableFollowUpNudges": true,
+            "MaxNudgesPerTurnCeiling": 3,
+            "MaxTotalNudgesCeiling": 8
+          }
+    acceptance_criteria:
+      - "No PreferTools field exists in appsettings."
+      - "No ReActPolicy rules exist in appsettings."
+      - "System starts with policy resolution coming from SQL; appsettings only provides ceilings/fallback."
+
+  - id: "35.06"
+    priority: "P1"
+    title: "Enterprise verification — contract tests + E2E scenario (ModelId=3)"
+    why: "Prove stability, ReAct depth, and scalability without regressions."
+    files_to_add:
+      - "tests/TILSOFTAI.Tests/Policies/RuntimePolicyResolutionTests.cs"
+      - "tests/TILSOFTAI.Tests/Policies/ReActFollowUpEvaluatorTests.cs"
+      - "tests/TILSOFTAI.Tests/E2E/ModelAnalysisReactFlowTests.cs"
+    tests:
+      policy_resolution:
+        - "When module scope=['model'], effective policy contains tool_catalog_context_pack + react_nudge JSON."
+        - "Tenant-specific policy overrides global policy."
+      followup_rules:
+        - "Given model_get_overview output with PieceCount=5, evaluator matches rule model.overview.pieces."
+        - "Args template resolves modelId from $.ModelId."
+      e2e_modelid3:
+        - "Conversation: 'Phân tích model với ID 3'"
+        - "Expected tool calls include model_get_overview and at least one follow-up tool when conditions match."
+        - "Final answer must include packaging/pieces/materials if tools executed; otherwise must label them as unknown with tool suggestions."
+    acceptance_criteria:
+      - "dotnet test passes."
+      - "No regressions in streaming or module scope fallback."
+
+acceptance_checklist_global:
+  - "Appsettings contains no PreferTools and no ReActPolicy."
+  - "RuntimePolicy + ReActFollowUpRule exist in SQL; policies and rules are seeded for Model module."
+  - "ChatPipeline resolves module scope → resolves policies → loads scoped tools/metadata → injects scoped follow-up rules."
+  - "ReAct depth is stable and deterministic via nudges; C# never auto-executes tools."
+  - "Adding a new module requires SQL seed only (module catalog + tool scope + metadata scope + follow-up rules + optional policy), not appsettings edits."
+
+rollout_plan:
+  - "1) Apply SQL migrations (073–076 + seeds 012–013)."
+  - "2) Deploy API/Orchestration changes."
+  - "3) Validate with ModelId=3 E2E tests and log review."
+  - "4) Operationalize: manage policies/rules via SQL change control (audited UpdatedBy/UpdatedAtUtc)."
+
+rollback_plan:
+  - "Disable runtime policies by setting dbo.RuntimePolicy.IsEnabled=0 (fallback to system ceilings)."
+  - "Disable follow-up nudges via runtime policy react_nudge.enabled=false (no code rollback needed)."
+  - "If necessary, revert C# changes and keep SQL objects (harmless if unused)."

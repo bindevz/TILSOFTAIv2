@@ -37,6 +37,9 @@ public sealed class ChatPipeline
     private readonly AnalyticsIntentDetector _intentDetector;
     private readonly AnalyticsOrchestrator? _analyticsOrchestrator;
     private readonly Modules.IModuleScopeResolver? _moduleScopeResolver;
+    private readonly Policies.IRuntimePolicyProvider? _runtimePolicyProvider;
+    private readonly Policies.IReActFollowUpRuleProvider? _followUpRuleProvider;
+    private readonly Policies.ReActFollowUpEvaluator? _followUpEvaluator;
     private readonly ILogger<ChatPipeline> _logger;
 
     public ChatPipeline(
@@ -56,6 +59,9 @@ public sealed class ChatPipeline
         AnalyticsIntentDetector intentDetector,
         AnalyticsOrchestrator? analyticsOrchestrator,
         Modules.IModuleScopeResolver? moduleScopeResolver,
+        Policies.IRuntimePolicyProvider? runtimePolicyProvider,
+        Policies.IReActFollowUpRuleProvider? followUpRuleProvider,
+        Policies.ReActFollowUpEvaluator? followUpEvaluator,
         ILogger<ChatPipeline> logger,
         Observability.ChatPipelineInstrumentation instrumentation,
         IMetricsService metrics)
@@ -76,6 +82,9 @@ public sealed class ChatPipeline
         _intentDetector = intentDetector ?? throw new ArgumentNullException(nameof(intentDetector));
         _analyticsOrchestrator = analyticsOrchestrator; // Optional, null if not registered
         _moduleScopeResolver = moduleScopeResolver; // Optional, null if module scoping not enabled
+        _runtimePolicyProvider = runtimePolicyProvider; // Optional, null if SQL policies not configured
+        _followUpRuleProvider = followUpRuleProvider; // Optional, null if follow-up rules not configured
+        _followUpEvaluator = followUpEvaluator; // Optional, null if follow-up evaluation not configured
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _instrumentation = instrumentation ?? throw new ArgumentNullException(nameof(instrumentation));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
@@ -185,6 +194,30 @@ public sealed class ChatPipeline
                 System.Text.Json.JsonSerializer.Serialize(scopeResult.Modules),
                 scopeResult.Confidence,
                 scopeResult.Reasons.Count > 0 ? string.Join("; ", scopeResult.Reasons) : "none");
+        }
+
+        // Resolve runtime policies from SQL (policy-as-data)
+        var runtimePolicies = Policies.RuntimePolicySnapshot.Empty;
+        IReadOnlyList<Policies.ReActFollowUpRule> followUpRules = Array.Empty<Policies.ReActFollowUpRule>();
+
+        if (_runtimePolicyProvider is not null && resolvedModules is { Count: > 0 })
+        {
+            runtimePolicies = await _runtimePolicyProvider.ResolveAsync(
+                ctx.TenantId, resolvedModules, appKey: null, environment: null, language: null, ct);
+
+            _logger.LogDebug(
+                "RuntimePolicyResolved | TenantId: {TenantId} | PolicyCount: {PolicyCount}",
+                ctx.TenantId, runtimePolicies.All.Count);
+        }
+
+        if (_followUpRuleProvider is not null && resolvedModules is { Count: > 0 })
+        {
+            followUpRules = await _followUpRuleProvider.GetScopedRulesAsync(
+                ctx.TenantId, resolvedModules, appKey: null, ct);
+
+            _logger.LogDebug(
+                "FollowUpRulesLoaded | TenantId: {TenantId} | RuleCount: {RuleCount}",
+                ctx.TenantId, followUpRules.Count);
         }
 
         // Load tools: scoped if resolver available, otherwise global
@@ -307,6 +340,14 @@ public sealed class ChatPipeline
                 }
             }
         }
+
+        // Follow-up nudge tracking
+        var firedRuleIds = new HashSet<long>();
+        var totalNudgeCount = 0;
+        var maxNudgesPerTurn = runtimePolicies.GetValueOrDefault("react_nudge", "maxNudgesPerTurn", 2);
+        var maxTotalNudges = runtimePolicies.GetValueOrDefault("react_nudge", "maxTotalNudges", 6);
+        var nudgeEnabled = _followUpEvaluator is not null && followUpRules.Count > 0
+            && runtimePolicies.GetValueOrDefault("react_nudge", "enabled", true);
 
         for (var step = 0; step < _chatOptions.MaxSteps; step++)
         {
@@ -509,6 +550,42 @@ public sealed class ChatPipeline
                 request.StreamObserver?.Report(ChatStreamEvent.ToolResult(executionRecord));
 
                 messages.Add(new LlmMessage(ChatRoles.Tool, compacted, tool.Name));
+
+                // ReAct follow-up nudge: evaluate rules and inject SYSTEM guidance
+                if (nudgeEnabled && totalNudgeCount < maxTotalNudges)
+                {
+                    var nudgesThisTurn = 0;
+                    var matched = _followUpEvaluator!.Evaluate(followUpRules, tool.Name, rawResult);
+
+                    foreach (var matchedRule in matched)
+                    {
+                        if (firedRuleIds.Contains(matchedRule.RuleId))
+                            continue;
+                        if (nudgesThisTurn >= maxNudgesPerTurn)
+                            break;
+                        if (totalNudgeCount >= maxTotalNudges)
+                            break;
+
+                        firedRuleIds.Add(matchedRule.RuleId);
+                        nudgesThisTurn++;
+                        totalNudgeCount++;
+
+                        var resolvedArgs = _followUpEvaluator.ResolveArgsTemplate(
+                            matchedRule.ArgsTemplateJson, rawResult);
+
+                        var nudgeText = $"[Follow-up guidance] {matchedRule.PromptHint}";
+                        if (!string.IsNullOrWhiteSpace(resolvedArgs))
+                        {
+                            nudgeText += $" Suggested args: {resolvedArgs}";
+                        }
+
+                        messages.Add(new LlmMessage(ChatRoles.System, nudgeText));
+
+                        _logger.LogInformation(
+                            "FollowUpNudgeInjected | RuleKey: {RuleKey} | FollowUpTool: {FollowUpTool} | TriggerTool: {TriggerTool}",
+                            matchedRule.RuleKey, matchedRule.FollowUpToolName, tool.Name);
+                    }
+                }
             }
         }
 

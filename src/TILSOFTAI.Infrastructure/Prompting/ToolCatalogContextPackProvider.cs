@@ -149,27 +149,53 @@ public sealed class ToolCatalogContextPackProvider : IContextPackProvider
         return builder.ToString();
     }
 
+    /// <summary>
+    /// PATCH 35: core_then_scope_order — core tools first, then by (Module, Name).
+    /// PreferTools is deprecated; ordering is now deterministic by design.
+    /// </summary>
     private IReadOnlyList<ToolDefinition> OrderTools(IReadOnlyList<ToolDefinition> tools)
     {
-        var preferList = _options.PreferTools ?? Array.Empty<string>();
-        var preferSet = new HashSet<string>(preferList, StringComparer.OrdinalIgnoreCase);
-        var ordered = new List<ToolDefinition>();
-
-        foreach (var preferred in preferList)
+        // Core tools always surface first (stable order)
+        var coreToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            var tool = tools.FirstOrDefault(t => string.Equals(t.Name, preferred, StringComparison.OrdinalIgnoreCase));
-            if (tool is not null && !ordered.Contains(tool))
+            "tool.list",
+            "diagnostics_run",
+            "action_request_write"
+        };
+
+        var coreTools = new List<ToolDefinition>();
+        var scopeTools = new List<ToolDefinition>();
+
+        foreach (var tool in tools)
+        {
+            if (coreToolNames.Contains(tool.Name))
             {
-                ordered.Add(tool);
+                coreTools.Add(tool);
+            }
+            else
+            {
+                scopeTools.Add(tool);
             }
         }
 
-        var remaining = tools
-            .Where(tool => !preferSet.Contains(tool.Name))
-            .OrderBy(tool => tool.Module ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(tool => tool.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+        // Sort scope tools by (Module, Name) for deterministic ordering
+        scopeTools.Sort((a, b) =>
+        {
+            var moduleCompare = string.Compare(
+                a.Module ?? string.Empty,
+                b.Module ?? string.Empty,
+                StringComparison.OrdinalIgnoreCase);
+            return moduleCompare != 0
+                ? moduleCompare
+                : string.Compare(
+                    a.Name ?? string.Empty,
+                    b.Name ?? string.Empty,
+                    StringComparison.OrdinalIgnoreCase);
+        });
 
-        ordered.AddRange(remaining);
+        var ordered = new List<ToolDefinition>(coreTools.Count + scopeTools.Count);
+        ordered.AddRange(coreTools);
+        ordered.AddRange(scopeTools);
 
         return ordered;
     }
