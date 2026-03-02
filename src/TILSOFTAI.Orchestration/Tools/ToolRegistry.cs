@@ -18,14 +18,18 @@ public sealed class ToolRegistry : IToolRegistry
             throw new ArgumentException(Resources.Val_ToolDefinitionNameRequired, nameof(def));
         }
 
-        if (string.IsNullOrWhiteSpace(def.Instruction))
+        // PATCH 37.02: SQL-backed tools get Instruction/JsonSchema from DB
+        if (!def.IsSqlBacked)
         {
-            throw new ArgumentException(Resources.Val_ToolDefinitionInstructionRequired, nameof(def));
-        }
+            if (string.IsNullOrWhiteSpace(def.Instruction))
+            {
+                throw new ArgumentException(Resources.Val_ToolDefinitionInstructionRequired, nameof(def));
+            }
 
-        if (string.IsNullOrWhiteSpace(def.JsonSchema))
-        {
-            throw new ArgumentException(Resources.Val_ToolDefinitionJsonSchemaRequired, nameof(def));
+            if (string.IsNullOrWhiteSpace(def.JsonSchema))
+            {
+                throw new ArgumentException(Resources.Val_ToolDefinitionJsonSchemaRequired, nameof(def));
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(def.SpName) && !def.SpName.StartsWith("ai_", StringComparison.OrdinalIgnoreCase))

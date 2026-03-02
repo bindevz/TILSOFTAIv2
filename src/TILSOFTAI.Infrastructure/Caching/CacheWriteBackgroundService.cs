@@ -58,7 +58,7 @@ public sealed class CacheWriteBackgroundService : BackgroundService, ICacheWrite
             {
                 await _cache.SetAsync(
                     item.TenantId, 
-                    item.NormalizedQuery, 
+                    item.NormalizedQuery ?? string.Empty, 
                     item.Roles, 
                     item.Insight, 
                     stoppingToken);

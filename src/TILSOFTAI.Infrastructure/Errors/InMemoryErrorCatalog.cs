@@ -130,6 +130,11 @@ public sealed class InMemoryErrorCatalog : IErrorCatalog
                 ["en"] = "Circuit breaker is open. Service temporarily unavailable.",
                 ["vi"] = "Circuit breaker dang mo. Dich vu tam thoi khong kha dung."
             },
+            [ErrorCode.LlmEmptyResponse] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "AI could not generate a response. Please try again or rephrase your question.",
+                ["vi"] = "AI khong the tao phan hoi. Vui long thu lai hoac dien dat khac."
+            },
             [ErrorCode.UnhandledError] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["en"] = "An unexpected error occurred.",

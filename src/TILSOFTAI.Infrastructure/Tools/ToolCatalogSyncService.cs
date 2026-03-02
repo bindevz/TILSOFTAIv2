@@ -96,7 +96,17 @@ public sealed class ToolCatalogSyncService : IScopedToolCatalogResolver
 
         if (string.IsNullOrWhiteSpace(instruction) || string.IsNullOrWhiteSpace(jsonSchema))
         {
-            _logger.LogWarning("Tool {ToolName} missing instruction or schema after merge.", moduleTool.Name);
+            // PATCH 37.02: SQL-backed tools MUST have Instruction/JsonSchema in DB
+            if (moduleTool.IsSqlBacked)
+            {
+                _logger.LogWarning(
+                    "Tool {ToolName} is SQL-backed but ToolCatalog lacks Instruction or JsonSchema. Hard fail — ensure SQL seeds are applied.",
+                    moduleTool.Name);
+            }
+            else
+            {
+                _logger.LogWarning("Tool {ToolName} missing instruction or schema after merge.", moduleTool.Name);
+            }
             return null;
         }
 

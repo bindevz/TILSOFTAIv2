@@ -48,4 +48,9 @@ public static class ErrorCode
     /// The circuit breaker is open.
     /// </summary>
     public const string CircuitOpen = "CIRCUIT_OPEN";
+
+    /// <summary>
+    /// PATCH 37.02: LLM returned empty content with no tool calls after retry.
+    /// </summary>
+    public const string LlmEmptyResponse = "LLM_EMPTY_RESPONSE";
 }

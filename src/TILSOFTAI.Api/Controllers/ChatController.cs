@@ -12,9 +12,10 @@ using TILSOFTAI.Orchestration.Pipeline;
 
 namespace TILSOFTAI.Api.Controllers;
 
+[AllowAnonymous]
 [ApiController]
 [Route("api/chats")]
-[Authorize]
+//[Authorize]
 public sealed class ChatController : ControllerBase
 {
     private readonly IOrchestrationEngine _engine;
@@ -43,6 +44,7 @@ public sealed class ChatController : ControllerBase
         _sensitivityClassifier = sensitivityClassifier ?? throw new ArgumentNullException(nameof(sensitivityClassifier));
     }
 
+    [AllowAnonymous]
     [HttpPost]
     public async Task<ActionResult<ChatApiResponse>> Post([FromBody] ChatApiRequest request, CancellationToken cancellationToken)
     {
@@ -93,6 +95,7 @@ public sealed class ChatController : ControllerBase
         return Ok(response);
     }
 
+    [AllowAnonymous]
     [HttpPost("stream")]
     public async Task Stream([FromBody] ChatApiRequest request, CancellationToken cancellationToken)
     {

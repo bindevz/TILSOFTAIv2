@@ -47,6 +47,7 @@ using TILSOFTAI.Orchestration.Caching;
 using TILSOFTAI.Orchestration.Compaction;
 using TILSOFTAI.Orchestration.Conversations;
 using TILSOFTAI.Orchestration.Llm;
+using TILSOFTAI.Orchestration.Modules;
 using TILSOFTAI.Orchestration.Normalization;
 using TILSOFTAI.Orchestration.Policies;
 using TILSOFTAI.Orchestration.Prompting;
@@ -230,6 +231,7 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<PlanOptimizer>();
         services.AddSingleton<AtomicDataEngine>();
 
+        services.AddSingleton<IModuleActivationProvider, SqlModuleActivationProvider>();
         services.AddSingleton<IModuleLoader, ModuleLoader>();
         services.AddHostedService<ModuleLoaderHostedService>();
         services.AddHostedService<ObservabilityPurgeHostedService>();

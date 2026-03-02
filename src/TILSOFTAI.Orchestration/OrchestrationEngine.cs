@@ -57,12 +57,12 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
 
         request.Stream = false;
         request.StreamObserver = null;
-        ApplySensitivePolicy(request);
+        ApplySensitivePolicy(request);// áp dụng lọc 
 
         ChatResult result;
         try
         {
-            result = await _chatPipeline.RunAsync(request, ctx, ct);
+            result = await _chatPipeline.RunAsync(request, ctx, ct); // vô trong này xử lý chính sự.
         }
         catch (TilsoftApiException)
         {
@@ -205,7 +205,7 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
                     lock (deltaLock) FlushDeltaUnsafe();
                     channel.Writer.TryWrite(ChatStreamEvent.Error(new ErrorEnvelope
                     {
-                        Code = apiEx.Code,
+                        Code = apiEx.Code ?? ErrorCode.ChatFailed,
                         Detail = apiEx.Detail
                     }));
                 }

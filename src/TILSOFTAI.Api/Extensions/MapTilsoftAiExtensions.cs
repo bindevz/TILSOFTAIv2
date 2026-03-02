@@ -27,13 +27,42 @@ public static class MapTilsoftAiExtensions
         var corsOptions = app.Services.GetRequiredService<IOptions<CorsOptions>>().Value;
         if (corsOptions.Enabled)
         {
+            corsOptions.Normalize();
             app.UseCors(policy =>
             {
-                policy.WithOrigins(corsOptions.AllowedOrigins)
-                      .WithMethods(corsOptions.AllowedMethods)
-                      .WithHeaders(corsOptions.AllowedHeaders);
+                // Origins
+                if (corsOptions.AllowedOrigins.Length == 1 && corsOptions.AllowedOrigins[0] == "*")
+                {
+                    policy.AllowAnyOrigin();
+                }
+                else
+                {
+                    policy.WithOrigins(corsOptions.AllowedOrigins);
+                }
 
-                if (corsOptions.AllowCredentials)
+                // Methods
+                if (corsOptions.AllowedMethods.Length == 1 && corsOptions.AllowedMethods[0] == "*")
+                {
+                    policy.AllowAnyMethod();
+                }
+                else
+                {
+                    policy.WithMethods(corsOptions.AllowedMethods);
+                }
+
+                // Headers
+                if (corsOptions.AllowedHeaders.Length == 1 && corsOptions.AllowedHeaders[0] == "*")
+                {
+                    policy.AllowAnyHeader();
+                }
+                else
+                {
+                    policy.WithHeaders(corsOptions.AllowedHeaders);
+                }
+
+                // Credentials (cannot be used with AllowAnyOrigin per CORS spec)
+                if (corsOptions.AllowCredentials
+                    && !(corsOptions.AllowedOrigins.Length == 1 && corsOptions.AllowedOrigins[0] == "*"))
                 {
                     policy.AllowCredentials();
                 }

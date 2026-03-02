@@ -178,7 +178,7 @@ public sealed class ChatPipeline
         IReadOnlyList<string>? resolvedModules = null;
         if (_moduleScopeResolver is not null)
         {
-            var scopeResult = await _moduleScopeResolver.ResolveAsync(promptInput, ctx, ct);
+            var scopeResult = await _moduleScopeResolver.ResolveAsync(promptInput, ctx, ct); // Thực hiện lọc modules.------------------
             resolvedModules = scopeResult.Modules;
 
             _logger.LogInformation(
@@ -224,7 +224,7 @@ public sealed class ChatPipeline
         IReadOnlyList<ToolDefinition> tools;
         if (resolvedModules is { Count: > 0 } && _toolCatalogResolver is IScopedToolCatalogResolver scopedResolver)
         {
-            tools = await scopedResolver.GetScopedToolsAsync(resolvedModules, ct);
+            tools = await scopedResolver.GetScopedToolsAsync(resolvedModules, ct); // thực hiện gọi tools theo bộ lọc AI.
         }
         else
         {
@@ -273,9 +273,11 @@ public sealed class ChatPipeline
 
         // PATCH 29.02: Detect analytics intent and route to deterministic orchestrator
         // PATCH 30.04: LLM-first detection with catalog_search tie-breaker for borderline
+        string? detectedEntityHint = null;
         if (_analyticsOptions.Enabled && _analyticsOrchestrator != null)
         {
             var intent = await _intentDetector.DetectAsync(promptInput, ct);
+            detectedEntityHint = intent.EntityHint;
             
             // ========== PATCH 31.07: RBAC Gate ==========
             // Fast role check BEFORE routing to analytics orchestrator
@@ -347,6 +349,43 @@ public sealed class ChatPipeline
             }
         }
 
+        // ========== PATCH 37.02A: Entity-hint scope widening ==========
+        // If intent detector found an entity hint (e.g., 'model'), ensure that module is in resolvedModules.
+        // This prevents scoping from accidentally excluding the domain module needed for the entity.
+        if (!string.IsNullOrEmpty(detectedEntityHint) && resolvedModules is { Count: > 0 })
+        {
+            var modulesBefore = resolvedModules;
+            var hintModule = detectedEntityHint.ToLowerInvariant();
+
+            if (!resolvedModules.Any(m => m.Equals(hintModule, StringComparison.OrdinalIgnoreCase)))
+            {
+                var widenedModules = new List<string>(resolvedModules) { hintModule };
+                resolvedModules = widenedModules;
+
+                // Reload scoped tools with widened modules
+                if (_toolCatalogResolver is IScopedToolCatalogResolver scopedResolverWiden)
+                {
+                    tools = await scopedResolverWiden.GetScopedToolsAsync(resolvedModules, ct);
+                    toolLookup = tools.ToDictionary(tool => tool.Name, StringComparer.OrdinalIgnoreCase);
+
+                    // Rebuild prompt context with widened scope
+                    promptBuildContext = new Prompting.PromptBuildContext(
+                        scopedTools: tools,
+                        resolvedModules: resolvedModules,
+                        policies: runtimePolicies);
+                }
+
+                _logger.LogInformation(
+                    "ScopeWidened | EntityHint: {EntityHint} | ModulesBefore: [{ModulesBefore}] | ModulesAfter: [{ModulesAfter}] | ToolCount: {ToolCount} | NonPlatformToolCount: {NonPlatformToolCount}",
+                    hintModule,
+                    string.Join(", ", modulesBefore),
+                    string.Join(", ", resolvedModules),
+                    tools.Count,
+                    tools.Count(t => !string.Equals(t.Module, "Platform", StringComparison.OrdinalIgnoreCase)));
+            }
+        }
+        // ========== END PATCH 37.02A ==========
+
         // Follow-up nudge tracking
         var firedRuleIds = new HashSet<long>();
         var totalNudgeCount = 0;
@@ -411,6 +450,62 @@ public sealed class ChatPipeline
             if (response.ToolCalls.Count == 0)
             {
                 var content = response.Content ?? string.Empty;
+
+                // ========== PATCH 37.02B: Empty assistant response guard ==========
+                // If content is empty and no tool calls, do 1 controlled retry with scope widening + system nudge.
+                if (string.IsNullOrWhiteSpace(content) && step == 0)
+                {
+                    _logger.LogWarning(
+                        "EmptyAssistantGuard | Step: {Step} | EntityHint: {EntityHint} | Modules: [{Modules}] | ToolCount: {ToolCount} | NonPlatformToolCount: {NonPlatformToolCount} | Action: retry_with_nudge",
+                        step,
+                        detectedEntityHint ?? "none",
+                        resolvedModules != null ? string.Join(", ", resolvedModules) : "none",
+                        tools.Count,
+                        tools.Count(t => !string.Equals(t.Module, "Platform", StringComparison.OrdinalIgnoreCase)));
+
+                    // Try widening scope with entity hint (if not already widened)
+                    if (!string.IsNullOrEmpty(detectedEntityHint)
+                        && resolvedModules is { Count: > 0 }
+                        && !resolvedModules.Any(m => m.Equals(detectedEntityHint, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        var widenedModules = new List<string>(resolvedModules) { detectedEntityHint.ToLowerInvariant() };
+                        resolvedModules = widenedModules;
+
+                        if (_toolCatalogResolver is IScopedToolCatalogResolver scopedRetry)
+                        {
+                            tools = await scopedRetry.GetScopedToolsAsync(resolvedModules, ct);
+                            toolLookup = tools.ToDictionary(tool => tool.Name, StringComparer.OrdinalIgnoreCase);
+                            promptBuildContext = new Prompting.PromptBuildContext(
+                                scopedTools: tools,
+                                resolvedModules: resolvedModules,
+                                policies: runtimePolicies);
+                        }
+
+                        _logger.LogInformation(
+                            "EmptyAssistantGuard | ScopeWidened | ModulesAfter: [{Modules}] | ToolCount: {ToolCount}",
+                            string.Join(", ", resolvedModules), tools.Count);
+                    }
+
+                    // Add system nudge to force a non-empty response
+                    messages.Add(new LlmMessage(ChatRoles.System,
+                        "You MUST either call a tool or return a non-empty answer. Do not return an empty response."));
+
+                    continue; // bounded retry (step increments, max 1 retry due to step==0 guard)
+                }
+
+                // If still empty after retry, fail explicitly
+                if (string.IsNullOrWhiteSpace(content))
+                {
+                    _logger.LogWarning(
+                        "EmptyAssistantGuard | ExhaustedRetry | Step: {Step} | Returning LLM_EMPTY_RESPONSE",
+                        step);
+
+                    var emptyMsg = "Xin lỗi, tôi không thể tạo phản hồi cho câu hỏi này. Vui lòng thử lại hoặc diễn đạt khác. (Sorry, I could not generate a response. Please try again or rephrase.)";
+                    request.StreamObserver?.Report(ChatStreamEvent.Final(emptyMsg));
+                    return Fail(request, emptyMsg, ErrorCode.LlmEmptyResponse);
+                }
+                // ========== END PATCH 37.02B ==========
+
                 var assistantMessage = new ChatMessage(ChatRoles.Assistant, content);
                 await _conversationStore.SaveAssistantMessageAsync(ctx, assistantMessage, policy, ct);
                 request.StreamObserver?.Report(ChatStreamEvent.Final(content));
@@ -540,13 +635,13 @@ public sealed class ChatPipeline
                 var maxBytes = _chatOptions.CompactionLimits.TryGetValue("ToolResultMaxBytes", out var limit) && limit > 0
                     ? limit
                     : 16000;
-                var compacted = _toolResultCompactor.CompactJson(rawResult, maxBytes, _chatOptions.CompactionRules);
+                var compacted = _toolResultCompactor.CompactJson(rawResult ?? string.Empty, maxBytes, _chatOptions.CompactionRules);
                 var executionRecord = new ToolExecutionRecord
                 {
                     ToolName = tool.Name,
                     SpName = tool.SpName,
                     ArgumentsJson = argumentsJson,
-                    Result = rawResult,
+                    Result = rawResult ?? string.Empty,
                     CompactedResult = compacted,
                     Success = true,
                     DurationMs = toolStopwatch.ElapsedMilliseconds
@@ -561,7 +656,7 @@ public sealed class ChatPipeline
                 if (nudgeEnabled && totalNudgeCount < maxTotalNudges)
                 {
                     var nudgesThisTurn = 0;
-                    var matched = _followUpEvaluator!.Evaluate(followUpRules, tool.Name, rawResult);
+                    var matched = _followUpEvaluator!.Evaluate(followUpRules, tool.Name, rawResult ?? string.Empty);
 
                     foreach (var matchedRule in matched)
                     {
@@ -577,7 +672,7 @@ public sealed class ChatPipeline
                         totalNudgeCount++;
 
                         var resolvedArgs = _followUpEvaluator.ResolveArgsTemplate(
-                            matchedRule.ArgsTemplateJson, rawResult);
+                            matchedRule.ArgsTemplateJson, rawResult ?? string.Empty);
 
                         var nudgeText = $"[Follow-up guidance] {matchedRule.PromptHint}";
                         if (!string.IsNullOrWhiteSpace(resolvedArgs))
@@ -642,6 +737,40 @@ public sealed class ChatPipeline
         }
 
         response.Content = contentBuilder.ToString();
+
+        // PATCH 37.04: Never return empty final when there are no tool calls
+        if (string.IsNullOrWhiteSpace(response.Content) && response.ToolCalls.Count == 0)
+        {
+            _logger.LogWarning("StreamEmptyFinal | Stream ended with empty content and no tool calls. Falling back to non-stream.");
+
+            try
+            {
+                var fallback = await _llmClient.CompleteAsync(request, ct);
+                if (!string.IsNullOrWhiteSpace(fallback.Content))
+                {
+                    response.Content = fallback.Content;
+                    chatRequest.StreamObserver?.Report(ChatStreamEvent.Final(fallback.Content));
+                    return response;
+                }
+
+                // Tool calls from fallback
+                if (fallback.ToolCalls.Count > 0)
+                {
+                    response.ToolCalls.AddRange(fallback.ToolCalls);
+                    return response;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "StreamEmptyFinal | Non-stream fallback also failed.");
+            }
+
+            // Last resort: emit safe error envelope
+            var safeMessage = "Xin lỗi, tôi không thể tạo phản hồi. Vui lòng thử lại. (Sorry, I could not generate a response. Please try again.)";
+            response.Content = safeMessage;
+            chatRequest.StreamObserver?.Report(ChatStreamEvent.Final(safeMessage));
+        }
+
         return response;
     }
 
