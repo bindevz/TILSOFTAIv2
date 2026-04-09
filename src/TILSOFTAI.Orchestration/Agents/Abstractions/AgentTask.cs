@@ -12,6 +12,11 @@ public sealed class AgentTask
     public IReadOnlyDictionary<string, string?> ContextPayload { get; init; } =
         new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
     public bool RequiresWritePreparation { get; set; }
+    /// <summary>
+    /// When set by a domain agent, restricts the tool/module scope for this task.
+    /// Sprint 2: not yet used by skeleton agents (Option 4), but available for future domain scoping.
+    /// </summary>
+    public IReadOnlyList<string>? AllowedModules { get; set; }
     public bool Stream { get; set; }
     public IProgress<SupervisorStreamEvent>? StreamObserver { get; set; }
     public bool AllowCache { get; set; } = true;

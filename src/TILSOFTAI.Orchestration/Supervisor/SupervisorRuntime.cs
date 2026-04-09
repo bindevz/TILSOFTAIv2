@@ -1,23 +1,28 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using TILSOFTAI.Agents.Abstractions;
 using TILSOFTAI.Approvals;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Supervisor.Classification;
 
 namespace TILSOFTAI.Supervisor;
 
 public sealed class SupervisorRuntime : ISupervisorRuntime
 {
+    private readonly IIntentClassifier _intentClassifier;
     private readonly IAgentRegistry _agentRegistry;
     private readonly IApprovalEngine _approvalEngine;
     private readonly ILogger<SupervisorRuntime> _logger;
 
     public SupervisorRuntime(
+        IIntentClassifier intentClassifier,
         IAgentRegistry agentRegistry,
         IApprovalEngine approvalEngine,
         ILogger<SupervisorRuntime> logger)
     {
+        _intentClassifier = intentClassifier ?? throw new ArgumentNullException(nameof(intentClassifier));
         _agentRegistry = agentRegistry ?? throw new ArgumentNullException(nameof(agentRegistry));
         _approvalEngine = approvalEngine ?? throw new ArgumentNullException(nameof(approvalEngine));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -35,23 +40,78 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
             return SupervisorResult.Fail("Input is required.");
         }
 
+        var sw = Stopwatch.StartNew();
+
+        // Step 1: Classify intent to determine domain hint (if not already provided)
         var task = MapRequest(request);
+
+        if (string.IsNullOrWhiteSpace(task.DomainHint))
+        {
+            var classification = await _intentClassifier.ClassifyAsync(request.Input, ct);
+
+            if (!string.IsNullOrWhiteSpace(classification.DomainHint))
+            {
+                task.DomainHint = classification.DomainHint;
+
+                if (!string.IsNullOrWhiteSpace(classification.IntentType))
+                {
+                    task.IntentType = classification.IntentType;
+                }
+
+                // Sprint 3: flag write intent for approval governance
+                if (string.Equals(classification.IntentType, "write", StringComparison.OrdinalIgnoreCase))
+                {
+                    task.RequiresWritePreparation = true;
+                    _logger.LogInformation(
+                        "SupervisorWriteDetected | Domain: {Domain} | RequiresWritePreparation: true",
+                        classification.DomainHint);
+                }
+
+                _logger.LogInformation(
+                    "SupervisorClassified | Domain: {Domain} | Confidence: {Confidence} | Reasons: [{Reasons}]",
+                    classification.DomainHint,
+                    classification.Confidence,
+                    string.Join("; ", classification.Reasons));
+            }
+            else
+            {
+                _logger.LogDebug(
+                    "SupervisorClassified | Domain: unresolved | Reasons: [{Reasons}]",
+                    string.Join("; ", classification.Reasons));
+            }
+        }
+
+        // Step 2: Resolve candidate agents
         var candidates = _agentRegistry.ResolveCandidates(task);
         if (candidates.Count == 0)
         {
+            _logger.LogWarning(
+                "SupervisorNoAgent | DomainHint: {DomainHint} | IntentType: {IntentType}",
+                task.DomainHint ?? "none", task.IntentType);
+
             return SupervisorResult.Fail("No domain agent could handle the request.", "SUPERVISOR_AGENT_NOT_FOUND");
         }
 
+        // Step 3: Select best agent (first candidate — registry returns them scored/ordered)
         var selectedAgent = candidates[0];
-        _logger.LogInformation(
-            "Supervisor selected agent {AgentId} for domain hint {DomainHint}.",
-            selectedAgent.AgentId,
-            task.DomainHint ?? "unspecified");
 
+        _logger.LogInformation(
+            "SupervisorRouted | AgentId: {AgentId} | DomainHint: {DomainHint} | CandidateCount: {CandidateCount}",
+            selectedAgent.AgentId,
+            task.DomainHint ?? "unspecified",
+            candidates.Count);
+
+        // Step 4: Execute agent
         var result = await selectedAgent.ExecuteAsync(
             task,
             AgentExecutionContext.FromRuntimeContext(ctx, _approvalEngine),
             ct);
+
+        sw.Stop();
+
+        _logger.LogInformation(
+            "SupervisorCompleted | AgentId: {AgentId} | Success: {Success} | DurationMs: {DurationMs}",
+            selectedAgent.AgentId, result.Success, sw.ElapsedMilliseconds);
 
         return SupervisorResult.FromAgentResult(result, selectedAgent.AgentId);
     }

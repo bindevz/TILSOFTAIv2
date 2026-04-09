@@ -1,18 +1,21 @@
 using TILSOFTAI.Agents.Abstractions;
-using TILSOFTAI.Orchestration.Pipeline;
-using TILSOFTAI.Supervisor;
 
 namespace TILSOFTAI.Agents;
 
+/// <summary>
+/// Legacy catch-all domain agent. Handles requests that no specialized domain agent claims.
+/// Sprint 2: reduced priority — only matches when DomainHint is null/empty or explicitly "legacy-chat".
+/// Delegates to LegacyChatPipelineBridge (shared with other domain agents).
+/// </summary>
 public sealed class LegacyChatDomainAgent : IDomainAgent
 {
     public const string AgentIdValue = "legacy-chat";
 
-    private readonly ChatPipeline _chatPipeline;
+    private readonly LegacyChatPipelineBridge _bridge;
 
-    public LegacyChatDomainAgent(ChatPipeline chatPipeline)
+    public LegacyChatDomainAgent(LegacyChatPipelineBridge bridge)
     {
-        _chatPipeline = chatPipeline ?? throw new ArgumentNullException(nameof(chatPipeline));
+        _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
     }
 
     public string AgentId => AgentIdValue;
@@ -28,45 +31,19 @@ public sealed class LegacyChatDomainAgent : IDomainAgent
             return false;
         }
 
-        return string.IsNullOrWhiteSpace(task.DomainHint)
-            || string.Equals(task.DomainHint, "legacy-chat", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(task.IntentType, "chat", StringComparison.OrdinalIgnoreCase);
-    }
-
-    public async Task<AgentResult> ExecuteAsync(AgentTask task, AgentExecutionContext context, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(task);
-        ArgumentNullException.ThrowIfNull(context);
-
-        var chatRequest = new ChatRequest
+        // Sprint 2 priority reduction:
+        // Only claim the task if no domain hint is set (catch-all), or if explicitly targeted
+        if (string.IsNullOrWhiteSpace(task.DomainHint))
         {
-            Input = task.Input,
-            Stream = task.Stream,
-            StreamObserver = task.StreamObserver is null
-                ? null
-                : new InlineProgress<ChatStreamEvent>(evt => task.StreamObserver.Report(SupervisorStreamEvent.FromChat(evt))),
-            AllowCache = task.AllowCache,
-            ContainsSensitive = task.ContainsSensitive,
-            SensitivityReasons = task.SensitivityReasons,
-            RequestPolicy = task.RequestPolicy,
-            MessageHistory = task.MessageHistory
-        };
-
-        var result = await _chatPipeline.RunAsync(chatRequest, context.RuntimeContext, ct);
-        return result.Success
-            ? AgentResult.Ok(result.Content ?? string.Empty)
-            : AgentResult.Fail(result.Error ?? "Chat request failed.", result.Code, result.Detail);
-    }
-
-    private sealed class InlineProgress<T> : IProgress<T>
-    {
-        private readonly Action<T> _handler;
-
-        public InlineProgress(Action<T> handler)
-        {
-            _handler = handler ?? throw new ArgumentNullException(nameof(handler));
+            return true; // catch-all for unclassified requests
         }
 
-        public void Report(T value) => _handler(value);
+        return string.Equals(task.DomainHint, "legacy-chat", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(task.DomainHint, "cross-domain", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public Task<AgentResult> ExecuteAsync(AgentTask task, AgentExecutionContext context, CancellationToken ct)
+    {
+        return _bridge.ExecuteAsync(task, context, ct);
     }
 }

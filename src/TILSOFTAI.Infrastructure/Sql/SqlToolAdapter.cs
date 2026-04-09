@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TILSOFTAI.Approvals;
 using TILSOFTAI.Orchestration.Sql;
 using TILSOFTAI.Tools.Abstractions;
 
@@ -7,10 +8,12 @@ namespace TILSOFTAI.Infrastructure.Sql;
 public sealed class SqlToolAdapter : IToolAdapter
 {
     private readonly ISqlExecutor _sqlExecutor;
+    private readonly IWriteActionGuard _writeActionGuard;
 
-    public SqlToolAdapter(ISqlExecutor sqlExecutor)
+    public SqlToolAdapter(ISqlExecutor sqlExecutor, IWriteActionGuard writeActionGuard)
     {
         _sqlExecutor = sqlExecutor ?? throw new ArgumentNullException(nameof(sqlExecutor));
+        _writeActionGuard = writeActionGuard ?? throw new ArgumentNullException(nameof(writeActionGuard));
     }
 
     public string AdapterType => "sql";
@@ -25,8 +28,7 @@ public sealed class SqlToolAdapter : IToolAdapter
             ToolAdapterOperationNames.ExecuteTool => ToolExecutionResult.Ok(
                 await _sqlExecutor.ExecuteToolAsync(storedProcedure, request.TenantId, request.ArgumentsJson, ct)),
 
-            ToolAdapterOperationNames.ExecuteWriteAction => ToolExecutionResult.Ok(
-                await _sqlExecutor.ExecuteWriteActionAsync(storedProcedure, request.TenantId, request.ArgumentsJson, ct)),
+            ToolAdapterOperationNames.ExecuteWriteAction => await ExecuteGuardedWriteAsync(request, storedProcedure, ct),
 
             ToolAdapterOperationNames.ExecuteAtomicPlan => ToolExecutionResult.Ok(
                 await _sqlExecutor.ExecuteAtomicPlanAsync(
@@ -47,6 +49,35 @@ public sealed class SqlToolAdapter : IToolAdapter
 
             _ => ToolExecutionResult.Fail("SQL_OPERATION_NOT_SUPPORTED", new { request.Operation })
         };
+    }
+
+    /// <summary>
+    /// Sprint 3: write operations require prior approval verification.
+    /// The caller must provide approvedActionId in request metadata.
+    /// </summary>
+    private async Task<ToolExecutionResult> ExecuteGuardedWriteAsync(
+        ToolExecutionRequest request,
+        string storedProcedure,
+        CancellationToken ct)
+    {
+        if (!request.Metadata.TryGetValue("approvedActionId", out var actionId)
+            || string.IsNullOrWhiteSpace(actionId))
+        {
+            return ToolExecutionResult.Fail(
+                "WRITE_ACTION_NOT_APPROVED",
+                new { message = "Write operations require an approved action ID. Route through IApprovalEngine." });
+        }
+
+        var guardResult = await _writeActionGuard.ValidateAsync(request.TenantId, actionId, ct);
+        if (!guardResult.IsApproved)
+        {
+            return ToolExecutionResult.Fail(
+                "WRITE_ACTION_GUARD_REJECTED",
+                new { actionId, reason = guardResult.Reason });
+        }
+
+        return ToolExecutionResult.Ok(
+            await _sqlExecutor.ExecuteWriteActionAsync(storedProcedure, request.TenantId, request.ArgumentsJson, ct));
     }
 
     private async Task<ToolExecutionResult> ExecuteQueryAsync(

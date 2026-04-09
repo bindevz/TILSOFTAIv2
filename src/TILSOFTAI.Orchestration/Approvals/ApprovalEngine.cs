@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
@@ -22,6 +24,7 @@ public sealed class ApprovalEngine : IApprovalEngine
     private readonly IConversationStore _conversationStore;
     private readonly ChatOptions _chatOptions;
     private readonly IJsonSchemaValidator _schemaValidator;
+    private readonly ILogger<ApprovalEngine> _logger;
 
     public ApprovalEngine(
         IActionRequestStore requestStore,
@@ -29,7 +32,8 @@ public sealed class ApprovalEngine : IApprovalEngine
         ToolResultCompactor toolResultCompactor,
         IConversationStore conversationStore,
         IOptions<ChatOptions> chatOptions,
-        IJsonSchemaValidator schemaValidator)
+        IJsonSchemaValidator schemaValidator,
+        ILogger<ApprovalEngine> logger)
     {
         _requestStore = requestStore ?? throw new ArgumentNullException(nameof(requestStore));
         _toolAdapterRegistry = toolAdapterRegistry ?? throw new ArgumentNullException(nameof(toolAdapterRegistry));
@@ -37,6 +41,7 @@ public sealed class ApprovalEngine : IApprovalEngine
         _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
         _chatOptions = chatOptions?.Value ?? throw new ArgumentNullException(nameof(chatOptions));
         _schemaValidator = schemaValidator ?? throw new ArgumentNullException(nameof(schemaValidator));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<ProposedActionRecord> CreateAsync(ProposedAction action, ApprovalContext context, CancellationToken ct)
@@ -81,18 +86,33 @@ public sealed class ApprovalEngine : IApprovalEngine
         };
 
         var created = await _requestStore.CreateAsync(requestRecord, ct);
+
+        _logger.LogInformation(
+            "ApprovalCreate | ActionId: {ActionId} | Tenant: {TenantId} | Agent: {AgentId} | SP: {StoredProcedure} | RequestedBy: {UserId}",
+            created.ActionId, context.TenantId, action.AgentId, proposedSpName, context.UserId);
+
         return MapRecord(created, action, context.AgentId);
     }
 
     public async Task<ProposedActionRecord> ApproveAsync(string actionId, ApprovalContext context, CancellationToken ct)
     {
         var record = await _requestStore.ApproveAsync(context.TenantId, actionId, context.UserId, ct);
+
+        _logger.LogInformation(
+            "ApprovalApprove | ActionId: {ActionId} | Tenant: {TenantId} | ApprovedBy: {UserId}",
+            actionId, context.TenantId, context.UserId);
+
         return MapRecord(record, actionType: "write", agentId: context.AgentId, targetSystem: SqlAdapterType);
     }
 
     public async Task<ProposedActionRecord> RejectAsync(string actionId, ApprovalContext context, CancellationToken ct)
     {
         var record = await _requestStore.RejectAsync(context.TenantId, actionId, context.UserId, ct);
+
+        _logger.LogInformation(
+            "ApprovalReject | ActionId: {ActionId} | Tenant: {TenantId} | RejectedBy: {UserId}",
+            actionId, context.TenantId, context.UserId);
+
         return MapRecord(record, actionType: "write", agentId: context.AgentId, targetSystem: SqlAdapterType);
     }
 
@@ -125,6 +145,7 @@ public sealed class ApprovalEngine : IApprovalEngine
         ValidateRoles(catalogEntry.RequiredRoles, context.Roles, executionPhase: true);
         ValidatePayloadSchema(catalogEntry.JsonSchema, request.ArgsJson, executionPhase: true);
 
+        var sw = Stopwatch.StartNew();
         var adapter = _toolAdapterRegistry.Resolve(SqlAdapterType);
         var execution = await adapter.ExecuteAsync(
             new ToolExecutionRequest
@@ -138,7 +159,8 @@ public sealed class ApprovalEngine : IApprovalEngine
                 CorrelationId = context.CorrelationId,
                 Metadata = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["storedProcedure"] = request.ProposedSpName
+                    ["storedProcedure"] = request.ProposedSpName,
+                    ["approvedActionId"] = actionId
                 }
             },
             ct);
@@ -155,7 +177,12 @@ public sealed class ApprovalEngine : IApprovalEngine
             : 16000;
         var compacted = _toolResultCompactor.CompactJson(rawResult, maxBytes, _chatOptions.CompactionRules);
 
+        sw.Stop();
         var updated = await _requestStore.MarkExecutedAsync(context.TenantId, actionId, compacted, success: true, ct);
+
+        _logger.LogInformation(
+            "ApprovalExecute | ActionId: {ActionId} | Tenant: {TenantId} | SP: {StoredProcedure} | DurationMs: {DurationMs} | Success: true",
+            actionId, context.TenantId, request.ProposedSpName, sw.ElapsedMilliseconds);
 
         await _conversationStore.SaveToolExecutionAsync(
             new Domain.ExecutionContext.TilsoftExecutionContext

@@ -42,6 +42,7 @@ using TILSOFTAI.Infrastructure.Sensitivity;
 using TILSOFTAI.Infrastructure.Sql;
 using TILSOFTAI.Infrastructure.Tools;
 using TILSOFTAI.Orchestration;
+using TILSOFTAI.Approvals;
 using TILSOFTAI.Orchestration.Actions;
 using TILSOFTAI.Orchestration.Caching;
 using TILSOFTAI.Orchestration.Compaction;
@@ -175,7 +176,8 @@ public static class AddTilsoftAiExtensions
         services.AddHostedService<SqlContractValidatorHostedService>();
         services.AddSingleton<IConversationStore, SqlConversationStore>();
         services.AddSingleton<IActionRequestStore, SqlActionRequestStore>();
-        services.AddSingleton<ActionApprovalService>();
+        // Sprint 3: write-action guard for adapter-level enforcement
+        services.AddSingleton<IWriteActionGuard, ApprovalBackedWriteActionGuard>();
         services.AddSingleton<CacheStampedeGuard>();
         services.AddSingleton<SemanticCache>();
         
