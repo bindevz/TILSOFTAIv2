@@ -1,0 +1,188 @@
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
+using TILSOFTAI.Agents.Abstractions;
+using TILSOFTAI.Approvals;
+using TILSOFTAI.Domain.ExecutionContext;
+
+namespace TILSOFTAI.Supervisor;
+
+public sealed class SupervisorRuntime : ISupervisorRuntime
+{
+    private readonly IAgentRegistry _agentRegistry;
+    private readonly IApprovalEngine _approvalEngine;
+    private readonly ILogger<SupervisorRuntime> _logger;
+
+    public SupervisorRuntime(
+        IAgentRegistry agentRegistry,
+        IApprovalEngine approvalEngine,
+        ILogger<SupervisorRuntime> logger)
+    {
+        _agentRegistry = agentRegistry ?? throw new ArgumentNullException(nameof(agentRegistry));
+        _approvalEngine = approvalEngine ?? throw new ArgumentNullException(nameof(approvalEngine));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public async Task<SupervisorResult> RunAsync(SupervisorRequest request, TilsoftExecutionContext ctx, CancellationToken ct)
+    {
+        if (request is null)
+        {
+            return SupervisorResult.Fail("Input is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Input))
+        {
+            return SupervisorResult.Fail("Input is required.");
+        }
+
+        var task = MapRequest(request);
+        var candidates = _agentRegistry.ResolveCandidates(task);
+        if (candidates.Count == 0)
+        {
+            return SupervisorResult.Fail("No domain agent could handle the request.", "SUPERVISOR_AGENT_NOT_FOUND");
+        }
+
+        var selectedAgent = candidates[0];
+        _logger.LogInformation(
+            "Supervisor selected agent {AgentId} for domain hint {DomainHint}.",
+            selectedAgent.AgentId,
+            task.DomainHint ?? "unspecified");
+
+        var result = await selectedAgent.ExecuteAsync(
+            task,
+            AgentExecutionContext.FromRuntimeContext(ctx, _approvalEngine),
+            ct);
+
+        return SupervisorResult.FromAgentResult(result, selectedAgent.AgentId);
+    }
+
+    public async IAsyncEnumerable<SupervisorStreamEvent> RunStreamAsync(
+        SupervisorRequest request,
+        TilsoftExecutionContext ctx,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        if (request is null)
+        {
+            yield return SupervisorStreamEvent.Error("Input is required.");
+            yield break;
+        }
+
+        var channel = Channel.CreateUnbounded<SupervisorStreamEvent>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = true,
+            AllowSynchronousContinuations = true
+        });
+
+        var terminalSeen = 0;
+        var progress = new InlineProgress<SupervisorStreamEvent>(evt =>
+        {
+            if (Interlocked.CompareExchange(ref terminalSeen, 0, 0) == 1)
+            {
+                return;
+            }
+
+            channel.Writer.TryWrite(evt);
+
+            if (IsTerminal(evt.Type))
+            {
+                Interlocked.Exchange(ref terminalSeen, 1);
+            }
+        });
+
+        var streamingRequest = new SupervisorRequest
+        {
+            Input = request.Input,
+            AllowCache = request.AllowCache,
+            ContainsSensitive = request.ContainsSensitive,
+            SensitivityReasons = request.SensitivityReasons,
+            RequestPolicy = request.RequestPolicy,
+            MessageHistory = request.MessageHistory,
+            IntentType = request.IntentType,
+            DomainHint = request.DomainHint,
+            RequiresWritePreparation = request.RequiresWritePreparation,
+            Stream = true,
+            StreamObserver = progress,
+            Metadata = request.Metadata
+        };
+
+        var runTask = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await RunAsync(streamingRequest, ctx, ct);
+                if (Interlocked.CompareExchange(ref terminalSeen, 1, 0) == 0)
+                {
+                    channel.Writer.TryWrite(result.Success
+                        ? SupervisorStreamEvent.Final(result.Output ?? string.Empty)
+                        : SupervisorStreamEvent.Error(result.Error ?? "Request failed."));
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Supervisor streaming execution failed.");
+                if (Interlocked.CompareExchange(ref terminalSeen, 1, 0) == 0)
+                {
+                    channel.Writer.TryWrite(SupervisorStreamEvent.Error("Request failed."));
+                }
+            }
+            finally
+            {
+                channel.Writer.TryComplete();
+            }
+        }, ct);
+
+        await foreach (var evt in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        {
+            yield return evt;
+
+            if (IsTerminal(evt.Type))
+            {
+                break;
+            }
+        }
+
+        try
+        {
+            await runTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+    }
+
+    private static AgentTask MapRequest(SupervisorRequest request) => new()
+    {
+        IntentType = request.IntentType ?? "chat",
+        DomainHint = request.DomainHint,
+        Input = request.Input,
+        ContextPayload = request.Metadata,
+        RequiresWritePreparation = request.RequiresWritePreparation,
+        Stream = request.Stream,
+        StreamObserver = request.StreamObserver,
+        AllowCache = request.AllowCache,
+        ContainsSensitive = request.ContainsSensitive,
+        SensitivityReasons = request.SensitivityReasons,
+        RequestPolicy = request.RequestPolicy,
+        MessageHistory = request.MessageHistory
+    };
+
+    private static bool IsTerminal(string? eventType) =>
+        string.Equals(eventType, "final", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, "error", StringComparison.OrdinalIgnoreCase);
+
+    private sealed class InlineProgress<T> : IProgress<T>
+    {
+        private readonly Action<T> _handler;
+
+        public InlineProgress(Action<T> handler)
+        {
+            _handler = handler ?? throw new ArgumentNullException(nameof(handler));
+        }
+
+        public void Report(T value) => _handler(value);
+    }
+}

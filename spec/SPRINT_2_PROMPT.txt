@@ -1,0 +1,21 @@
+Implement Sprint 2 only.
+
+Sprint 2 goals:
+- introduce SupervisorRuntime
+- introduce AgentRegistry
+- introduce AccountingAgent and WarehouseAgent as first domain agents
+- move runtime ownership from modules toward agents
+- convert modules into capability packs or tool packs where appropriate
+
+Constraints:
+- do not keep module-centric runtime as the main path after this sprint unless absolutely required for temporary compatibility
+- explain every temporary compatibility decision
+- do not let agents depend directly on SQL-specific execution details
+- do not put domain logic into API or infrastructure
+
+Required output:
+- exact runtime flow after Sprint 2
+- files added and modified
+- legacy runtime paths still remaining
+- why any remaining compatibility shim still exists
+- recommended deletions for Sprint 3

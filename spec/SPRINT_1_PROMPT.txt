@@ -1,0 +1,36 @@
+Implement Sprint 1 only.
+
+Sprint 1 goals:
+- establish v3 architecture boundaries
+- create core contracts for SupervisorRuntime, DomainAgent, ToolAdapter, ApprovalEngine
+- map current SQL executor into SqlToolAdapter
+- identify old module-centric runtime paths for deprecation
+- do not fully migrate all domain behavior yet
+
+Repository-specific focus:
+- current orchestration engine
+- current module loader and tool registry
+- current SQL execution path
+- current approval flow
+- current README and architecture docs
+
+Non-goals:
+- full multi-agent routing
+- full migration of all modules
+- full adapter implementation beyond SQL
+- full approval engine execution workflow rewrite
+
+Required output:
+- code changes
+- architectural notes
+- exact deletion/deprecation candidates
+- next sprint prerequisites
+
+Mandatory report format:
+1. Objective completed
+2. Files created
+3. Files modified
+4. Files deleted
+5. Old runtime paths deprecated
+6. Risks
+7. Next sprint work

@@ -1,0 +1,56 @@
+version: "3.0"
+name: "TILSOFTAI V3 Cleanup Checklist"
+cleanup_domains:
+  configuration:
+    remove:
+      - "Committed secrets or environment-specific endpoints"
+      - "Production-like credentials in appsettings.json"
+    verify:
+      - "appsettings.Sample.json exists and is accurate"
+      - "README explains local overrides and env vars"
+  naming:
+    remove_or_rename:
+      - "Names that imply module-centric runtime ownership when runtime is now agent-centric"
+      - "Generic names that hide approval or adapter responsibilities"
+    verify:
+      - "New names match Supervisor / Agent / Adapter / Approval mental model"
+  dependency_injection:
+    remove:
+      - "Duplicate registrations"
+      - "Registrations for deleted or unreachable services"
+      - "Legacy registration chains kept only by habit"
+    verify:
+      - "Each service registration has a current runtime purpose"
+  runtime_abstractions:
+    remove:
+      - "Module-only runtime ownership that no longer participates meaningfully"
+      - "Unused wrappers left from prior orchestration patterns"
+    preserve_temporarily:
+      - "Compatibility facades that are still used by public entrypoints"
+    verify:
+      - "The orchestration center is SupervisorRuntime"
+  legacy_code:
+    remove:
+      - "Dead methods"
+      - "Unused DTOs"
+      - "Unused options"
+      - "Unreferenced helper classes"
+      - "Commented-out legacy code"
+    verify:
+      - "Deleted code is not still referenced in docs or DI"
+  approval_path:
+    remove:
+      - "Hidden write execution pathways outside ApprovalEngine"
+    verify:
+      - "All write actions route through ProposedAction and ApprovalEngine"
+  adapters:
+    remove:
+      - "SQL-only assumptions in generic contracts"
+    verify:
+      - "Generic contracts do not hardcode stored procedure language"
+acceptance_questions:
+  - "Can a new ERP integration be added by implementing an adapter rather than rewriting orchestration core?"
+  - "Can a new domain be added as an agent without introducing module sprawl?"
+  - "Can any state-changing action bypass approval? If yes, cleanup is incomplete."
+  - "Does the codebase still expose secrets or environment-specific values?"
+  - "Does the README still describe the old architecture?"

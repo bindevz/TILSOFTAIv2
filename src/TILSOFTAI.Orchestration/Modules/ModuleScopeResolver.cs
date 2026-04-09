@@ -9,6 +9,7 @@ using TILSOFTAI.Orchestration.Tools;
 
 namespace TILSOFTAI.Orchestration.Modules;
 
+[Obsolete("Module-centric scope resolution is deprecated in Sprint 1. Replace with supervisor/domain-agent routing.")]
 public sealed class ModuleScopeResolver : IModuleScopeResolver
 {
     private readonly ILlmClient _llmClient;

@@ -1,0 +1,334 @@
+version: "3.0"
+pack_name: "TILSOFTAI V3 AI Agent Instruct Pack"
+language: "English"
+intended_consumer: "Autonomous or semi-autonomous AI coding agent"
+repository:
+  name: "TILSOFTAIv2"
+  owner: "bindevz"
+  primary_branch: "master"
+  stack:
+    language: "C#"
+    runtime: ".NET 10"
+    data:
+      - "SQL Server 2025"
+      - "Redis (optional)"
+    transport:
+      - "REST"
+      - "SSE"
+      - "SignalR"
+      - "OpenAI-compatible API surface"
+mission:
+  primary_goal: >
+    Upgrade the current repository into TILSOFTAI V3: an enterprise-grade internal AI platform
+    centered on Supervisor Runtime + Domain Agents + Tool Adapters + Approval Engine, while
+    preserving multi-tenant safety, observability, deterministic write controls, and compatibility
+    with heterogeneous ERP/application integration patterns.
+  expected_outcome:
+    - "Agent-centric orchestration instead of module-centric runtime logic"
+    - "ERP-agnostic integration via adapter abstractions"
+    - "Approval-first write-back workflow"
+    - "Cleaner project layout with less dead code and fewer legacy abstractions"
+    - "Updated README and architectural documentation aligned with the new model"
+project_context:
+  current_state_summary:
+    - "The repository is currently a modular orchestration platform with a single chat orchestration interface."
+    - "Tool execution is strongly SQL-centric."
+    - "Approval for write actions already exists and should be evolved, not discarded."
+    - "Reflection-based module loading is present and should be migrated toward capability pack loading."
+  current_repo_signals:
+    - path: "README.md"
+      observation: "Describes a multi-module SQL-backed orchestration platform."
+      confidence: "high"
+    - path: "src/TILSOFTAI.Orchestration/IOrchestrationEngine.cs"
+      observation: "Current runtime center is a single orchestration engine with chat and streaming methods."
+      confidence: "high"
+    - path: "src/TILSOFTAI.Infrastructure/Modules/ModuleLoader.cs"
+      observation: "Modules are discovered and registered via reflection into tool registries."
+      confidence: "high"
+    - path: "src/TILSOFTAI.Orchestration/Actions/ActionApprovalService.cs"
+      observation: "Approval for write actions already exists and should become the V3 Approval Engine foundation."
+      confidence: "high"
+    - path: "src/TILSOFTAI.Infrastructure/Sql/SqlExecutor.cs"
+      observation: "SQL execution is encapsulated already and should become a SQL adapter rather than the global execution center."
+      confidence: "high"
+target_architecture:
+  name: "TILSOFTAI V3"
+  runtime_style: "Supervisor-driven, agent-centric, adapter-based, approval-first"
+  architectural_principles:
+    - "Supervisor coordinates; Domain Agents own domain reasoning."
+    - "Tool Adapters integrate with external systems; adapters never own domain rules."
+    - "Approval Engine is the only write gate."
+    - "Modules remain packaging boundaries only; they must not remain the primary runtime mental model."
+    - "C# must not hardcode business intelligence that belongs to agents, catalogs, or tools."
+    - "No free-form SQL generation for production behavior."
+    - "Multi-tenant safety and role safety are non-negotiable."
+  high_level_flow:
+    - "Client request enters API/Gateway layer."
+    - "Supervisor classifies intent and routes work to one or more Domain Agents."
+    - "Domain Agents request capabilities through Tool Adapters."
+    - "Any write intent becomes a ProposedAction."
+    - "Approval Engine validates, queues, approves/rejects, and executes via the correct adapter."
+    - "Observability records the full chain."
+desired_project_structure:
+  root_projects:
+    - "src/TILSOFTAI.Api"
+    - "src/TILSOFTAI.Domain"
+    - "src/TILSOFTAI.Supervisor"
+    - "src/TILSOFTAI.Agents.Abstractions"
+    - "src/TILSOFTAI.Agents.Accounting"
+    - "src/TILSOFTAI.Agents.Warehouse"
+    - "src/TILSOFTAI.Agents.Sales"
+    - "src/TILSOFTAI.Agents.Purchasing"
+    - "src/TILSOFTAI.Agents.MasterData"
+    - "src/TILSOFTAI.Tools.Abstractions"
+    - "src/TILSOFTAI.Tools.Sql"
+    - "src/TILSOFTAI.Tools.Rest"
+    - "src/TILSOFTAI.Tools.FileImport"
+    - "src/TILSOFTAI.Tools.Queue"
+    - "src/TILSOFTAI.Tools.Webhooks"
+    - "src/TILSOFTAI.Approvals"
+    - "src/TILSOFTAI.Infrastructure"
+    - "src/TILSOFTAI.Contracts"
+    - "src/TILSOFTAI.Observability"
+  migration_mapping:
+    - from: "src/TILSOFTAI.Orchestration/IOrchestrationEngine.cs"
+      to: "Keep as compatibility facade, add src/TILSOFTAI.Supervisor/ISupervisorRuntime.cs"
+      action: "refactor"
+    - from: "src/TILSOFTAI.Infrastructure/Modules/ModuleLoader.cs"
+      to: "src/TILSOFTAI.Infrastructure/Capabilities/CapabilityPackLoader.cs"
+      action: "replace-gradually"
+    - from: "src/TILSOFTAI.Orchestration/Actions/ActionApprovalService.cs"
+      to: "src/TILSOFTAI.Approvals/ApprovalEngine.cs"
+      action: "evolve-and-move"
+    - from: "src/TILSOFTAI.Infrastructure/Sql/SqlExecutor.cs"
+      to: "src/TILSOFTAI.Tools.Sql/SqlToolAdapter.cs"
+      action: "wrap-and-retain-core"
+domain_agents:
+  required_agents:
+    - id: "accounting"
+      display_name: "AccountingAgent"
+      owns:
+        - "Receivables"
+        - "Payables"
+        - "Invoices"
+        - "Draft journal proposals"
+        - "Financial validation advice"
+      must_not:
+        - "Directly post final accounting entries without approval"
+    - id: "warehouse"
+      display_name: "WarehouseAgent"
+      owns:
+        - "Inventory"
+        - "Stock movements"
+        - "Cycle count anomalies"
+        - "Inventory adjustment drafts"
+      must_not:
+        - "Directly finalize warehouse write-back without approval"
+    - id: "sales"
+      display_name: "SalesAgent"
+      owns:
+        - "Sales orders"
+        - "Credit checks"
+        - "Delivery state interpretation"
+    - id: "purchasing"
+      display_name: "PurchasingAgent"
+      owns:
+        - "Purchase orders"
+        - "Supplier-side matching"
+        - "Procurement recommendations"
+    - id: "masterdata"
+      display_name: "MasterDataAgent"
+      owns:
+        - "Product/customer/vendor master validation"
+        - "Duplicate detection"
+        - "Normalization and enrichment recommendations"
+  required_agent_contract:
+    must_define:
+      - "Agent identity"
+      - "Owned domains"
+      - "Allowed capabilities"
+      - "Approval policy hooks"
+      - "Escalation rules"
+      - "Context providers"
+supervisor:
+  responsibilities:
+    - "Classify request intent"
+    - "Route work to the correct agent or multiple agents"
+    - "Decompose large tasks into domain sub-tasks"
+    - "Merge final responses"
+    - "Escalate write intent into ProposedAction"
+    - "Never bypass Approval Engine"
+  must_not:
+    - "Contain business-domain logic that belongs to Domain Agents"
+    - "Call low-level SQL directly"
+    - "Decide final write execution without policy and approval"
+tool_adapters:
+  mandatory_adapter_types:
+    - "SqlToolAdapter"
+    - "RestApiToolAdapter"
+    - "FileImportAdapter"
+    - "QueueActionAdapter"
+    - "WebhookAdapter"
+  adapter_rules:
+    - "Adapters integrate systems; they do not contain domain business policy."
+    - "Adapters must expose structured contracts, not hidden conventions."
+    - "Adapters must support tenant-safe execution context."
+    - "Adapters must support correlation IDs and observability."
+approval_engine:
+  core_rules:
+    - "All write intents must become ProposedAction objects."
+    - "No agent may execute state-changing behavior directly."
+    - "Approval Engine validates action type, actor roles, tenant scope, schema, and target system."
+    - "Approval Engine must support approve, reject, expire, and execute."
+    - "Execution must be idempotent where possible."
+    - "Every action must be auditable."
+legacy_cleanup_policy:
+  remove_or_reduce:
+    - "Module-centric runtime decision making"
+    - "Reflection-heavy module ownership as the primary runtime abstraction"
+    - "Dead code and unused registrations"
+    - "Duplicate service registrations"
+    - "Legacy naming that conflicts with the V3 mental model"
+    - "Config values that represent real secrets"
+  preserve_and_wrap:
+    - "ExecutionContext handling"
+    - "Observability and telemetry infrastructure"
+    - "Streaming infrastructure"
+    - "Schema validation"
+    - "Resilience primitives"
+    - "Useful SQL execution core"
+  deprecation_policy:
+    - "Mark old types as compatibility facades before deleting them."
+    - "Move behavior first; delete legacy wrappers only after tests and references are clean."
+migration_strategy:
+  phases:
+    - phase_id: "P0"
+      name: "Stabilize baseline"
+      goals:
+        - "Remove secret-like values from committed configuration"
+        - "Align auth requirements with actual endpoint behavior"
+        - "Fix documentation drift"
+      done_when:
+        - "No committed secrets remain in tracked config files"
+        - "Public entrypoints have clear auth policy"
+        - "README and code routes do not contradict each other"
+    - phase_id: "P1"
+      name: "Introduce V3 abstractions without breaking current runtime"
+      goals:
+        - "Add Supervisor abstractions"
+        - "Add Domain Agent abstractions"
+        - "Add Tool Adapter abstractions"
+        - "Add Approval Engine abstractions"
+        - "Keep old orchestration engine as compatibility entrypoint"
+    - phase_id: "P2"
+      name: "Wrap current SQL-centric execution"
+      goals:
+        - "Convert current SQL execution usage into SqlToolAdapter"
+        - "Retain safe catalog/schema validation"
+        - "Route existing read tooling through capability-based contracts"
+    - phase_id: "P3"
+      name: "Replace module-centric runtime with capability packs + agents"
+      goals:
+        - "Introduce CapabilityPackLoader"
+        - "Move domain registration from module-first to capability-first"
+        - "Introduce AccountingAgent and WarehouseAgent first"
+    - phase_id: "P4"
+      name: "Promote approval flow into platform Approval Engine"
+      goals:
+        - "Transform existing write action flow into ProposedAction + ApprovalEngine + Executor model"
+        - "Keep current safety checks"
+    - phase_id: "P5"
+      name: "Add non-SQL adapters and ERP-agnostic execution"
+      goals:
+        - "Add RestApiToolAdapter"
+        - "Add FileImportAdapter"
+        - "Add QueueActionAdapter"
+        - "Update catalogs and configs to support system connections"
+    - phase_id: "P6"
+      name: "Remove obsolete V2-only structures"
+      goals:
+        - "Delete dead module-only plumbing"
+        - "Delete obsolete names and wrappers"
+        - "Update README to V3"
+execution_protocol_for_ai_agent:
+  work_style:
+    - "Work incrementally in small, reviewable slices."
+    - "Prefer refactoring with compatibility wrappers first, deletion second."
+    - "Keep the solution buildable as often as possible."
+    - "When uncertain, choose explicit interfaces over implicit conventions."
+  before_each_change:
+    - "Read the affected file and its callers."
+    - "Document whether the type is to keep, wrap, move, deprecate, or delete."
+    - "Update or create tests if behavior changes."
+  after_each_change:
+    - "Confirm compile-level integrity when possible."
+    - "Confirm DI registrations are not duplicated or stale."
+    - "Confirm observability and auth assumptions are still valid."
+  output_per_task:
+    - "Files changed"
+    - "Why they changed"
+    - "Legacy behaviors retained"
+    - "Legacy behaviors deprecated"
+    - "Follow-up work left intentionally undone"
+strict_rules:
+  never_do:
+    - "Do not reintroduce module sprawl as the main runtime abstraction."
+    - "Do not hardcode ERP-specific business logic into generic adapters."
+    - "Do not allow direct write execution from agents."
+    - "Do not commit secrets or environment-specific credentials."
+    - "Do not silently preserve dead code 'just in case'."
+    - "Do not generate unrestricted SQL from LLM output."
+  always_do:
+    - "Preserve multi-tenant boundaries."
+    - "Preserve approval-first behavior for writes."
+    - "Keep observability consistent."
+    - "Use structured contracts."
+    - "Prefer explicit naming aligned with V3 architecture."
+definition_of_done:
+  architecture:
+    - "Supervisor runtime exists and is the intended orchestration center."
+    - "At least AccountingAgent and WarehouseAgent exist as first-class domain agents."
+    - "Tool adapters exist with SQL adapter implemented and in active use."
+    - "ApprovalEngine exists as a first-class subsystem."
+  code_quality:
+    - "Obsolete V2-only abstractions are removed or clearly marked deprecated."
+    - "Dead registrations and dead code are removed."
+    - "Naming reflects V3 mental model."
+  documentation:
+    - "README fully rewritten to V3."
+    - "Architecture docs reflect agents, adapters, and approvals."
+    - "Migration notes exist for remaining backlog."
+  safety:
+    - "Write-back still requires approval."
+    - "Tenant safety remains enforced."
+    - "Secrets are not committed."
+deliverables:
+  mandatory_files:
+    - "README.md (rewritten for V3)"
+    - "docs/architecture_v3.md"
+    - "docs/migration_v2_to_v3.md"
+    - "docs/agent_catalog.md"
+    - "docs/tool_adapter_catalog.md"
+    - "docs/approval_engine.md"
+    - "docs/cleanup_report.md"
+  mandatory_code_artifacts:
+    - "ISupervisorRuntime"
+    - "IDomainAgent"
+    - "IToolAdapter"
+    - "IApprovalEngine"
+    - "SupervisorRuntime implementation"
+    - "AccountingAgent"
+    - "WarehouseAgent"
+    - "SqlToolAdapter"
+    - "ApprovalEngine"
+success_criteria:
+  tactical:
+    - "The codebase is easier to reason about than V2."
+    - "A new ERP integration can be introduced via adapter rather than deep core rewrites."
+    - "A new domain agent can be added without expanding module sprawl."
+  strategic:
+    - "The repository now reads as an enterprise internal AI platform, not a SQL-centric module orchestration demo."
+notes_for_agent:
+  - "Treat the current repository as a living baseline, not as something to discard."
+  - "Prefer evolutionary refactoring over rewrite-from-scratch."
+  - "When choosing between keeping and deleting legacy structures, keep only what still has clear operational value."

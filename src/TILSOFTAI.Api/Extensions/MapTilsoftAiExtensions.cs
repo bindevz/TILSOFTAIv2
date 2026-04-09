@@ -12,6 +12,9 @@ public static class MapTilsoftAiExtensions
 {
     public static WebApplication MapTilsoftAi(this WebApplication app)
     {
+        // Private Network Access (PNA) - must be first to handle PNA preflight before any other middleware
+        app.UseMiddleware<PrivateNetworkAccessMiddleware>();
+        
         app.UseRouting();
         
         // Security headers for all responses

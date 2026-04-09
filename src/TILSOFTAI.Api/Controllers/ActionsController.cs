@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TILSOFTAI.Approvals;
 using TILSOFTAI.Domain.ExecutionContext;
-using TILSOFTAI.Orchestration.Actions;
 
 namespace TILSOFTAI.Api.Controllers;
 
@@ -10,12 +10,12 @@ namespace TILSOFTAI.Api.Controllers;
 [Authorize]
 public sealed class ActionsController : ControllerBase
 {
-    private readonly ActionApprovalService _approvalService;
+    private readonly IApprovalEngine _approvalEngine;
     private readonly IExecutionContextAccessor _contextAccessor;
 
-    public ActionsController(ActionApprovalService approvalService, IExecutionContextAccessor contextAccessor)
+    public ActionsController(IApprovalEngine approvalEngine, IExecutionContextAccessor contextAccessor)
     {
-        _approvalService = approvalService ?? throw new ArgumentNullException(nameof(approvalService));
+        _approvalEngine = approvalEngine ?? throw new ArgumentNullException(nameof(approvalEngine));
         _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(contextAccessor));
     }
 
@@ -23,7 +23,10 @@ public sealed class ActionsController : ControllerBase
     [Authorize(Roles = "ai_action_approver")]
     public async Task<IActionResult> Approve(string actionId, CancellationToken cancellationToken)
     {
-        var result = await _approvalService.ApproveAsync(_contextAccessor.Current, actionId, cancellationToken);
+        var result = await _approvalEngine.ApproveAsync(
+            actionId,
+            ApprovalContext.FromExecutionContext(_contextAccessor.Current),
+            cancellationToken);
         return Ok(result);
     }
 
@@ -31,7 +34,10 @@ public sealed class ActionsController : ControllerBase
     [Authorize(Roles = "ai_action_approver")]
     public async Task<IActionResult> Reject(string actionId, CancellationToken cancellationToken)
     {
-        var result = await _approvalService.RejectAsync(_contextAccessor.Current, actionId, cancellationToken);
+        var result = await _approvalEngine.RejectAsync(
+            actionId,
+            ApprovalContext.FromExecutionContext(_contextAccessor.Current),
+            cancellationToken);
         return Ok(result);
     }
 
@@ -39,7 +45,10 @@ public sealed class ActionsController : ControllerBase
     [Authorize(Roles = "ai_action_approver")]
     public async Task<IActionResult> Execute(string actionId, CancellationToken cancellationToken)
     {
-        var result = await _approvalService.ExecuteAsync(_contextAccessor.Current, actionId, cancellationToken);
+        var result = await _approvalEngine.ExecuteAsync(
+            actionId,
+            ApprovalContext.FromExecutionContext(_contextAccessor.Current),
+            cancellationToken);
         return Ok(result);
     }
 }

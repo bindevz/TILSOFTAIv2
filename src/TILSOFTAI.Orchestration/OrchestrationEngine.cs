@@ -9,12 +9,13 @@ using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Metrics;
 using TILSOFTAI.Domain.Sensitivity;
 using TILSOFTAI.Orchestration.Pipeline;
+using TILSOFTAI.Supervisor;
 
 namespace TILSOFTAI.Orchestration;
 
 public sealed class OrchestrationEngine : IOrchestrationEngine
 {
-    private readonly ChatPipeline _chatPipeline;
+    private readonly ISupervisorRuntime _supervisorRuntime;
     private readonly IOptions<StreamingOptions> _streamingOptions;
     private readonly ISensitivityClassifier _sensitivityClassifier;
     private readonly SensitiveDataOptions _sensitiveDataOptions;
@@ -24,7 +25,7 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
     private readonly ILogger<OrchestrationEngine> _logger;
 
     public OrchestrationEngine(
-        ChatPipeline chatPipeline,
+        ISupervisorRuntime supervisorRuntime,
         IOptions<StreamingOptions> streamingOptions,
         ISensitivityClassifier sensitivityClassifier,
         IOptions<SensitiveDataOptions> sensitiveDataOptions,
@@ -33,7 +34,7 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
         IOptions<ObservabilityOptions> observabilityOptions,
         ILogger<OrchestrationEngine> logger)
     {
-        _chatPipeline = chatPipeline ?? throw new ArgumentNullException(nameof(chatPipeline));
+        _supervisorRuntime = supervisorRuntime ?? throw new ArgumentNullException(nameof(supervisorRuntime));
         _streamingOptions = streamingOptions ?? throw new ArgumentNullException(nameof(streamingOptions));
         _sensitivityClassifier = sensitivityClassifier ?? throw new ArgumentNullException(nameof(sensitivityClassifier));
         _sensitiveDataOptions = sensitiveDataOptions?.Value ?? throw new ArgumentNullException(nameof(sensitiveDataOptions));
@@ -62,7 +63,8 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
         ChatResult result;
         try
         {
-            result = await _chatPipeline.RunAsync(request, ctx, ct); // vô trong này xử lý chính sự.
+            var supervisorResult = await _supervisorRuntime.RunAsync(MapRequest(request), ctx, ct);
+            result = MapResult(supervisorResult);
         }
         catch (TilsoftApiException)
         {
@@ -190,7 +192,8 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
             ChatResult? result = null;
             try
             {
-                result = await _chatPipeline.RunAsync(request, ctx, ct);
+                var supervisorResult = await _supervisorRuntime.RunAsync(MapRequest(request), ctx, ct);
+                result = MapResult(supervisorResult);
             }
             catch (OperationCanceledException)
             {
@@ -307,6 +310,32 @@ public sealed class OrchestrationEngine : IOrchestrationEngine
         {
             _logger.LogWarning(logEx, "Failed to persist error to ErrorLog.");
         }
+    }
+
+    private static SupervisorRequest MapRequest(ChatRequest request)
+    {
+        return new SupervisorRequest
+        {
+            Input = request.Input,
+            AllowCache = request.AllowCache,
+            ContainsSensitive = request.ContainsSensitive,
+            SensitivityReasons = request.SensitivityReasons,
+            RequestPolicy = request.RequestPolicy,
+            MessageHistory = request.MessageHistory,
+            IntentType = "chat",
+            Stream = request.Stream,
+            StreamObserver = request.StreamObserver is null
+                ? null
+                : new SynchronousProgress<SupervisorStreamEvent>(
+                    evt => request.StreamObserver.Report(new ChatStreamEvent(evt.Type, evt.Payload)))
+        };
+    }
+
+    private static ChatResult MapResult(SupervisorResult result)
+    {
+        return result.Success
+            ? ChatResult.Ok(result.Output ?? string.Empty)
+            : ChatResult.Fail(result.Error ?? "Chat request failed.", result.Code, result.Detail);
     }
 }
 

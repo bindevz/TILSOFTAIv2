@@ -22,6 +22,13 @@ public sealed class JwtSigningKeyRefreshHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Skip JWKS refresh entirely when authentication is disabled
+        if (!_authOptions.Enabled)
+        {
+            _logger.LogInformation("JWT signing key refresh disabled (Auth:Enabled=false).");
+            return;
+        }
+
         await TryRefreshAsync(stoppingToken);
 
         var failureCount = 0;

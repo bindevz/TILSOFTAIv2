@@ -1,0 +1,112 @@
+version: "3.0"
+name: "TILSOFTAI V3 Core Interface Contracts"
+interfaces:
+  - name: "ISupervisorRuntime"
+    purpose: "Primary orchestration center for V3 runtime."
+    methods:
+      - "Task<SupervisorResult> RunAsync(SupervisorRequest request, TilsoftExecutionContext ctx, CancellationToken ct)"
+      - "IAsyncEnumerable<SupervisorStreamEvent> RunStreamAsync(SupervisorRequest request, TilsoftExecutionContext ctx, CancellationToken ct)"
+    rules:
+      - "Must not embed domain-specific business logic."
+      - "Must delegate domain reasoning to agents."
+      - "Must be able to escalate ProposedAction to Approval Engine."
+  - name: "IDomainAgent"
+    purpose: "Represents a first-class domain reasoning unit."
+    properties:
+      - "string AgentId"
+      - "string DisplayName"
+      - "IReadOnlyList<string> OwnedDomains"
+    methods:
+      - "bool CanHandle(AgentTask task)"
+      - "Task<AgentResult> ExecuteAsync(AgentTask task, AgentExecutionContext context, CancellationToken ct)"
+    rules:
+      - "Must operate only within its domain scope."
+      - "Must use capabilities/tools through adapters."
+      - "Must not execute writes directly."
+  - name: "IAgentRegistry"
+    purpose: "Resolves available domain agents."
+    methods:
+      - "IReadOnlyList<IDomainAgent> GetAll()"
+      - "IDomainAgent? GetById(string agentId)"
+      - "IReadOnlyList<IDomainAgent> ResolveCandidates(AgentTask task)"
+  - name: "IToolAdapter"
+    purpose: "Abstracts external system integration."
+    properties:
+      - "string AdapterType"
+    methods:
+      - "Task<ToolExecutionResult> ExecuteAsync(ToolExecutionRequest request, CancellationToken ct)"
+    rules:
+      - "Must be integration-focused, not business-policy-focused."
+      - "Must accept tenant, correlation, and agent context."
+  - name: "IToolAdapterRegistry"
+    purpose: "Resolves adapters by system connection or capability."
+    methods:
+      - "IToolAdapter Resolve(string adapterType)"
+      - "IToolAdapter ResolveForCapability(string capabilityKey, string systemId)"
+  - name: "IApprovalEngine"
+    purpose: "Owns the write approval lifecycle."
+    methods:
+      - "Task<ProposedActionRecord> CreateAsync(ProposedAction action, ApprovalContext context, CancellationToken ct)"
+      - "Task<ProposedActionRecord> ApproveAsync(string actionId, ApprovalContext context, CancellationToken ct)"
+      - "Task<ProposedActionRecord> RejectAsync(string actionId, ApprovalContext context, CancellationToken ct)"
+      - "Task<ActionExecutionResult> ExecuteAsync(string actionId, ApprovalContext context, CancellationToken ct)"
+    rules:
+      - "Must validate policy, role, schema, tenant, and idempotency constraints."
+      - "Must be the only write gate."
+  - name: "ICapabilityResolver"
+    purpose: "Maps agent requests to concrete capabilities and system targets."
+    methods:
+      - "CapabilityDefinition Resolve(string capabilityKey, string tenantId)"
+  - name: "ICapabilityPackLoader"
+    purpose: "Replaces runtime centrality of reflection modules with capability pack loading."
+    methods:
+      - "IReadOnlyList<CapabilityPack> LoadPacks(IEnumerable<string> packNames)"
+contracts:
+  request_objects:
+    - name: "SupervisorRequest"
+      fields:
+        - "Input"
+        - "AllowCache"
+        - "ContainsSensitive"
+        - "Metadata"
+    - name: "AgentTask"
+      fields:
+        - "IntentType"
+        - "DomainHint"
+        - "Input"
+        - "ContextPayload"
+        - "RequiresWritePreparation"
+    - name: "ToolExecutionRequest"
+      fields:
+        - "TenantId"
+        - "AgentId"
+        - "SystemId"
+        - "CapabilityKey"
+        - "Operation"
+        - "ArgumentsJson"
+        - "ExecutionMode"
+        - "CorrelationId"
+    - name: "ProposedAction"
+      fields:
+        - "ActionType"
+        - "AgentId"
+        - "TargetSystem"
+        - "CapabilityKey"
+        - "PayloadJson"
+        - "DiffPreviewJson"
+        - "RiskLevel"
+        - "ApprovalRequirement"
+  result_objects:
+    - name: "SupervisorResult"
+    - name: "SupervisorStreamEvent"
+    - name: "AgentResult"
+    - name: "ToolExecutionResult"
+    - name: "ActionExecutionResult"
+recommended_namespaces:
+  - "TILSOFTAI.Supervisor"
+  - "TILSOFTAI.Agents.Abstractions"
+  - "TILSOFTAI.Approvals"
+  - "TILSOFTAI.Tools.Abstractions"
+compatibility_notes:
+  - "IOrchestrationEngine may remain temporarily as a facade over ISupervisorRuntime."
+  - "Existing SQL executor behavior should be wrapped by SqlToolAdapter rather than removed immediately."

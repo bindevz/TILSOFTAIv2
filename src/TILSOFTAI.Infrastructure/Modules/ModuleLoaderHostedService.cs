@@ -10,6 +10,7 @@ namespace TILSOFTAI.Infrastructure.Modules;
 /// PATCH 37.01: DB-first module loading with config fallback.
 /// Tries IModuleActivationProvider (SQL) first; falls back to ModulesOptions.Enabled.
 /// </summary>
+[Obsolete("Module bootstrap hosting is deprecated in Sprint 1. Plan migration to capability-pack loading.")]
 public sealed class ModuleLoaderHostedService : IHostedService
 {
     private readonly IModuleLoader _moduleLoader;

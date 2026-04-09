@@ -1,0 +1,117 @@
+version: "3.0"
+name: "TILSOFTAI V3 Migration Task Plan"
+execution_model: "Incremental refactor with compatibility wrappers"
+tasks:
+  - id: "MIG-001"
+    title: "Create V3 architecture documentation baseline"
+    objective: "Add architecture_v3, migration_v2_to_v3, and a new V3 README draft."
+    actions:
+      - "Create docs/architecture_v3.md"
+      - "Create docs/migration_v2_to_v3.md"
+      - "Prepare README rewrite draft"
+    done_when:
+      - "The repository has V3 architecture docs checked in."
+  - id: "MIG-002"
+    title: "Stabilize configuration and secret hygiene"
+    objective: "Remove secret-like committed values and align config with enterprise practice."
+    actions:
+      - "Replace concrete connection strings and endpoints in tracked config with placeholders"
+      - "Create or refresh appsettings.Sample.json"
+      - "Document local override and environment variable usage"
+    done_when:
+      - "Tracked config files contain placeholders only."
+  - id: "MIG-003"
+    title: "Introduce Supervisor abstractions"
+    objective: "Add the new orchestration center without breaking current runtime."
+    actions:
+      - "Create ISupervisorRuntime"
+      - "Create SupervisorRequest, SupervisorResult, SupervisorStreamEvent"
+      - "Create SupervisorRuntime skeleton"
+      - "Adapt current orchestration engine as compatibility layer"
+    done_when:
+      - "Current chat flow can be routed through SupervisorRuntime or a compatibility facade."
+  - id: "MIG-004"
+    title: "Introduce agent abstractions"
+    objective: "Make domain agents first-class runtime concepts."
+    actions:
+      - "Create IDomainAgent and AgentExecutionContext"
+      - "Create AgentRegistry"
+      - "Create initial agent routing policy"
+      - "Create AccountingAgent and WarehouseAgent skeletons"
+    done_when:
+      - "At least two agents are loadable and routable."
+  - id: "MIG-005"
+    title: "Introduce capability and adapter abstractions"
+    objective: "Break the hard dependency on SQL as the only execution model."
+    actions:
+      - "Create IToolAdapter and related contracts"
+      - "Create CapabilityDefinition and CapabilityResolver"
+      - "Create ToolAdapterRegistry"
+      - "Create SqlToolAdapter by wrapping existing SQL executor"
+    done_when:
+      - "Existing safe SQL tool execution flows through SqlToolAdapter."
+  - id: "MIG-006"
+    title: "Promote approval flow into Approval Engine"
+    objective: "Transform current write-action flow into a generic approval-first subsystem."
+    actions:
+      - "Create ProposedAction and approval contracts"
+      - "Create IApprovalEngine"
+      - "Move existing approval logic into ApprovalEngine"
+      - "Keep current validation behaviors"
+    done_when:
+      - "Write requests are represented as ProposedAction and routed through ApprovalEngine."
+  - id: "MIG-007"
+    title: "Replace module-centric runtime ownership"
+    objective: "Reduce module sprawl and move runtime ownership to agents + capability packs."
+    actions:
+      - "Create CapabilityPackLoader"
+      - "Move runtime registration responsibilities away from ITilsoftModule-centric ownership"
+      - "Keep module assemblies only if they still serve packaging/distribution value"
+    done_when:
+      - "Runtime language and docs are agent/capability-based rather than module-based."
+  - id: "MIG-008"
+    title: "Add non-SQL adapter support"
+    objective: "Make the platform ERP/application agnostic."
+    actions:
+      - "Create RestApiToolAdapter"
+      - "Create FileImportAdapter"
+      - "Create QueueActionAdapter"
+      - "Create connection catalog contracts"
+    done_when:
+      - "The codebase can integrate a system without introducing SQL-centric assumptions."
+  - id: "MIG-009"
+    title: "Cleanup legacy V2-only code"
+    objective: "Delete unused wrappers, duplicate registrations, and dead module-era runtime code."
+    actions:
+      - "Find dead or duplicated DI registrations"
+      - "Delete obsolete types that are fully replaced"
+      - "Rename lingering V2-centric types where necessary"
+      - "Update tests and docs after deletion"
+    done_when:
+      - "No obsolete V2-only runtime ownership remains except intentional compatibility facades."
+  - id: "MIG-010"
+    title: "Finalize V3 README and documentation pack"
+    objective: "Ensure the repository communicates the new model correctly."
+    actions:
+      - "Replace README with V3 text"
+      - "Add agent catalog doc"
+      - "Add tool adapter catalog doc"
+      - "Add approval engine doc"
+      - "Add cleanup report"
+    done_when:
+      - "A new engineer reading the repo sees V3, not V2."
+task_execution_order:
+  - "MIG-001"
+  - "MIG-002"
+  - "MIG-003"
+  - "MIG-004"
+  - "MIG-005"
+  - "MIG-006"
+  - "MIG-007"
+  - "MIG-008"
+  - "MIG-009"
+  - "MIG-010"
+agent_behavior:
+  - "After each task, summarize changed files and residual debt."
+  - "Do not delete behavior before replacement exists."
+  - "Prefer explicit migrations and compatibility notes."

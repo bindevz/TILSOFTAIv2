@@ -1,0 +1,23 @@
+Implement Sprint 3 only.
+
+Sprint 3 goals:
+- evolve current approval flow into ApprovalEngine
+- ensure every write intent becomes a ProposedAction or approval-required action
+- prevent direct write execution paths outside ApprovalEngine
+- keep auditability and tenant safety
+
+Repository-specific requirements:
+- reuse valid concepts from the current approval flow
+- do not keep direct write execution entry points without policy checks
+- document every execution path that can still mutate external systems
+- ensure domain agents do not execute writes directly
+
+If any legacy write path remains, explicitly identify and justify it.
+
+Required output:
+- files created
+- files modified
+- files deleted
+- all remaining write paths
+- all new approval-enforced paths
+- migration blockers still unresolved

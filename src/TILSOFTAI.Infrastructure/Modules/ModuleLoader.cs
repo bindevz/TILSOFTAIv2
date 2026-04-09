@@ -5,6 +5,7 @@ using TILSOFTAI.Orchestration.Tools;
 
 namespace TILSOFTAI.Infrastructure.Modules;
 
+[Obsolete("Reflection-driven module loading is deprecated in Sprint 1. Plan migration to capability-pack loading.")]
 public sealed class ModuleLoader : IModuleLoader
 {
     private readonly ILogger<ModuleLoader> _logger;

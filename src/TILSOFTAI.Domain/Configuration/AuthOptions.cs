@@ -2,6 +2,12 @@ namespace TILSOFTAI.Domain.Configuration;
 
 public sealed class AuthOptions
 {
+    /// <summary>
+    /// Master switch for JWT authentication. When false, auth is bypassed (anonymous access).
+    /// Default: true for backward compatibility.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
     public string Issuer { get; set; } = string.Empty;
     public string Audience { get; set; } = string.Empty;
     public string JwksUrl { get; set; } = string.Empty;

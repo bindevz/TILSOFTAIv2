@@ -76,6 +76,7 @@ using System.Threading.RateLimiting;
 using TILSOFTAI.Api.Options;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
 using Microsoft.IdentityModel.Tokens;
+using TILSOFTAI.Tools.Abstractions;
 
 namespace TILSOFTAI.Api.Extensions;
 
@@ -169,6 +170,7 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<DiagnosticsToolHandler>();
         services.AddSingleton<IToolHandler, ToolHandlerRouter>();
         services.AddSingleton<ISqlExecutor, SqlExecutor>();
+        services.AddSingleton<IToolAdapter, SqlToolAdapter>();
         services.AddSingleton<SqlContractValidator>();
         services.AddHostedService<SqlContractValidatorHostedService>();
         services.AddSingleton<IConversationStore, SqlConversationStore>();
@@ -238,14 +240,33 @@ public static class AddTilsoftAiExtensions
         services.AddHostedService<ErrorCatalogCoverageGuard>();
 
         RegisterCaching(services, configuration);
-        ConfigureAuthentication(services);
-
-        services.AddAuthorization(options =>
+        // Conditionally configure authentication based on Auth:Enabled
+        var authEnabled = configuration.GetValue<bool>("Auth:Enabled", true);
+        if (authEnabled)
         {
-            options.FallbackPolicy = new AuthorizationPolicyBuilder()
-                .RequireAuthenticatedUser()
-                .Build();
-        });
+            ConfigureAuthentication(services);
+
+            services.AddAuthorization(options =>
+            {
+                options.FallbackPolicy = new AuthorizationPolicyBuilder()
+                    .RequireAuthenticatedUser()
+                    .Build();
+            });
+        }
+        else
+        {
+            // Auth disabled: register dummy auth scheme that accepts all requests
+            services.AddAuthentication("NoAuth")
+                .AddScheme<AuthenticationSchemeOptions, NoAuthHandler>("NoAuth", _ => { });
+
+            services.AddAuthorization(options =>
+            {
+                options.DefaultPolicy = new AuthorizationPolicyBuilder("NoAuth")
+                    .RequireAssertion(_ => true)
+                    .Build();
+                options.FallbackPolicy = null; // Allow anonymous access
+            });
+        }
         
         // Register RateLimiter configurator and service
         services.AddSingleton<IConfigureOptions<RateLimiterOptions>, ConfigureRateLimiterOptions>();
@@ -338,13 +359,13 @@ public static class AddTilsoftAiExtensions
 
         services.AddOptions<AuthOptions>()
             .Bind(configuration.GetSection(ConfigurationSectionNames.Auth))
-            .Validate(options => !string.IsNullOrWhiteSpace(options.Issuer), "Auth:Issuer is required.")
-            .Validate(options => !string.IsNullOrWhiteSpace(options.Audience), "Auth:Audience is required.")
+            .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.Issuer), "Auth:Issuer is required when Auth:Enabled=true.")
+            .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.Audience), "Auth:Audience is required when Auth:Enabled=true.")
             // JwksUrl is optional - if empty, JWT signing key refresh will be skipped
             // .Validate(options => !string.IsNullOrWhiteSpace(options.JwksUrl), "Auth:JwksUrl is required.")
-            .Validate(options => !string.IsNullOrWhiteSpace(options.TenantClaimName), "Auth:TenantClaimName is required.")
-            .Validate(options => !string.IsNullOrWhiteSpace(options.UserIdClaimName), "Auth:UserIdClaimName is required.")
-            .Validate(options => !string.IsNullOrWhiteSpace(options.TrustedGatewayClaimName), "Auth:TrustedGatewayClaimName is required.")
+            .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TenantClaimName), "Auth:TenantClaimName is required when Auth:Enabled=true.")
+            .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.UserIdClaimName), "Auth:UserIdClaimName is required when Auth:Enabled=true.")
+            .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.TrustedGatewayClaimName), "Auth:TrustedGatewayClaimName is required when Auth:Enabled=true.")
             .Validate(options => options.JwksRefreshIntervalMinutes > 0, "Auth:JwksRefreshIntervalMinutes must be > 0.")
             .Validate(options => options.JwksRefreshFailureBackoffSeconds > 0, "Auth:JwksRefreshFailureBackoffSeconds must be > 0.")
             .Validate(options => options.JwksRefreshMaxBackoffSeconds >= options.JwksRefreshFailureBackoffSeconds,
@@ -526,7 +547,8 @@ public static class AddTilsoftAiExtensions
                 var metrics = sp.GetRequiredService<IMetricsService>();
                 var circuitry = sp.GetRequiredService<TILSOFTAI.Infrastructure.Resilience.CircuitBreakerRegistry>();
                 var retries = sp.GetRequiredService<TILSOFTAI.Infrastructure.Resilience.RetryPolicyRegistry>();
-                return new RedisCacheProvider(cache, TimeSpan.FromMinutes(options.DefaultTtlMinutes), metrics, circuitry, retries);
+                var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<RedisCacheProvider>();
+                return new RedisCacheProvider(cache, TimeSpan.FromMinutes(options.DefaultTtlMinutes), metrics, circuitry, retries, logger);
             });
         }
         else

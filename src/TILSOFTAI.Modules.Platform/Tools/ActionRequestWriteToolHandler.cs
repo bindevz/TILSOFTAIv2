@@ -1,17 +1,17 @@
 using System.Text.Json;
+using TILSOFTAI.Approvals;
 using TILSOFTAI.Domain.ExecutionContext;
-using TILSOFTAI.Orchestration.Actions;
 using TILSOFTAI.Orchestration.Tools;
 
 namespace TILSOFTAI.Modules.Platform.Tools;
 
 public sealed class ActionRequestWriteToolHandler : IToolHandler
 {
-    private readonly ActionApprovalService _actionApprovalService;
+    private readonly IApprovalEngine _approvalEngine;
 
-    public ActionRequestWriteToolHandler(ActionApprovalService actionApprovalService)
+    public ActionRequestWriteToolHandler(IApprovalEngine approvalEngine)
     {
-        _actionApprovalService = actionApprovalService ?? throw new ArgumentNullException(nameof(actionApprovalService));
+        _approvalEngine = approvalEngine ?? throw new ArgumentNullException(nameof(approvalEngine));
     }
 
     public async Task<string> ExecuteAsync(
@@ -48,19 +48,27 @@ public sealed class ActionRequestWriteToolHandler : IToolHandler
         var argsJson = argsJsonElement.GetString() ?? string.Empty;
 
         // Create pending action request (does NOT execute)
-        var request = await _actionApprovalService.CreateAsync(
-            context,
-            proposedToolName,
-            proposedSpName,
-            argsJson,
+        var request = await _approvalEngine.CreateAsync(
+            new ProposedAction
+            {
+                ActionType = "write",
+                AgentId = "platform",
+                TargetSystem = "sql",
+                CapabilityKey = proposedToolName,
+                PayloadJson = argsJson,
+                ApprovalRequirement = "required",
+                ToolName = proposedToolName,
+                StoredProcedure = proposedSpName
+            },
+            ApprovalContext.FromExecutionContext(context, "platform"),
             cancellationToken);
 
         var result = new
         {
             actionId = request.ActionId,
             status = request.Status,
-            proposedSpName = request.ProposedSpName,
-            proposedToolName = request.ProposedToolName,
+            proposedSpName = request.StoredProcedure,
+            proposedToolName = request.ToolName ?? request.CapabilityKey,
             message = "Action request created successfully. Pending human approval."
         };
 
