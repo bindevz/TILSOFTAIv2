@@ -1,0 +1,125 @@
+version: 1
+name: sprint_4_checklist
+description: >-
+  Sprint 4 execution checklist for TILSOFTAIv2. This checklist is designed for the
+  current repository state after Sprint 3 and focuses on one real domain-native path,
+  approval hardening, auth hardening, documentation alignment, and compatibility debt reduction.
+
+repo:
+  name: bindevz/TILSOFTAIv2
+  current_state_summary:
+    - SupervisorRuntime exists and routes requests.
+    - AccountingAgent and WarehouseAgent exist as domain skeletons.
+    - LegacyChatPipelineBridge remains the shared transitional execution bridge.
+    - ApprovalEngine and IWriteActionGuard already exist.
+    - SqlToolAdapter is write-guarded.
+    - README is not fully aligned with current runtime truth.
+    - Chat endpoints still expose anonymous access by default.
+
+sprint_goal:
+  primary: >-
+    Implement one real domain-native Warehouse execution path and reduce dependency on
+    LegacyChatPipelineBridge for that path.
+  secondary:
+    - Add end-to-end approval lifecycle tests.
+    - Tighten chat endpoint authentication behavior.
+    - Align README and docs to Sprint 4 runtime truth.
+
+must_do:
+  capability_model:
+    - Add a concrete capability descriptor model.
+    - Add a minimal capability registry or provider usable by agents at runtime.
+    - Ensure capability metadata includes:
+        - capability_key
+        - domain
+        - adapter_type
+        - operation
+        - target_system_id
+        - integration_binding
+        - execution_mode
+    - Avoid speculative generic framework layers.
+
+  warehouse_native_path:
+    - Add at least one Warehouse read-only capability.
+    - Update WarehouseAgent to resolve and execute the capability natively.
+    - Use ToolAdapterRegistry for adapter invocation.
+    - Keep LegacyChatPipelineBridge as fallback only when no capability matches.
+    - Do not let WarehouseAgent call SqlExecutor directly.
+
+  approval_hardening:
+    - Preserve ApprovalEngine as write orchestration owner.
+    - Preserve IWriteActionGuard as adapter-level enforcement.
+    - Add end-to-end tests for:
+        - create_action
+        - approve_action
+        - execute_action
+        - re_execute_should_fail
+        - pending_should_not_execute
+        - rejected_should_not_execute
+
+  auth_hardening:
+    - Remove AllowAnonymous as default production behavior from chat endpoints.
+    - If anonymous access is needed for dev or testing, gate it behind config or environment.
+    - Update docs to reflect actual auth behavior.
+
+  documentation:
+    - Rewrite README to reflect Sprint 4 runtime truth.
+    - Describe:
+        - SupervisorRuntime
+        - Domain Agents
+        - Warehouse native execution path
+        - ApprovalEngine and write guard
+        - compatibility bridge status
+        - limitations and next steps
+
+  cleanup:
+    - Do not add new logic to LegacyChatPipelineBridge beyond transitional fallback concerns.
+    - Do not add new domain logic to OrchestrationEngine.
+    - Mark compatibility components with removal conditions.
+    - Remove obviously obsolete transitional code only when safe.
+
+must_not_do:
+  - Add new domain agents.
+  - Add planner or graph orchestration.
+  - Add multi-agent collaboration in this sprint.
+  - Expand module-centric runtime.
+  - Reintroduce direct write execution outside ApprovalEngine.
+  - Keep WarehouseAgent fully bridge-dependent.
+  - Rewrite everything at once.
+
+target_files_or_areas:
+  likely_modify:
+    - src/TILSOFTAI.Orchestration/Supervisor/SupervisorRuntime.cs
+    - src/TILSOFTAI.Orchestration/Agents/Domain/WarehouseAgent.cs
+    - src/TILSOFTAI.Orchestration/Agents/Abstractions/*
+    - src/TILSOFTAI.Orchestration/Capabilities/*
+    - src/TILSOFTAI.Infrastructure/Sql/SqlToolAdapter.cs
+    - src/TILSOFTAI.Orchestration/Approvals/*
+    - src/TILSOFTAI.Api/Controllers/ChatController.cs
+    - README.md
+    - docs/*
+  avoid_large_changes_to:
+    - broad accounting domain behavior
+    - planner/memory subsystems
+    - global module removal
+    - wide API surface redesign
+
+acceptance_criteria:
+  - WarehouseAgent has at least one real native read-only execution path.
+  - That path uses a capability definition and ToolAdapterRegistry.
+  - That path does not route through LegacyChatPipelineBridge.
+  - Approval lifecycle has end-to-end coverage.
+  - Chat endpoint auth is hardened.
+  - README reflects actual Sprint 4 runtime state.
+  - Remaining compatibility paths are explicitly documented as transitional.
+
+required_output:
+  - summary_of_changes
+  - files_created
+  - files_modified
+  - files_deleted
+  - native_paths_added
+  - compatibility_paths_remaining
+  - safe_deletions_explained
+  - risks
+  - next_sprint_followups

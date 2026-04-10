@@ -1,0 +1,40 @@
+Review the Sprint 4 implementation against the actual TILSOFTAIv2 target for this sprint.
+
+You must review for architectural truth, not just code compilation.
+
+Check specifically:
+1. Did WarehouseAgent gain at least one real native execution path?
+2. Does that native path bypass LegacyChatPipelineBridge for the supported capability?
+3. Is capability resolution explicit and reusable?
+4. Did the implementation avoid direct domain-to-SqlExecutor coupling?
+5. Does ApprovalEngine remain the write orchestration owner?
+6. Does SqlToolAdapter still require write approval metadata?
+7. Were end-to-end approval lifecycle tests added?
+8. Is ChatController still anonymously open by default?
+9. Does README reflect Sprint 4 runtime truth?
+10. Did any compatibility component gain more architectural weight instead of less?
+
+You must identify:
+- architecture drift still present
+- code that should still be deleted or reduced
+- fake progress (renames without real runtime change)
+- any new debt introduced in Sprint 4
+- what must happen in Sprint 5
+
+Required output format:
+1. Sprint 4 objectives achieved
+2. Native execution paths confirmed
+3. Compatibility paths still remaining
+4. Security posture assessment
+5. Approval-governance assessment
+6. Documentation alignment assessment
+7. Code that should still be reduced or removed
+8. Risks
+9. Exact Sprint 5 priorities
+
+Important review rules:
+- Do not praise scaffolding as completion.
+- Do not count fallback logic as native execution.
+- Do not count docs-only change as architectural progress.
+- Do not accept anonymous-by-default production runtime.
+- Do not ignore compatibility debt.

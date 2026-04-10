@@ -6,6 +6,7 @@ using TILSOFTAI.Agents.Abstractions;
 using TILSOFTAI.Approvals;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Supervisor.Classification;
+using TILSOFTAI.Tools.Abstractions;
 
 namespace TILSOFTAI.Supervisor;
 
@@ -14,17 +15,20 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
     private readonly IIntentClassifier _intentClassifier;
     private readonly IAgentRegistry _agentRegistry;
     private readonly IApprovalEngine _approvalEngine;
+    private readonly IToolAdapterRegistry _toolAdapterRegistry;
     private readonly ILogger<SupervisorRuntime> _logger;
 
     public SupervisorRuntime(
         IIntentClassifier intentClassifier,
         IAgentRegistry agentRegistry,
         IApprovalEngine approvalEngine,
+        IToolAdapterRegistry toolAdapterRegistry,
         ILogger<SupervisorRuntime> logger)
     {
         _intentClassifier = intentClassifier ?? throw new ArgumentNullException(nameof(intentClassifier));
         _agentRegistry = agentRegistry ?? throw new ArgumentNullException(nameof(agentRegistry));
         _approvalEngine = approvalEngine ?? throw new ArgumentNullException(nameof(approvalEngine));
+        _toolAdapterRegistry = toolAdapterRegistry ?? throw new ArgumentNullException(nameof(toolAdapterRegistry));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -104,7 +108,7 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
         // Step 4: Execute agent
         var result = await selectedAgent.ExecuteAsync(
             task,
-            AgentExecutionContext.FromRuntimeContext(ctx, _approvalEngine),
+            AgentExecutionContext.FromRuntimeContext(ctx, _approvalEngine, _toolAdapterRegistry),
             ct);
 
         sw.Stop();

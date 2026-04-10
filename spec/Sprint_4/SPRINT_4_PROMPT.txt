@@ -1,0 +1,137 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 4.
+
+Current repository reality:
+- SupervisorRuntime is real and already classifies, routes, and executes through agents.
+- AccountingAgent and WarehouseAgent exist, but they are still structural skeletons.
+- LegacyChatPipelineBridge still acts as the shared compatibility path for domain agents that do not yet have native execution.
+- ApprovalEngine exists and SqlToolAdapter write execution is already guarded by IWriteActionGuard.
+- The repository is still transitional: V3 architecture exists, but at least part of runtime behavior still depends on legacy pipeline execution.
+- README and runtime truth are not fully aligned.
+- ChatController still exposes anonymous access in the current edge path and must be hardened.
+
+Sprint 4 objective:
+Move the repository from agent-routed legacy execution into the first real domain-native V3 execution path, while hardening write governance, tightening edge security, and aligning documentation with runtime truth.
+
+Primary sprint goal:
+Implement one real domain-native execution path in WarehouseAgent.
+
+This sprint is successful only if WarehouseAgent can execute at least one real read-only capability without depending on LegacyChatPipelineBridge for that path.
+
+Target architecture principles for Sprint 4:
+1. SupervisorRuntime remains the orchestration owner.
+2. Domain agents own domain runtime decisions.
+3. Tool adapters own integration behavior.
+4. ApprovalEngine owns write governance.
+5. LegacyChatPipelineBridge remains fallback-only, not the primary execution path.
+6. SQL is allowed as an adapter implementation, but not as a domain runtime owner.
+7. Capability contracts must be explicit.
+
+Non-negotiable rules:
+1. Do not add new domain agents in this sprint.
+2. Do not introduce planner-style orchestration.
+3. Do not expand module-centric runtime.
+4. Do not keep WarehouseAgent fully dependent on LegacyChatPipelineBridge.
+5. Do not allow write execution outside ApprovalEngine plus adapter-level guard.
+6. Do not solve everything at once; implement one real path cleanly.
+7. Do not leave documentation stale when runtime changed.
+8. Do not keep anonymous chat access as the default production path.
+9. Do not add abstractions that have no immediate usage in this sprint.
+10. Prefer deleting or de-emphasizing incorrect transitional code over layering more wrappers.
+
+Sprint 4 scope:
+A. Warehouse domain-native read path
+- Introduce a real capability model usable by WarehouseAgent.
+- Add at least one Warehouse capability that resolves into a real adapter call.
+- WarehouseAgent must execute that capability directly through the adapter layer.
+- LegacyChatPipelineBridge may remain as fallback only when no native capability matches.
+
+B. Capability model
+- Add a concrete capability descriptor or registry usable at runtime.
+- Capability metadata must include:
+  - capability key
+  - domain
+  - adapter type
+  - operation
+  - target system id
+  - integration binding metadata (e.g. storedProcedure or endpoint)
+  - whether the capability is read-only or write-related
+- WarehouseAgent must use this model rather than hard-coded ad hoc branching where possible.
+
+C. Approval hardening
+- Preserve current ApprovalEngine and IWriteActionGuard design.
+- Add end-to-end tests for create -> approve -> execute -> reject or re-execute failure paths.
+- Ensure write execution continues to require approvedActionId.
+
+D. Edge security hardening
+- Remove AllowAnonymous as the default production behavior from chat endpoints.
+- If anonymous access is still needed for dev/testing, it must be explicit and environment/config gated.
+- Documentation must reflect the actual policy.
+
+E. Documentation alignment
+- Rewrite README so it reflects Sprint 4 truth.
+- README must describe:
+  - current runtime shape
+  - SupervisorRuntime
+  - Domain Agents
+  - Warehouse native path
+  - ApprovalEngine + write guard
+  - transitional compatibility paths still remaining
+  - current limitations
+
+F. Compatibility debt reduction
+- OrchestrationEngine must remain compatibility-oriented, not regain architectural ownership.
+- LegacyChatPipelineBridge must not grow new domain logic.
+- Mark remaining transitional components with explicit removal conditions.
+
+Recommended implementation order:
+1. Introduce capability descriptor / registry contracts and minimal runtime implementation.
+2. Implement Warehouse capability definitions.
+3. Update WarehouseAgent to execute at least one capability natively.
+4. Keep fallback to LegacyChatPipelineBridge only when capability resolution fails.
+5. Add unit and integration tests for native path.
+6. Add approval flow end-to-end tests.
+7. Harden chat endpoint auth.
+8. Rewrite README and relevant docs.
+9. Trim compatibility debt where safe.
+
+Concrete acceptance criteria:
+1. There is at least one Warehouse capability that does not use LegacyChatPipelineBridge.
+2. WarehouseAgent can execute that capability through ToolAdapterRegistry.
+3. The native path is covered by tests.
+4. ApprovalEngine has end-to-end tests for write lifecycle.
+5. Anonymous chat access is no longer the default production path.
+6. README describes Sprint 4 runtime truth.
+7. Compatibility paths are explicitly identified as transitional.
+
+Suggested capability candidates:
+- warehouse.inventory.summary
+- warehouse.inventory.by-item
+- warehouse.receipts.recent
+
+Preferred implementation style:
+- explicit contracts
+- small cohesive services
+- minimal viable capability registry
+- adapter invocation through well-defined request objects
+- no speculative framework work
+
+Required reporting after implementation:
+1. Summary of completed Sprint 4 work
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Native execution paths added
+6. Compatibility paths still kept temporarily
+7. Exact reason each kept compatibility path still exists
+8. Risks introduced
+9. Remaining Sprint 5 follow-up work
+
+Definition of done:
+- Warehouse native execution exists and is real
+- no fake domain ownership is introduced
+- no new direct write path bypasses approval governance
+- code is cleaner than before
+- runtime truth and docs match
+- security posture is tighter than before

@@ -1,0 +1,67 @@
+version: 1
+name: sprint_4_definition_of_done
+description: >-
+  Definition of Done for Sprint 4 in TILSOFTAIv2. Completion requires a real domain-native
+  execution path, improved security posture, approval-flow validation, and documentation-runtime alignment.
+
+done_when:
+  native_execution:
+    required: true
+    criteria:
+      - At least one Warehouse capability executes natively without LegacyChatPipelineBridge.
+      - WarehouseAgent resolves and runs the capability through ToolAdapterRegistry.
+      - No direct SqlExecutor dependency is introduced into WarehouseAgent.
+      - Native execution is validated by automated tests.
+
+  capability_model:
+    required: true
+    criteria:
+      - Capability metadata exists as a first-class runtime concept.
+      - Capability resolution is explicit, not hidden in scattered if/else branches.
+      - Capability contract is sufficient for future adapter expansion.
+
+  approval_governance:
+    required: true
+    criteria:
+      - ApprovalEngine remains the only valid write orchestration owner.
+      - Adapter-level write guard still blocks unapproved execution.
+      - End-to-end approval tests cover success and failure lifecycle cases.
+
+  security:
+    required: true
+    criteria:
+      - Production chat/runtime entry points are not anonymous by default.
+      - Any development/testing anonymous mode is explicit and isolated.
+      - Runtime behavior and documentation match.
+
+  documentation:
+    required: true
+    criteria:
+      - README describes Sprint 4 runtime truth.
+      - Transitional components are documented honestly.
+      - Current limitations are listed.
+      - Next-step technical debt is clearly called out.
+
+  cleanup:
+    required: true
+    criteria:
+      - No new architectural debt is introduced into LegacyChatPipelineBridge.
+      - OrchestrationEngine remains compatibility-oriented.
+      - Transitional paths are either reduced or explicitly marked for removal.
+      - Code added in Sprint 4 has clear ownership and purpose.
+
+must_fail_if:
+  - WarehouseAgent still depends exclusively on LegacyChatPipelineBridge.
+  - No real capability model exists.
+  - Write execution can occur without approvedActionId.
+  - Chat endpoints remain anonymously open by default in production.
+  - README still reflects only Sprint 1 transitional truth.
+  - Sprint 4 adds broad new architecture without delivering one real native path.
+
+evidence_required:
+  - file_level_change_report
+  - test_list_and_coverage_summary
+  - explanation_of_native_path
+  - auth_behavior_summary
+  - list_of_remaining_transitional_components
+  - updated_readme_reference

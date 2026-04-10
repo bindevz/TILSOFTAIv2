@@ -4,14 +4,17 @@ using TILSOFTAI.Agents.Abstractions;
 namespace TILSOFTAI.Agents.Domain;
 
 /// <summary>
-/// Abstract base for Sprint 2 domain agent skeletons.
-/// Delegates execution to LegacyChatPipelineBridge.
-/// Subclasses define identity (AgentId, OwnedDomains) and CanHandle routing.
+/// Abstract base for domain agent skeletons.
+/// Default execution delegates to LegacyChatPipelineBridge.
+/// Subclasses may override ExecuteAsync to implement domain-native execution (Sprint 4+).
 /// </summary>
 public abstract class DomainAgentBase : IDomainAgent
 {
     private readonly LegacyChatPipelineBridge _bridge;
     private readonly ILogger _logger;
+
+    protected LegacyChatPipelineBridge Bridge => _bridge;
+    protected ILogger Logger => _logger;
 
     protected DomainAgentBase(LegacyChatPipelineBridge bridge, ILogger logger)
     {
@@ -40,7 +43,7 @@ public abstract class DomainAgentBase : IDomainAgent
         return false;
     }
 
-    public async Task<AgentResult> ExecuteAsync(AgentTask task, AgentExecutionContext context, CancellationToken ct)
+    public virtual async Task<AgentResult> ExecuteAsync(AgentTask task, AgentExecutionContext context, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(context);

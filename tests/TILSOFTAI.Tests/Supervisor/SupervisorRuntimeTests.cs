@@ -6,6 +6,7 @@ using TILSOFTAI.Approvals;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Supervisor;
 using TILSOFTAI.Supervisor.Classification;
+using TILSOFTAI.Tools.Abstractions;
 using Xunit;
 
 namespace TILSOFTAI.Tests.Supervisor;
@@ -34,8 +35,9 @@ public sealed class SupervisorRuntimeTests
             .ReturnsAsync(IntentClassification.Unclassified("test"));
 
         var approvalEngine = new Mock<IApprovalEngine>();
+        var adapterRegistry = new Mock<IToolAdapterRegistry>();
         var logger = new Mock<ILogger<SupervisorRuntime>>();
-        var runtime = new SupervisorRuntime(classifier.Object, registry.Object, approvalEngine.Object, logger.Object);
+        var runtime = new SupervisorRuntime(classifier.Object, registry.Object, approvalEngine.Object, adapterRegistry.Object, logger.Object);
 
         var result = await runtime.RunAsync(
             new SupervisorRequest
@@ -63,8 +65,9 @@ public sealed class SupervisorRuntimeTests
             .ReturnsAsync(IntentClassification.Unclassified("test"));
 
         var approvalEngine = new Mock<IApprovalEngine>();
+        var adapterRegistry = new Mock<IToolAdapterRegistry>();
         var logger = new Mock<ILogger<SupervisorRuntime>>();
-        var runtime = new SupervisorRuntime(classifier.Object, registry.Object, approvalEngine.Object, logger.Object);
+        var runtime = new SupervisorRuntime(classifier.Object, registry.Object, approvalEngine.Object, adapterRegistry.Object, logger.Object);
 
         var result = await runtime.RunAsync(
             new SupervisorRequest { Input = "show receivables" },
@@ -103,8 +106,9 @@ public sealed class SupervisorRuntimeTests
             });
 
         var approvalEngine = new Mock<IApprovalEngine>();
+        var adapterRegistry = new Mock<IToolAdapterRegistry>();
         var logger = new Mock<ILogger<SupervisorRuntime>>();
-        var runtime = new SupervisorRuntime(classifier.Object, registry.Object, approvalEngine.Object, logger.Object);
+        var runtime = new SupervisorRuntime(classifier.Object, registry.Object, approvalEngine.Object, adapterRegistry.Object, logger.Object);
 
         var result = await runtime.RunAsync(
             new SupervisorRequest { Input = "check inventory levels" },

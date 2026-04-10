@@ -4,6 +4,7 @@ using TILSOFTAI.Agents.Abstractions;
 using TILSOFTAI.Agents.Domain;
 using TILSOFTAI.Approvals;
 using TILSOFTAI.Orchestration.Analytics;
+using TILSOFTAI.Orchestration.Capabilities;
 using TILSOFTAI.Orchestration.Pipeline;
 using TILSOFTAI.Supervisor;
 using TILSOFTAI.Supervisor.Classification;
@@ -15,20 +16,25 @@ public static class OrchestrationServiceCollectionExtensions
 {
     public static IServiceCollection AddOrchestrationEngine(this IServiceCollection services)
     {
-        // Sprint 2: Supervisor runtime with intent classification
+        // Supervisor runtime with intent classification
         services.AddSingleton<IIntentClassifier, KeywordIntentClassifier>();
         services.AddSingleton<ISupervisorRuntime, SupervisorRuntime>();
 
-        // Sprint 1 compatibility facade (deprecated)
+        // Sprint 1 compatibility facade (deprecated — to be removed when all controllers use ISupervisorRuntime)
         services.AddSingleton<IOrchestrationEngine, OrchestrationEngine>();
 
-        // Sprint 2: Legacy bridge — single shared pipeline delegation point
+        // Legacy bridge — transitional shared pipeline delegation point
+        // Sprint 4: only used as fallback when no native capability matches
         services.AddSingleton<LegacyChatPipelineBridge>();
         services.AddSingleton<ChatPipeline>();
 
-        // Sprint 2: Domain agents
-        services.AddSingleton<IDomainAgent, AccountingAgent>();
-        services.AddSingleton<IDomainAgent, WarehouseAgent>();
+        // Sprint 4: Capability registry — seeded with warehouse capabilities
+        services.AddSingleton<ICapabilityRegistry>(
+            new InMemoryCapabilityRegistry(WarehouseCapabilities.All));
+
+        // Domain agents
+        services.AddSingleton<IDomainAgent, AccountingAgent>();   // still bridge-only (Sprint 4)
+        services.AddSingleton<IDomainAgent, WarehouseAgent>();    // Sprint 4: native capability path
         services.AddSingleton<IDomainAgent, LegacyChatDomainAgent>(); // catch-all fallback
 
         // Agent registry
