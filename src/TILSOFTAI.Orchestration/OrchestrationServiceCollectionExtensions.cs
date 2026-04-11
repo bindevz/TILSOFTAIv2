@@ -21,20 +21,31 @@ public static class OrchestrationServiceCollectionExtensions
         services.AddSingleton<ISupervisorRuntime, SupervisorRuntime>();
 
         // Sprint 1 compatibility facade (deprecated — to be removed when all controllers use ISupervisorRuntime)
+        #pragma warning disable CS0618 // Obsolete
         services.AddSingleton<IOrchestrationEngine, OrchestrationEngine>();
+        #pragma warning restore CS0618
 
         // Legacy bridge — transitional shared pipeline delegation point
-        // Sprint 4: only used as fallback when no native capability matches
+        // Sprint 5: only used as fallback when no native capability matches for either domain
         services.AddSingleton<LegacyChatPipelineBridge>();
         services.AddSingleton<ChatPipeline>();
 
-        // Sprint 4: Capability registry — seeded with warehouse capabilities
-        services.AddSingleton<ICapabilityRegistry>(
-            new InMemoryCapabilityRegistry(WarehouseCapabilities.All));
+        // Sprint 5: Capability resolver — structured resolution replacing string matching
+        services.AddSingleton<ICapabilityResolver, StructuredCapabilityResolver>();
+
+        // Sprint 5: Capability sources — static fallbacks + configuration-driven
+        services.AddSingleton<ICapabilitySource>(
+            new StaticCapabilitySource("static-warehouse", WarehouseCapabilities.All));
+        services.AddSingleton<ICapabilitySource>(
+            new StaticCapabilitySource("static-accounting", AccountingCapabilities.All));
+        services.AddSingleton<ICapabilitySource, ConfigurationCapabilitySource>();
+
+        // Sprint 5: Composite capability registry — loads from all ICapabilitySource instances
+        services.AddSingleton<ICapabilityRegistry, CompositeCapabilityRegistry>();
 
         // Domain agents
-        services.AddSingleton<IDomainAgent, AccountingAgent>();   // still bridge-only (Sprint 4)
-        services.AddSingleton<IDomainAgent, WarehouseAgent>();    // Sprint 4: native capability path
+        services.AddSingleton<IDomainAgent, AccountingAgent>();   // Sprint 5: native capability path
+        services.AddSingleton<IDomainAgent, WarehouseAgent>();    // Sprint 4+5: native capability path
         services.AddSingleton<IDomainAgent, LegacyChatDomainAgent>(); // catch-all fallback
 
         // Agent registry

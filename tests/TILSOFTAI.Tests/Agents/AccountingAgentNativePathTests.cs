@@ -13,22 +13,17 @@ using Xunit;
 
 namespace TILSOFTAI.Tests.Agents;
 
-public sealed class WarehouseAgentNativePathTests
+public sealed class AccountingAgentNativePathTests
 {
-    /// <summary>
-    /// Creates a LegacyChatPipelineBridge without calling its constructor.
-    /// This avoids the null-check on ChatPipeline. The instance is only valid
-    /// for native-path tests where Bridge.ExecuteAsync is never called.
-    /// </summary>
     private static LegacyChatPipelineBridge CreateUninitializedBridge() =>
         (LegacyChatPipelineBridge)RuntimeHelpers.GetUninitializedObject(typeof(LegacyChatPipelineBridge));
 
-    private static WarehouseAgent CreateAgent(ICapabilityRegistry? capabilityRegistry = null)
+    private static AccountingAgent CreateAgent(ICapabilityRegistry? capabilityRegistry = null)
     {
-        var capReg = capabilityRegistry ?? new InMemoryCapabilityRegistry(WarehouseCapabilities.All);
+        var capReg = capabilityRegistry ?? new InMemoryCapabilityRegistry(AccountingCapabilities.All);
         var resolver = new StructuredCapabilityResolver(new Mock<ILogger<StructuredCapabilityResolver>>().Object);
-        var logger = new Mock<ILogger<WarehouseAgent>>().Object;
-        return new WarehouseAgent(CreateUninitializedBridge(), capReg, resolver, logger);
+        var logger = new Mock<ILogger<AccountingAgent>>().Object;
+        return new AccountingAgent(CreateUninitializedBridge(), capReg, resolver, logger);
     }
 
     private static AgentExecutionContext CreateContext(IToolAdapterRegistry? adapterRegistry = null)
@@ -46,64 +41,92 @@ public sealed class WarehouseAgentNativePathTests
         };
     }
 
-    // ────────────────────────── Identity ──────────────────────────
+    // ────────────────────── Identity ──────────────────────────
 
     [Fact]
-    public void AgentId_ShouldBeWarehouse()
+    public void AgentId_ShouldBeAccounting()
     {
         var agent = CreateAgent();
-        agent.AgentId.Should().Be("warehouse");
+        agent.AgentId.Should().Be("accounting");
     }
 
     [Fact]
-    public void OwnedDomains_ShouldContainWarehouse()
+    public void OwnedDomains_ShouldContainAccounting()
     {
         var agent = CreateAgent();
-        agent.OwnedDomains.Should().Contain("warehouse");
+        agent.OwnedDomains.Should().Contain("accounting");
     }
 
     [Fact]
-    public void CanHandle_ShouldReturnTrueForWarehouseDomain()
+    public void CanHandle_ShouldReturnTrueForAccountingDomain()
     {
         var agent = CreateAgent();
-        agent.CanHandle(new AgentTask { DomainHint = "warehouse" }).Should().BeTrue();
+        agent.CanHandle(new AgentTask { DomainHint = "accounting" }).Should().BeTrue();
     }
 
     [Fact]
-    public void CanHandle_ShouldReturnFalseForAccountingDomain()
+    public void CanHandle_ShouldReturnFalseForWarehouseDomain()
     {
         var agent = CreateAgent();
-        agent.CanHandle(new AgentTask { DomainHint = "accounting" }).Should().BeFalse();
+        agent.CanHandle(new AgentTask { DomainHint = "warehouse" }).Should().BeFalse();
     }
 
-    // ────────────────────── Capability Resolution ──────────────────────
+    // ────────────────── Capability Resolution via Hint ────────────────────
 
-    [Theory]
-    [InlineData("show me inventory summary", "warehouse.inventory.summary")]
-    [InlineData("warehouse.inventory.by-item", "warehouse.inventory.by-item")]
-    [InlineData("warehouse.receipts.recent", "warehouse.receipts.recent")]
-    [InlineData("show inventory summary report", "warehouse.inventory.summary")]
-    public void ResolveCapability_ShouldMatchKnownCapabilities(string input, string expectedKey)
+    [Fact]
+    public void ResolveCapability_WithExactKeyHint_ShouldMatch()
     {
         var agent = CreateAgent();
-#pragma warning disable CS0618
-        var cap = agent.ResolveCapability(input);
-#pragma warning restore CS0618
+        var task = new AgentTask
+        {
+            Input = "anything",
+            CapabilityHint = new CapabilityRequestHint
+            {
+                CapabilityKey = "accounting.receivables.summary",
+                Domain = "accounting"
+            }
+        };
 
+        var cap = agent.ResolveCapability(task, AccountingCapabilities.All);
         cap.Should().NotBeNull();
-        cap!.CapabilityKey.Should().Be(expectedKey);
+        cap!.CapabilityKey.Should().Be("accounting.receivables.summary");
     }
 
-    [Theory]
-    [InlineData("hello how are you")]
-    [InlineData("what is the weather")]
-    [InlineData("")]
-    public void ResolveCapability_ShouldReturnNullForUnmatchedInput(string input)
+    [Fact]
+    public void ResolveCapability_WithKeywordHint_ShouldMatch()
     {
         var agent = CreateAgent();
-#pragma warning disable CS0618
-        agent.ResolveCapability(input).Should().BeNull();
-#pragma warning restore CS0618
+        var task = new AgentTask
+        {
+            Input = "show me payables summary",
+            CapabilityHint = new CapabilityRequestHint
+            {
+                Domain = "accounting",
+                SubjectKeywords = new[] { "payables", "summary" }
+            }
+        };
+
+        var cap = agent.ResolveCapability(task, AccountingCapabilities.All);
+        cap.Should().NotBeNull();
+        cap!.CapabilityKey.Should().Be("accounting.payables.summary");
+    }
+
+    [Fact]
+    public void ResolveCapability_WithNoMatchHint_ShouldReturnNull()
+    {
+        var agent = CreateAgent();
+        var task = new AgentTask
+        {
+            Input = "hello how are you",
+            CapabilityHint = new CapabilityRequestHint
+            {
+                Domain = "accounting",
+                SubjectKeywords = new[] { "hello", "how" }
+            }
+        };
+
+        var cap = agent.ResolveCapability(task, AccountingCapabilities.All);
+        cap.Should().BeNull();
     }
 
     // ────────────────────── Native Execution Path ──────────────────────
@@ -113,25 +136,35 @@ public sealed class WarehouseAgentNativePathTests
     {
         var mockAdapter = new Mock<IToolAdapter>();
         mockAdapter.Setup(a => a.ExecuteAsync(It.IsAny<ToolExecutionRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ToolExecutionResult.Ok("{\"items\": 42}"));
+            .ReturnsAsync(ToolExecutionResult.Ok("{\"total\": 125000}"));
 
         var mockAdapterRegistry = new Mock<IToolAdapterRegistry>();
         mockAdapterRegistry.Setup(r => r.Resolve("sql")).Returns(mockAdapter.Object);
 
         var agent = CreateAgent();
-        var task = new AgentTask { Input = "show me inventory summary", DomainHint = "warehouse", IntentType = "query" };
+        var task = new AgentTask
+        {
+            Input = "show me receivables summary",
+            DomainHint = "accounting",
+            IntentType = "query",
+            CapabilityHint = new CapabilityRequestHint
+            {
+                Domain = "accounting",
+                SubjectKeywords = new[] { "receivables", "summary" }
+            }
+        };
         var context = CreateContext(mockAdapterRegistry.Object);
 
         var result = await agent.ExecuteAsync(task, context, CancellationToken.None);
 
         result.Success.Should().BeTrue();
-        result.Output.Should().Contain("42");
+        result.Output.Should().Contain("125000");
 
         mockAdapter.Verify(a => a.ExecuteAsync(
             It.Is<ToolExecutionRequest>(r =>
-                r.CapabilityKey == "warehouse.inventory.summary" &&
+                r.CapabilityKey == "accounting.receivables.summary" &&
                 r.Operation == "execute_query" &&
-                r.AgentId == "warehouse" &&
+                r.AgentId == "accounting" &&
                 r.SystemId == "sql"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -147,7 +180,16 @@ public sealed class WarehouseAgentNativePathTests
         mockAdapterRegistry.Setup(r => r.Resolve("sql")).Returns(mockAdapter.Object);
 
         var agent = CreateAgent();
-        var task = new AgentTask { Input = "show me inventory summary", DomainHint = "warehouse" };
+        var task = new AgentTask
+        {
+            Input = "show me payables summary",
+            DomainHint = "accounting",
+            CapabilityHint = new CapabilityRequestHint
+            {
+                Domain = "accounting",
+                SubjectKeywords = new[] { "payables", "summary" }
+            }
+        };
         var context = CreateContext(mockAdapterRegistry.Object);
 
         var result = await agent.ExecuteAsync(task, context, CancellationToken.None);
@@ -167,7 +209,16 @@ public sealed class WarehouseAgentNativePathTests
         mockAdapterRegistry.Setup(r => r.Resolve("sql")).Returns(mockAdapter.Object);
 
         var agent = CreateAgent();
-        var task = new AgentTask { Input = "warehouse.receipts.recent", DomainHint = "warehouse" };
+        var task = new AgentTask
+        {
+            Input = "invoice by number",
+            DomainHint = "accounting",
+            CapabilityHint = new CapabilityRequestHint
+            {
+                Domain = "accounting",
+                SubjectKeywords = new[] { "invoice", "number" }
+            }
+        };
         var context = CreateContext(mockAdapterRegistry.Object);
 
         await agent.ExecuteAsync(task, context, CancellationToken.None);
@@ -190,14 +241,23 @@ public sealed class WarehouseAgentNativePathTests
         mockAdapterRegistry.Setup(r => r.Resolve("sql")).Returns(mockAdapter.Object);
 
         var agent = CreateAgent();
-        var task = new AgentTask { Input = "show me inventory summary", DomainHint = "warehouse" };
+        var task = new AgentTask
+        {
+            Input = "receivables summary",
+            DomainHint = "accounting",
+            CapabilityHint = new CapabilityRequestHint
+            {
+                Domain = "accounting",
+                SubjectKeywords = new[] { "receivables", "summary" }
+            }
+        };
         var context = CreateContext(mockAdapterRegistry.Object);
 
         await agent.ExecuteAsync(task, context, CancellationToken.None);
 
         capturedRequest.Should().NotBeNull();
         capturedRequest!.Metadata.Should().ContainKey("storedProcedure");
-        capturedRequest.Metadata["storedProcedure"].Should().Be("dbo.ai_warehouse_inventory_summary");
+        capturedRequest.Metadata["storedProcedure"].Should().Be("dbo.ai_accounting_receivables_summary");
     }
 
     // ────────────────────── Fallback Path ──────────────────────
@@ -205,11 +265,17 @@ public sealed class WarehouseAgentNativePathTests
     [Fact]
     public async Task ExecuteAsync_ShouldAttemptBridgeFallback_WhenNoCapabilityMatches()
     {
-        // When no capability matches, the agent falls back to Bridge.ExecuteAsync.
-        // Since our bridge is uninitialized (no pipeline), this will throw NullReferenceException,
-        // proving the fallback path was actually taken.
         var agent = CreateAgent();
-        var task = new AgentTask { Input = "hello how are you", DomainHint = "warehouse" };
+        var task = new AgentTask
+        {
+            Input = "hello how are you",
+            DomainHint = "accounting",
+            CapabilityHint = new CapabilityRequestHint
+            {
+                Domain = "accounting",
+                SubjectKeywords = new[] { "hello" }
+            }
+        };
         var context = CreateContext(new Mock<IToolAdapterRegistry>().Object);
 
         var act = () => agent.ExecuteAsync(task, context, CancellationToken.None);
@@ -219,12 +285,19 @@ public sealed class WarehouseAgentNativePathTests
     [Fact]
     public async Task ExecuteAsync_ShouldFallback_WhenAdapterRegistryIsNull()
     {
-        // Even when a capability matches, if ToolAdapterRegistry is null, fallback to bridge
         var agent = CreateAgent();
-        var task = new AgentTask { Input = "show me inventory summary", DomainHint = "warehouse" };
-        var context = CreateContext(null); // no adapter registry
+        var task = new AgentTask
+        {
+            Input = "receivables summary",
+            DomainHint = "accounting",
+            CapabilityHint = new CapabilityRequestHint
+            {
+                Domain = "accounting",
+                SubjectKeywords = new[] { "receivables", "summary" }
+            }
+        };
+        var context = CreateContext(null);
 
-        // Bridge will throw because it's uninitialized — proves fallback path was taken
         var act = () => agent.ExecuteAsync(task, context, CancellationToken.None);
         await act.Should().ThrowAsync<NullReferenceException>();
     }

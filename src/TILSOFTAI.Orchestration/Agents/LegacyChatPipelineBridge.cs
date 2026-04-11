@@ -9,6 +9,11 @@ namespace TILSOFTAI.Agents;
 /// Sprint 2 bridge: delegates agent execution to the legacy ChatPipeline.
 /// All domain agents that do not yet own their own execution loop use this bridge.
 /// This is a temporary compatibility shim — domain-native execution replaces it in future sprints.
+///
+/// TRANSITIONAL COMPONENT — Sprint 5 compatibility debt:
+///   Why it still exists: Fallback path for AccountingAgent (non-matched capabilities) and LegacyChatDomainAgent (catch-all).
+///   What depends on it: DomainAgentBase default ExecuteAsync, LegacyChatDomainAgent, agents when no native capability matches.
+///   What removes it: Sprint 7+ — when all domain agents have full native capability coverage for their domains.
 /// </summary>
 public sealed class LegacyChatPipelineBridge
 {

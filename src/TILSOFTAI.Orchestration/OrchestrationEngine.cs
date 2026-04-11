@@ -13,7 +13,18 @@ using TILSOFTAI.Supervisor;
 
 namespace TILSOFTAI.Orchestration;
 
+/// <summary>
+/// Sprint 1 compatibility facade implementation.
+///
+/// TRANSITIONAL COMPONENT — Sprint 5 compatibility debt:
+///   Why it still exists: Controllers and hubs use IOrchestrationEngine which delegates to ISupervisorRuntime.
+///   What depends on it: ChatController, ChatHub, sensitivity classification, error logging, streaming.
+///   What removes it: Sprint 6+ — migrate controllers to ISupervisorRuntime, move sensitivity/error-log to middleware.
+/// </summary>
+#pragma warning disable CS0618 // IOrchestrationEngine is Obsolete
+[Obsolete("Sprint 5: Migrate consumers to ISupervisorRuntime directly.")]
 public sealed class OrchestrationEngine : IOrchestrationEngine
+#pragma warning restore CS0618
 {
     private readonly ISupervisorRuntime _supervisorRuntime;
     private readonly IOptions<StreamingOptions> _streamingOptions;

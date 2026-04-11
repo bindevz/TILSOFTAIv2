@@ -7,21 +7,25 @@ using TILSOFTAI.Tools.Abstractions;
 namespace TILSOFTAI.Agents.Domain;
 
 /// <summary>
-/// Sprint 4: Warehouse domain agent with native capability execution.
-/// Resolves warehouse capabilities from ICapabilityRegistry and executes via ToolAdapterRegistry.
+/// Sprint 5: Warehouse domain agent with native capability execution.
+/// Resolves warehouse capabilities from ICapabilityRegistry using ICapabilityResolver
+/// and executes via ToolAdapterRegistry.
 /// Falls back to LegacyChatPipelineBridge when no native capability matches.
 /// </summary>
 public sealed class WarehouseAgent : DomainAgentBase
 {
     private readonly ICapabilityRegistry _capabilityRegistry;
+    private readonly ICapabilityResolver _capabilityResolver;
 
     public WarehouseAgent(
         LegacyChatPipelineBridge bridge,
         ICapabilityRegistry capabilityRegistry,
+        ICapabilityResolver capabilityResolver,
         ILogger<WarehouseAgent> logger)
         : base(bridge, logger)
     {
         _capabilityRegistry = capabilityRegistry ?? throw new ArgumentNullException(nameof(capabilityRegistry));
+        _capabilityResolver = capabilityResolver ?? throw new ArgumentNullException(nameof(capabilityResolver));
     }
 
     public override string AgentId => "warehouse";
@@ -40,8 +44,10 @@ public sealed class WarehouseAgent : DomainAgentBase
         // Sprint 3: enforce write governance before any execution
         AgentWritePolicy.EnforceWriteGovernance(task, AgentId, Logger);
 
-        // Sprint 4: attempt native capability resolution
-        var capability = ResolveCapability(task.Input);
+        // Sprint 5: attempt native capability resolution using structured resolver
+        var candidates = _capabilityRegistry.GetByDomain("warehouse");
+        var capability = ResolveCapability(task, candidates);
+
         if (capability is not null && context.ToolAdapterRegistry is not null)
         {
             Logger.LogInformation(
@@ -72,9 +78,40 @@ public sealed class WarehouseAgent : DomainAgentBase
     }
 
     /// <summary>
-    /// Resolve a warehouse capability from the input text.
-    /// Matches capability keys against normalized input keywords.
+    /// Sprint 5: Resolve warehouse capability using structured resolver.
+    /// Uses CapabilityHint from supervisor when available.
     /// </summary>
+    internal CapabilityDescriptor? ResolveCapability(AgentTask task, IReadOnlyList<CapabilityDescriptor> candidates)
+    {
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        // Use structured resolver with capability hint
+        if (task.CapabilityHint is not null)
+        {
+            return _capabilityResolver.Resolve(task.CapabilityHint, candidates);
+        }
+
+        // Fallback: build a hint from raw input for backward compatibility
+        var fallbackHint = new CapabilityRequestHint
+        {
+            Domain = "warehouse",
+            SubjectKeywords = task.Input
+                .Split(new[] { ' ', ',', '.', '?', '!' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(w => w.ToLowerInvariant())
+                .Distinct()
+                .ToList()
+        };
+
+        return _capabilityResolver.Resolve(fallbackHint, candidates);
+    }
+
+    /// <summary>
+    /// Sprint 4 backward-compat: Resolve a warehouse capability from the input text.
+    /// </summary>
+    [Obsolete("Sprint 5: use ResolveCapability(AgentTask, IReadOnlyList<CapabilityDescriptor>) with structured resolver instead")]
     internal CapabilityDescriptor? ResolveCapability(string input)
     {
         if (string.IsNullOrWhiteSpace(input))
@@ -82,39 +119,29 @@ public sealed class WarehouseAgent : DomainAgentBase
             return null;
         }
 
-        var normalizedInput = input.ToLowerInvariant();
         var capabilities = _capabilityRegistry.GetByDomain("warehouse");
 
-        // Match by capability key keywords present in input
+        // Check if input is an exact capability key
         foreach (var cap in capabilities)
         {
-            var keyParts = cap.CapabilityKey.Split('.', StringSplitOptions.RemoveEmptyEntries);
-
-            // Check if input contains the significant domain+operation keywords
-            // e.g. "warehouse.inventory.summary" → check for "inventory" + "summary"
-            if (keyParts.Length >= 3)
-            {
-                var subject = keyParts[1]; // e.g. "inventory", "receipts"
-                var action = keyParts[2];  // e.g. "summary", "by-item", "recent"
-
-                if (normalizedInput.Contains(subject, StringComparison.OrdinalIgnoreCase)
-                    && normalizedInput.Contains(action.Replace("-", " "), StringComparison.OrdinalIgnoreCase))
-                {
-                    return cap;
-                }
-            }
-        }
-
-        // Also allow direct capability key match (e.g. from a structured request)
-        foreach (var cap in capabilities)
-        {
-            if (normalizedInput.Contains(cap.CapabilityKey, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(cap.CapabilityKey, input.Trim(), StringComparison.OrdinalIgnoreCase))
             {
                 return cap;
             }
         }
 
-        return null;
+        // Fallback: build a hint and use the structured resolver
+        var hint = new CapabilityRequestHint
+        {
+            Domain = "warehouse",
+            SubjectKeywords = input
+                .Split(new[] { ' ', ',', '.', '?', '!' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(w => w.ToLowerInvariant())
+                .Distinct()
+                .ToList()
+        };
+
+        return _capabilityResolver.Resolve(hint, capabilities);
     }
 
     private async Task<AgentResult> ExecuteNativeAsync(

@@ -1,72 +1,79 @@
-# TILSOFTAI V3 Architecture Baseline
+# Architecture V3 — Sprint 5
 
-## Sprint 1 boundary decisions
-
-Sprint 1 introduces the V3 architecture boundaries inside the existing project layout instead of waiting for a full project split.
-
-New runtime contracts:
-- `TILSOFTAI.Supervisor.ISupervisorRuntime`
-- `TILSOFTAI.Agents.Abstractions.IDomainAgent`
-- `TILSOFTAI.Agents.Abstractions.IAgentRegistry`
-- `TILSOFTAI.Tools.Abstractions.IToolAdapter`
-- `TILSOFTAI.Tools.Abstractions.IToolAdapterRegistry`
-- `TILSOFTAI.Approvals.IApprovalEngine`
-
-New compatibility implementations:
-- `TILSOFTAI.Supervisor.SupervisorRuntime`
-- `TILSOFTAI.Agents.LegacyChatDomainAgent`
-- `TILSOFTAI.Agents.DomainAgentRegistry`
-- `TILSOFTAI.Tools.Abstractions.ToolAdapterRegistry`
-- `TILSOFTAI.Infrastructure.Sql.SqlToolAdapter`
-- `TILSOFTAI.Approvals.ApprovalEngine`
-
-## Runtime layering after Sprint 1
+## Runtime Shape
 
 ```text
-Compatibility entrypoints
-  IOrchestrationEngine
-  ActionApprovalService
+API / Hub / OpenAI Surface
+  -> IOrchestrationEngine (compatibility facade — [Obsolete], Sprint 6 removal)
+     -> ISupervisorRuntime
+        -> IIntentClassifier (keyword-based)
+        -> CapabilityRequestHint (Sprint 5 — structured hints for capability resolution)
+        -> IAgentRegistry
+           -> WarehouseAgent          (native capability path — Sprint 4+5)
+           -> AccountingAgent         (native capability path — Sprint 5)
+           -> LegacyChatDomainAgent   (catch-all fallback — transitional)
+              -> LegacyChatPipelineBridge (transitional — Sprint 7 removal)
+                 -> ChatPipeline -> IToolHandler -> SqlToolAdapter
 
-V3 boundaries
-  ISupervisorRuntime
-  IDomainAgent / IAgentRegistry
-  IToolAdapter / IToolAdapterRegistry
-  IApprovalEngine
+Native capability path (Sprint 5):
+  DomainAgent
+    -> ICapabilityRegistry.GetByDomain(domain)        // candidates
+    -> ICapabilityResolver.Resolve(hint, candidates)   // structured resolution
+    -> IToolAdapterRegistry.Resolve(adapterType)       // adapter lookup
+    -> IToolAdapter.ExecuteAsync(request)               // execution
 
-Current concrete bridge
-  LegacyChatDomainAgent -> ChatPipeline
-  SqlToolAdapter -> ISqlExecutor
-  ApprovalEngine -> IActionRequestStore + SqlToolAdapter
+Capability registry loading (Sprint 5):
+  CompositeCapabilityRegistry
+    -> StaticCapabilitySource("warehouse", WarehouseCapabilities.All)
+    -> StaticCapabilitySource("accounting", AccountingCapabilities.All)
+    -> ConfigurationCapabilitySource (loads from appsettings.json Capabilities section)
+
+Write requests:
+  -> IApprovalEngine (create -> approve -> execute lifecycle)
+     -> IActionRequestStore
+     -> IWriteActionGuard (adapter-level enforcement)
+     -> SqlToolAdapter
 ```
 
-## What changed materially
+## Key Components
 
-Supervisor:
-- `OrchestrationEngine` is no longer the orchestration owner.
-- `OrchestrationEngine` now maps chat requests into `SupervisorRequest` and delegates to `ISupervisorRuntime`.
+### Capability Resolution (Sprint 5)
 
-Agents:
-- `LegacyChatDomainAgent` wraps the existing `ChatPipeline`.
-- This keeps today’s behavior alive while making agent routing a first-class concept.
+| Component | Purpose |
+|-----------|---------|
+| `CapabilityRequestHint` | Structured hint from supervisor (explicit key, domain, keywords) |
+| `ICapabilityResolver` | Contract for structured capability resolution |
+| `StructuredCapabilityResolver` | Default resolver: exact key > keyword matching |
 
-Tool adapters:
-- `SqlToolHandler` no longer reaches straight into `ISqlExecutor`.
-- `SqlToolHandler` now goes through `IToolAdapterRegistry` and `SqlToolAdapter`.
+### Capability Registry (Sprint 5)
 
-Approval flow:
-- `ActionsController` now depends on `IApprovalEngine`.
-- `ActionRequestWriteToolHandler` now creates `ProposedAction` and calls `IApprovalEngine`.
-- `ActionApprovalService` remains only as a compatibility facade for old callers.
+| Component | Purpose |
+|-----------|---------|
+| `ICapabilitySource` | Pluggable capability source interface |
+| `StaticCapabilitySource` | Wraps static capability definitions |
+| `ConfigurationCapabilitySource` | Loads from `appsettings.json` |
+| `CompositeCapabilityRegistry` | Production registry — loads from all sources |
+| `InMemoryCapabilityRegistry` | Test/fallback only |
 
-## Still intentionally legacy
+### Domain Agents (Sprint 5)
 
-These pieces are still active, but no longer represent the target architecture:
-- `IModuleLoader` / `ModuleLoader` / `ModuleLoaderHostedService`
-- `IModuleScopeResolver` / `ModuleScopeResolver`
-- `ITilsoftModule` module packages and named tool-handler registration
-- `IOrchestrationEngine` compatibility entrypoint
-- `ActionApprovalService` compatibility entrypoint
+| Agent | Status | Capabilities |
+|-------|--------|-------------|
+| `WarehouseAgent` | Native (Sprint 4+5) | 3 read-only warehouse capabilities |
+| `AccountingAgent` | Native (Sprint 5) | 3 read-only accounting capabilities |
+| `LegacyChatDomainAgent` | Bridge (transitional) | Catch-all for unclassified requests |
 
-## Notes
+### Registered Capabilities
 
-- The AGENTS source-of-truth reference `spec\patch_18\18_00_overview.yaml` was not present in the repo at the requested path during implementation. Sprint 1 was anchored to the available v3 instruction pack plus the live codebase.
+| Key | Domain | Stored Procedure |
+|-----|--------|-----------------|
+| `warehouse.inventory.summary` | warehouse | `dbo.ai_warehouse_inventory_summary` |
+| `warehouse.inventory.by-item` | warehouse | `dbo.ai_warehouse_inventory_by_item` |
+| `warehouse.receipts.recent` | warehouse | `dbo.ai_warehouse_receipts_recent` |
+| `accounting.receivables.summary` | accounting | `dbo.ai_accounting_receivables_summary` |
+| `accounting.payables.summary` | accounting | `dbo.ai_accounting_payables_summary` |
+| `accounting.invoice.by-number` | accounting | `dbo.ai_accounting_invoice_by_number` |
+
+## Transition State
+
+See [compatibility_debt_report.md](compatibility_debt_report.md) for full tracking of all transitional components.

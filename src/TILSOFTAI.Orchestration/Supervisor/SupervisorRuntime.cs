@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TILSOFTAI.Agents.Abstractions;
 using TILSOFTAI.Approvals;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Orchestration.Capabilities;
 using TILSOFTAI.Supervisor.Classification;
 using TILSOFTAI.Tools.Abstractions;
 
@@ -48,10 +49,12 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
 
         // Step 1: Classify intent to determine domain hint (if not already provided)
         var task = MapRequest(request);
+        IntentClassification? classificationResult = null;
 
         if (string.IsNullOrWhiteSpace(task.DomainHint))
         {
             var classification = await _intentClassifier.ClassifyAsync(request.Input, ct);
+            classificationResult = classification;
 
             if (!string.IsNullOrWhiteSpace(classification.DomainHint))
             {
@@ -84,6 +87,9 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
                     string.Join("; ", classification.Reasons));
             }
         }
+
+        // Sprint 5: Build structured capability hint for domain agents
+        task.CapabilityHint = BuildCapabilityHint(request, task, classificationResult);
 
         // Step 2: Resolve candidate agents
         var candidates = _agentRegistry.ResolveCandidates(task);
@@ -233,6 +239,67 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
         RequestPolicy = request.RequestPolicy,
         MessageHistory = request.MessageHistory
     };
+
+    /// <summary>
+    /// Sprint 5: Build a structured CapabilityRequestHint from request metadata and classification.
+    /// Priority: explicit capabilityKey from metadata > domain + extracted keywords.
+    /// </summary>
+    private static CapabilityRequestHint BuildCapabilityHint(
+        SupervisorRequest request,
+        AgentTask task,
+        IntentClassification? classification)
+    {
+        // If caller explicitly provided a capability key in metadata, use it directly
+        string? explicitKey = null;
+        if (request.Metadata.TryGetValue("capabilityKey", out var ck) && !string.IsNullOrWhiteSpace(ck))
+        {
+            explicitKey = ck;
+        }
+
+        // Extract subject keywords from input text
+        var keywords = ExtractSubjectKeywords(request.Input);
+
+        return new CapabilityRequestHint
+        {
+            CapabilityKey = explicitKey,
+            Domain = task.DomainHint,
+            Operation = task.IntentType,
+            SubjectKeywords = keywords
+        };
+    }
+
+    /// <summary>
+    /// Sprint 5: Extract meaningful subject keywords from user input.
+    /// Filters out common stop words and short tokens.
+    /// </summary>
+    internal static IReadOnlyList<string> ExtractSubjectKeywords(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return Array.Empty<string>();
+        }
+
+        var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "show", "me", "the", "a", "an", "of", "in", "for", "to", "and", "or",
+            "is", "are", "was", "were", "be", "been", "being", "get", "list",
+            "what", "how", "where", "when", "who", "which", "please", "can", "could",
+            "would", "should", "do", "does", "did", "will", "shall", "may", "might",
+            "i", "you", "we", "they", "it", "my", "our", "your", "all", "this", "that",
+            "with", "from", "on", "at", "by", "about", "give", "find", "have", "has",
+            // Vietnamese stop words
+            "cho", "tôi", "xem", "của", "và", "các", "là", "có", "được", "này",
+            "đó", "từ", "trong", "nào", "bao", "nhiêu"
+        };
+
+        return input
+            .Split(new[] { ' ', ',', '.', '?', '!', ':', ';', '-', '_', '/' },
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(w => w.Length >= 2 && !stopWords.Contains(w))
+            .Select(w => w.ToLowerInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
 
     private static bool IsTerminal(string? eventType) =>
         string.Equals(eventType, "final", StringComparison.OrdinalIgnoreCase)

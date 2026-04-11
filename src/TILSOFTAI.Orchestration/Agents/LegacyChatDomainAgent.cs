@@ -6,6 +6,12 @@ namespace TILSOFTAI.Agents;
 /// Legacy catch-all domain agent. Handles requests that no specialized domain agent claims.
 /// Sprint 2: reduced priority — only matches when DomainHint is null/empty or explicitly "legacy-chat".
 /// Delegates to LegacyChatPipelineBridge (shared with other domain agents).
+///
+/// TRANSITIONAL COMPONENT — Sprint 5 compatibility debt:
+///   Why it still exists: Catch-all for unclassified requests. No domain agent claims requests with null/empty DomainHint.
+///   What depends on it: DomainAgentRegistry fallback logic, any request that fails intent classification.
+///   What removes it: Sprint 6+ — when intent classification covers all production domains,
+///     or when a default "general" agent replaces this catch-all pattern.
 /// </summary>
 public sealed class LegacyChatDomainAgent : IDomainAgent
 {

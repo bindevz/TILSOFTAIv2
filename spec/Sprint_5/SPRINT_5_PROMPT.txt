@@ -1,0 +1,229 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 5.
+
+Baseline repository reality (after Sprint 4):
+- SupervisorRuntime is real and already classifies, routes, and executes through agents.
+- WarehouseAgent has the first real native domain execution path through capability resolution and ToolAdapterRegistry.
+- AccountingAgent still exists, but remains bridge-dependent and does not yet own a native capability path.
+- LegacyChatPipelineBridge still exists as a compatibility fallback for unsupported or non-native domain paths.
+- ApprovalEngine and IWriteActionGuard already govern write execution.
+- CapabilityDescriptor, ICapabilityRegistry, InMemoryCapabilityRegistry, and WarehouseCapabilities now exist.
+- Chat controller edge auth has been hardened compared with earlier sprints, and the runtime now uses authentication and authorization middleware.
+- The platform is no longer only an architectural shell, but it is still transitional and still depends too much on compatibility paths.
+
+Sprint 5 mission:
+Convert Sprint 4’s single native-domain proof into a repeatable platform pattern.
+
+Sprint 5 must prove all of the following:
+1. Native execution is not limited to one warehouse demo path.
+2. Capability resolution is more reliable than naive keyword matching.
+3. Capability registration can become data-driven instead of static-only.
+4. Critical runtime paths are validated with realistic integration tests.
+5. Compatibility debt is shrinking, not growing.
+
+Primary objective:
+Implement a second real native domain path, preferably in AccountingAgent.
+
+Sprint 5 success condition:
+The repository must no longer look like “Warehouse is native, everything else still bridges”.
+By the end of this sprint, the platform must support at least two real native read paths across two domains.
+
+Target architecture principles:
+1. SupervisorRuntime remains the orchestration owner.
+2. Domain agents own domain runtime decisions.
+3. Capability contracts remain the execution boundary for native paths.
+4. Tool adapters remain the integration boundary.
+5. ApprovalEngine remains the only write governance owner.
+6. LegacyChatPipelineBridge remains fallback-only and must continue losing architectural weight.
+7. SQL is still allowed as an adapter implementation, but not as a domain orchestration center.
+8. Sprint 5 must improve execution quality, not just add more abstractions.
+
+Primary Sprint 5 goals:
+
+A. Second native domain path
+- Implement at least one real native read-only capability for AccountingAgent.
+- Recommended capability candidates:
+  - accounting.receivables.summary
+  - accounting.payables.summary
+  - accounting.invoice.by-number
+- AccountingAgent must execute the capability through:
+  - capability resolution
+  - ToolAdapterRegistry
+  - ToolExecutionRequest
+  - adapter execution
+- AccountingAgent must not call SqlExecutor directly.
+- LegacyChatPipelineBridge may remain fallback-only when no native accounting capability applies.
+
+B. Better capability resolution
+- Replace or reduce naive string-contains matching as the main capability selection mechanism.
+- Introduce a more reliable capability selection strategy.
+- Acceptable implementation patterns:
+  1. structured capability hint supplied by SupervisorRuntime
+  2. per-domain ICapabilityResolver
+  3. explicit task metadata that maps to capability keys
+- Unacceptable long-term pattern:
+  - continuing to depend mainly on matching fragments of capability key text in freeform input
+- Sprint 5 must migrate at least Warehouse and Accounting to the improved capability resolution path.
+
+C. Data-driven capability registry
+- Reduce dependence on purely static hardcoded capability lists.
+- Introduce a data-driven capability source.
+- Acceptable first step:
+  - configuration-backed capability loading
+  - SQL-backed capability loading
+  - composable registry with startup loading from data source
+- InMemoryCapabilityRegistry may remain only as:
+  - fallback
+  - test fixture
+  - bootstrap support
+- Capability metadata must remain explicit and must still include:
+  - capability key
+  - domain
+  - adapter type
+  - operation
+  - target system id
+  - integration binding
+  - execution mode
+  - optional policy / argument metadata if needed
+
+D. Integration validation
+- Add infrastructure-backed or realistic runtime integration tests for:
+  1. Warehouse native path
+  2. Accounting native path
+  3. Approval lifecycle with realistic persistence boundary
+  4. Auth-enabled request path
+- Do not rely only on mocked unit tests for Sprint 5 success.
+- Integration tests do not need full production infra, but they must validate real wiring and real path behavior.
+
+E. Compatibility debt reduction
+- LegacyChatPipelineBridge must not gain new architectural responsibilities.
+- OrchestrationEngine must remain compatibility-oriented only.
+- Do not add new domain behavior to compatibility shims.
+- Every remaining compatibility component must be explicitly marked with:
+  - why it still exists
+  - what depends on it
+  - what removes it later
+- If safe, reduce or simplify compatibility paths as part of this sprint.
+
+F. Documentation alignment
+- Update README so it reflects Sprint 5 runtime truth.
+- Update architecture notes if the runtime shape changes materially.
+- Document:
+  - Accounting native path
+  - improved capability resolution
+  - data-driven capability registry step
+  - remaining compatibility debt
+  - known limitations
+  - Sprint 6 priorities
+
+Non-negotiable rules:
+1. Do not add new domain agents in this sprint.
+2. Do not introduce planner-style orchestration.
+3. Do not introduce multi-agent graph execution.
+4. Do not add speculative framework layers without direct Sprint 5 use.
+5. Do not increase dependency on LegacyChatPipelineBridge.
+6. Do not bypass capability + adapter contracts for native execution.
+7. Do not bypass ApprovalEngine or IWriteActionGuard for any write-related path.
+8. Do not leave capability resolution primarily dependent on raw keyword matching.
+9. Do not leave README stale after runtime changes.
+10. Do not keep old and new runtime paths in parallel without explicit justification.
+
+Explicitly in scope:
+- one second native domain path
+- improved capability resolution
+- data-driven capability registry step
+- integration test improvements
+- compatibility debt reduction
+- documentation updates
+
+Explicitly out of scope:
+- adding new agents
+- planner / graph orchestration
+- broad REST/file/queue adapter rollout
+- domain write-native paths
+- full removal of all legacy compatibility code
+- large UI/API redesign
+- memory subsystem expansion
+
+Recommended implementation order:
+1. Design and implement improved capability resolution.
+2. Add accounting capability definitions.
+3. Implement AccountingAgent native read path.
+4. Introduce data-driven capability registry loading.
+5. Migrate Warehouse native path to the improved resolver if needed.
+6. Add integration tests for native paths and auth-enabled runtime path.
+7. Reduce compatibility debt where safe.
+8. Update README and architecture documentation.
+9. Produce a compatibility debt report.
+
+Required architectural outcomes:
+1. AccountingAgent has at least one real native read-only capability path.
+2. WarehouseAgent still works and is not regressed.
+3. Capability selection is more reliable than Sprint 4 heuristic matching.
+4. Capabilities can be loaded from a data-driven source.
+5. Critical runtime flows have realistic integration validation.
+6. Compatibility debt is reduced or at minimum more explicitly bounded.
+
+Definition of done:
+- AccountingAgent native execution exists and is real.
+- WarehouseAgent native execution remains working.
+- Capability resolution uses a clearer runtime mechanism than naive string matching.
+- Data-driven capability loading exists in production code path.
+- Integration tests validate real wiring for native paths and auth-enabled request handling.
+- Compatibility components did not gain new responsibilities.
+- README and docs match the runtime truth.
+
+Must-fail conditions:
+- AccountingAgent remains bridge-only.
+- Capability selection still depends mainly on string matching over capability key fragments.
+- The registry remains static-only with no data-driven step.
+- Sprint 5 adds new architecture without adding a second real native path.
+- Tests remain mostly mocked and do not validate real runtime wiring.
+- Compatibility debt grows.
+
+Preferred implementation style:
+- explicit contracts
+- small cohesive services
+- minimal but real runtime behavior
+- deletable compatibility code
+- honest documentation
+- no cosmetic-only refactoring
+
+Required deliverables:
+1. A second native domain path in AccountingAgent.
+2. Improved capability resolution used by runtime.
+3. Data-driven capability registry support.
+4. Integration tests for:
+   - accounting native path
+   - warehouse native path
+   - auth-enabled controller/runtime path
+   - approval flow with realistic persistence boundary
+5. Updated README and architecture docs.
+6. Compatibility debt report.
+
+Required reporting after implementation:
+1. Summary of Sprint 5 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Native paths now supported
+6. Capability resolution changes
+7. Data-driven registry changes
+8. Integration tests added
+9. Remaining compatibility components
+10. Exact reason each remaining compatibility component still exists
+11. Risks introduced
+12. Recommended Sprint 6 priorities
+
+Review discipline:
+- Do not report scaffolding as completion.
+- Do not report bridge fallback as native execution.
+- Do not report docs-only edits as architecture completion.
+- Do not report a new abstraction as progress unless runtime actually uses it.
+- Prefer proving the pattern in two domains over partially touching many domains.
+
+Final instruction:
+Sprint 5 is about converting V3 from a promising transition into a repeatable platform pattern.
+Do not spend this sprint beautifying architecture.
+Spend it proving that native execution, capability resolution, and governance can scale beyond a single domain.
