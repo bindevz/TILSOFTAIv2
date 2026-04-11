@@ -22,7 +22,7 @@ public sealed class CompositeCapabilityRegistryTests
             new StaticCapabilitySource("accounting", AccountingCapabilities.All));
 
         registry.GetByDomain("warehouse").Should().HaveCount(4);
-        registry.GetByDomain("accounting").Should().HaveCount(3);
+        registry.GetByDomain("accounting").Should().HaveCount(4);
     }
 
     [Fact]

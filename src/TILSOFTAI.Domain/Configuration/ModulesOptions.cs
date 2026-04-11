@@ -2,6 +2,8 @@ namespace TILSOFTAI.Domain.Configuration;
 
 public sealed class ModulesOptions
 {
+    public bool EnableLegacyAutoload { get; set; }
+
     public string[] Enabled { get; set; } = Array.Empty<string>();
 
     /// <summary>

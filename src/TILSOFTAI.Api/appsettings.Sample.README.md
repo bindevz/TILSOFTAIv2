@@ -43,18 +43,37 @@ Runtime capabilities can be supplied in the `Capabilities` array. Configuration 
   "RequiredRoles": [ "warehouse_external_read" ],
   "AllowedTenants": [],
   "IntegrationBinding": {
-    "baseUrl": "https://external-stock.example.com",
+    "connectionName": "external-stock-api",
     "endpoint": "/warehouse/external-stock",
-    "method": "GET",
-    "timeoutSeconds": "10",
-    "retryCount": "2",
-    "retryDelayMs": "100",
-    "authScheme": "Bearer",
-    "authToken": "ENV_OR_SECRET_VALUE",
-    "apiKeyHeader": "X-Api-Key",
-    "apiKey": "ENV_OR_SECRET_VALUE"
+    "method": "GET"
+  },
+  "ArgumentContract": {
+    "RequiredArguments": [ "@ItemNo" ],
+    "AllowedArguments": [ "@ItemNo" ],
+    "AllowAdditionalArguments": false
   }
 }
 ```
 
-`RequiredRoles` and `AllowedTenants` are enforced before adapter resolution. REST adapter failures are classified as binding, client, server, timeout, transient HTTP, or transport failures.
+`RequiredRoles`, `AllowedTenants`, and `ArgumentContract` are enforced before adapter resolution.
+
+External auth belongs in the connection catalog, not raw capability metadata:
+
+```json
+{
+  "ExternalConnections": {
+    "Connections": {
+      "external-stock-api": {
+        "BaseUrl": "https://external-stock.example.com",
+        "AuthScheme": "Bearer",
+        "AuthTokenSecret": "tilsoft/external-stock-api/token",
+        "TimeoutSeconds": 10,
+        "RetryCount": 2,
+        "RetryDelayMs": 100
+      }
+    }
+  }
+}
+```
+
+The REST adapter resolves secret references through `ISecretProvider` and rejects raw `authToken` or `apiKey` metadata.

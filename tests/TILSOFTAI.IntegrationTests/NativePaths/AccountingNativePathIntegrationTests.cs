@@ -150,7 +150,11 @@ public sealed class AccountingNativePathIntegrationTests
 
         var request = new SupervisorRequest
         {
-            Input = "show invoice by number for accounting"
+            Input = "show invoice by number for accounting",
+            Metadata = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["arguments"] = "{\"@InvoiceNumber\":\"INV-001\"}"
+            }
         };
 
         var ctx = new TilsoftExecutionContext

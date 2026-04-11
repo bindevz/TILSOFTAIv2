@@ -151,8 +151,14 @@ public sealed class WarehouseNativePathIntegrationTests
 
         foreach (var (input, expectedPrefix) in inputs)
         {
+            var metadata = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            if (expectedPrefix == "warehouse.inventory.by-item")
+            {
+                metadata["arguments"] = "{\"@ItemNo\":\"CHAIR-001\"}";
+            }
+
             var result = await runtime.RunAsync(
-                new SupervisorRequest { Input = input },
+                new SupervisorRequest { Input = input, Metadata = metadata },
                 new TilsoftExecutionContext { TenantId = "t1", CorrelationId = "c1", Roles = new[] { "warehouse_read" } },
                 CancellationToken.None);
 

@@ -1,0 +1,251 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 8.
+
+Baseline repository reality (after Sprint 7):
+- `LegacyChatDomainAgent` was deleted.
+- `GeneralChatAgent` now owns unclassified/general requests and only uses legacy fallback explicitly.
+- Native capability execution is policy-gated through `RequiredRoles` and `AllowedTenants`.
+- `RestJsonToolAdapter` supports config-driven binding, timeout, retry, auth/header metadata, tenant/correlation propagation, and classified failures.
+- `/health/ready` uses `NativeRuntimeHealthCheck`, while module health is legacy diagnostic only.
+- Unit and integration suites are green, with one intentionally bounded skipped deep analytics E2E test.
+- However, the platform is still not fully enterprise-grade because bridge/module legacy infrastructure still exists, secret sourcing is not yet platform-governed, capability contracts are still light, readiness is still partly domain-hardcoded, and SQL remains the dominant production path.
+
+Sprint 8 mission:
+Turn the platform from a bounded enterprise-grade core into a more fully governed enterprise-grade runtime.
+
+Primary objective:
+Shrink legacy bridge dependence again, extract module-era ownership from the runtime story, govern capability sourcing and secrets properly, harden capability contracts, generalize readiness, and prove a second governed non-SQL external path.
+
+Strategic success condition:
+After Sprint 8, the platform should look less like:
+“native runtime plus carefully bounded legacy residue”
+and more like:
+“a governed native platform with explicitly temporary compatibility residue”.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the orchestration owner.
+2. Domain agents remain the native execution owners.
+3. `GeneralChatAgent` remains bounded and supervisor-native.
+4. Capability descriptors are native execution boundaries, but production capability shape must become more durably governed.
+5. Adapters remain the integration boundary.
+6. ApprovalEngine remains the sole write-governance owner.
+7. Legacy bridge and module support must continue shrinking.
+8. External integration auth and connection metadata must be platform-governed.
+9. Readiness must reflect runtime truth generically, not only current domain assumptions.
+10. Enterprise-grade progress must be measured by reduced legacy influence, stronger contracts, better governance, and cleaner operational semantics.
+
+Primary Sprint 8 goals:
+
+A. Extract module-era tool catalog ownership
+- Replace module-first legacy tool catalog behavior with capability-pack loading or an equivalent platform-native legacy support mechanism.
+- Reduce dependency on:
+  - `IModuleLoader`
+  - `ModuleLoader`
+  - `ModuleLoaderHostedService`
+  - `IModuleScopeResolver`
+  - `ModuleScopeResolver`
+  where safe.
+- Make it explicit that module-era services are not part of active native runtime identity.
+- Remove dead registrations and dead compatibility paths where possible.
+
+B. Shrink `LegacyChatPipelineBridge` again
+- Identify which request classes still reach bridge fallback.
+- Remove at least one meaningful bridge-bound request class through native handling.
+- Tighten bridge reason reporting and operational measurement.
+- Keep fallback bounded and explicitly temporary.
+
+C. Govern production capability sourcing
+- Move production capability definitions away from reliance on static code literals where possible.
+- Improve durable capability source support through configuration, connection catalog, capability source abstractions, or equivalent governed platform data.
+- Make precedence explicit between:
+  - static defaults
+  - environment/app configuration
+  - durable platform capability sources
+- Add tests for precedence and override behavior.
+
+D. Introduce production-grade secret/connection governance for external integrations
+- Do not treat auth token or API key values as ordinary metadata.
+- Source REST auth/header material from a platform secret provider or governed external connection catalog.
+- Ensure logs/telemetry do not leak secret-bearing values.
+- Add tests for secret-backed external capability execution configuration.
+
+E. Add contract-first validation for representative capabilities
+- Introduce schema validation or strong request-contract validation for:
+  - at least one warehouse SQL capability
+  - at least one accounting SQL capability
+  - the REST stock capability
+- Validation must happen before adapter execution.
+- Validation failures must be deterministic and operator-friendly.
+- Add tests for invalid argument shapes.
+
+F. Generalize native readiness
+- Evolve `NativeRuntimeHealthCheck` beyond hardcoded warehouse/accounting assumptions.
+- Readiness should validate the generic native runtime by loaded capabilities, required adapters, and critical orchestration dependencies.
+- Keep separate health semantics for:
+  - native runtime
+  - legacy diagnostics
+  - external dependencies
+- Update docs and runbooks accordingly.
+
+G. Prove a second governed non-SQL production-style path
+- Add one more governed external capability path.
+- Prefer a second REST integration or a gRPC-backed capability.
+- Include:
+  - governed connection metadata
+  - secret sourcing
+  - timeout/retry/failure handling
+  - observability
+  - tests
+
+H. Deepen policy beyond role/tenant-only checks where feasible
+- Add optional provider-driven system policy checks or equivalent extensibility.
+- Preserve the current `RequiredRoles` / `AllowedTenants` gates.
+- Add tests for policy denial reasons and observability.
+
+I. Reduce bounded skipped deep analytics validation if practical
+- Either unskip the remaining deep analytics E2E test,
+- or move it into a clearly bounded external workflow validation suite with explicit ownership and execution rules.
+
+Non-negotiable rules:
+1. Do not add new fallback layers.
+2. Do not re-center runtime identity around module loading.
+3. Do not preserve bridge behavior unchanged.
+4. Do not leave external secrets as raw metadata/config values.
+5. Do not keep production capability shape primarily in code literals if a governed source can own it.
+6. Do not add schema complexity without real deterministic validation benefits.
+7. Do not weaken approval or write governance.
+8. Do not convert docs updates into fake progress claims.
+9. Prefer extraction, simplification, and deletion over wrapper accumulation.
+10. Keep all remaining compatibility residue explicit and measurable.
+
+Explicitly in scope:
+- module-era extraction/isolation
+- bridge fallback reduction
+- governed capability sourcing
+- secret provider or connection catalog integration
+- capability contract validation
+- readiness generalization
+- second governed external capability path
+- policy depth improvements
+- validation/docs/debt updates
+
+Explicitly out of scope:
+- broad new business domains
+- planner runtime
+- graph orchestration
+- large UI/product feature work
+- broad workflow/product expansion
+- full performance certification
+- full deletion of `ChatPipeline`
+- full deletion of `LegacyChatPipelineBridge`
+
+Recommended implementation order:
+1. Add governed secret/connection sourcing for REST integrations.
+2. Add contract-first validation for representative capabilities.
+3. Generalize native readiness.
+4. Replace or isolate module-first legacy tool catalog behavior.
+5. Remove one meaningful bridge-bound request class.
+6. Add one more governed external capability path.
+7. Update docs and debt/readiness reports.
+8. Delete dead compatibility code.
+
+Required architectural outcomes:
+1. Module-era services no longer define the active runtime story.
+2. Bridge fallback scope is smaller than in Sprint 7.
+3. Production capability shape is governed more durably than static code defaults.
+4. External auth/secret handling is platform-governed.
+5. Representative capabilities have deterministic contracts and validation.
+6. Native readiness is generalized and scalable.
+7. A second governed external adapter path proves platform maturity beyond SQL-plus-one.
+8. Remaining legacy residue is smaller, clearer, and more honestly documented.
+
+Definition of done:
+- Module loader/module scope influence is reduced or isolated further.
+- `LegacyChatPipelineBridge` request classes are reduced again.
+- Production capability sourcing is more durable and explicit.
+- REST auth/header material is secret-backed or connection-catalog-backed.
+- Representative capabilities fail fast on invalid arguments.
+- `NativeRuntimeHealthCheck` is domain-agnostic or substantially more generic.
+- A second governed non-SQL path exists and is tested.
+- Policy denial behavior is at least as strong as Sprint 7 and more extensible.
+- Docs, readiness notes, and debt reports reflect runtime truth.
+- The codebase is cleaner and less legacy-dependent after Sprint 8.
+
+Must-fail conditions:
+- module-era services still appear central to runtime identity
+- bridge fallback footprint is unchanged
+- external secrets remain ordinary metadata values
+- capability definitions are still primarily code literals for production behavior
+- argument handling remains mostly dictionary/string based
+- readiness remains hardcoded around current domains
+- Sprint 8 adds abstraction without materially improving governance or shrinking legacy influence
+
+Preferred implementation style:
+- explicit ownership
+- durable governance
+- contract-first execution
+- smaller compatibility residue
+- measurable runtime behavior
+- safe deletions
+- operational honesty
+- no architecture theater
+
+Required deliverables:
+1. Module-era extraction:
+   - reduced active dependency on module-era runtime services
+   - replacement or isolation of legacy tool catalog ownership
+2. Bridge reduction:
+   - fewer request classes reaching the bridge
+   - better bridge reporting
+3. Capability source governance:
+   - clearer source precedence
+   - durable source improvements
+4. Secret/connection governance:
+   - secret-backed or connection-catalog-backed external auth
+   - tests and safe logging rules
+5. Capability contracts:
+   - validation for representative SQL and REST capabilities
+   - deterministic failure codes
+6. Readiness generalization:
+   - less domain-hardcoded health logic
+   - updated readiness docs
+7. Second external path:
+   - governed and tested non-SQL capability path
+8. Documentation:
+   - README
+   - architecture notes
+   - compatibility debt report
+   - enterprise readiness gap report
+   - readiness docs
+   - external integration governance note
+
+Required reporting after implementation:
+1. Summary of Sprint 8 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Module-era components reduced or isolated
+6. Bridge fallback reductions
+7. Capability source governance changes
+8. Secret/connection governance changes
+9. Capability contract validation changes
+10. Native readiness generalization changes
+11. Second external capability path changes
+12. Validation/test improvements
+13. Remaining compatibility components
+14. Remaining enterprise-grade blockers
+15. Recommended Sprint 9 priorities
+
+Review discipline:
+- Do not count docs-only changes as runtime progress.
+- Do not count secret placeholders as secret governance.
+- Do not count a second external adapter as platform maturity unless it has real policy/governance/tests.
+- Do not count validation as complete unless bad inputs fail before adapter execution.
+- Do not keep compatibility services “just in case” without an active bounded dependency.
+- Prefer one real deletion or extraction over multiple cosmetic abstractions.
+
+Final instruction:
+Sprint 8 is about platform governance maturity.
+Do not spend Sprint 8 making the architecture more impressive in diagrams.
+Spend it making the runtime less legacy-dependent, external integrations safer, capability execution more deterministic, readiness more honest, and production ownership more durable.

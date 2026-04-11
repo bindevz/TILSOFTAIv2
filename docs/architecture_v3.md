@@ -1,4 +1,4 @@
-# Architecture V3 - Sprint 7
+# Architecture V3 - Sprint 8
 
 ## Runtime Shape
 
@@ -19,11 +19,12 @@ Native capability path:
     -> ICapabilityRegistry.GetByDomain(domain)
     -> ICapabilityResolver.Resolve(hint, candidates)
     -> CapabilityAccessPolicy.Evaluate(required roles, allowed tenants)
+    -> CapabilityArgumentValidator.Validate(argument contract)
     -> IToolAdapterRegistry.Resolve(adapterType)
     -> IToolAdapter.ExecuteAsync(request)
 
 Bridge fallback path:
-  Explicit legacy request or unmatched domain capability
+  Explicit legacy request
     -> LegacyChatPipelineBridge
     -> ChatPipeline
     -> module-era tool catalog/scope resolution
@@ -56,6 +57,18 @@ Write path:
 | REST capabilities | REST endpoint, method, timeout, retry, and auth metadata are configuration-driven through `IntegrationBinding`. |
 | Readiness | `/health/ready` uses `NativeRuntimeHealthCheck`; module health is legacy diagnostic only. |
 
+## Sprint 8 Ownership Changes
+
+| Area | Sprint 8 state |
+|------|----------------|
+| Bridge fallback | Unmatched warehouse/accounting capability requests return `DOMAIN_CAPABILITY_NOT_FOUND` instead of reaching the bridge. |
+| Capability sourcing | Static descriptors are fallback keys/contracts; configuration overrides production binding by capability key. |
+| External connections | `ExternalConnections` catalog owns base URL, timeout, retry, and secret references by `connectionName`. |
+| Secret governance | REST auth/API-key material is resolved through `ISecretProvider`; raw secret metadata is rejected. |
+| Contracts | Representative SQL and REST capabilities enforce `ArgumentContract` before adapter resolution. |
+| Readiness | `NativeRuntimeHealthCheck` uses all loaded capabilities and required adapter registrations, without domain hardcoding. |
+| Modules | `ModuleLoaderHostedService` is disabled unless `Modules:EnableLegacyAutoload=true`; module health is diagnostic only. |
+
 ## Capabilities
 
 | Key | Domain | Adapter | Binding |
@@ -63,10 +76,11 @@ Write path:
 | `warehouse.inventory.summary` | warehouse | sql | `dbo.ai_warehouse_inventory_summary` |
 | `warehouse.inventory.by-item` | warehouse | sql | `dbo.ai_warehouse_inventory_by_item` |
 | `warehouse.receipts.recent` | warehouse | sql | `dbo.ai_warehouse_receipts_recent` |
-| `warehouse.external-stock.lookup` | warehouse | rest-json | Configured `baseUrl`, `endpoint`, `method`, retry, timeout, auth metadata |
+| `warehouse.external-stock.lookup` | warehouse | rest-json | Configured `connectionName`, `endpoint`, `method`, retry, timeout, secret-backed auth |
 | `accounting.receivables.summary` | accounting | sql | `dbo.ai_accounting_receivables_summary` |
 | `accounting.payables.summary` | accounting | sql | `dbo.ai_accounting_payables_summary` |
 | `accounting.invoice.by-number` | accounting | sql | `dbo.ai_accounting_invoice_by_number` |
+| `accounting.exchange-rate.lookup` | accounting | rest-json | Configured `connectionName`, `endpoint`, `method`, retry, timeout, secret-backed API key |
 
 ## Observability Signals
 
@@ -89,6 +103,16 @@ Capabilities may specify:
 
 Policy denial happens before adapter resolution and is returned as `CAPABILITY_ACCESS_DENIED`.
 
+## Capability Contracts
+
+Capabilities may specify `ArgumentContract`:
+
+- `RequiredArguments`: all must be present.
+- `AllowedArguments`: permitted argument names when additional arguments are disabled.
+- `AllowAdditionalArguments`: when false, unknown arguments fail validation.
+
+Validation failure returns `CAPABILITY_ARGUMENT_VALIDATION_FAILED` before adapter resolution.
+
 ## Transition State
 
-The native path is supervisor-driven, policy-gated, and adapter-backed. The bridge and module system remain only for legacy chat/tool fallback and diagnostics. Sprint 8 should focus on shrinking `ChatPipeline` dependency and replacing module-era tool catalog behavior with capability-pack loading.
+The native path is supervisor-driven, policy-gated, contract-validated, and adapter-backed. The bridge remains only for explicit legacy fallback. Module autoload is off by default and module health is diagnostic. Sprint 9 should focus on shrinking `ChatPipeline` dependency and replacing module-era tool catalog behavior with capability-pack loading.

@@ -83,7 +83,8 @@ public sealed class ConfigurationCapabilitySource : ICapabilitySource
                 ExecutionMode = child["ExecutionMode"] ?? "readonly",
                 IntegrationBinding = binding,
                 RequiredRoles = ReadStringList(child.GetSection("RequiredRoles")),
-                AllowedTenants = ReadStringList(child.GetSection("AllowedTenants"))
+                AllowedTenants = ReadStringList(child.GetSection("AllowedTenants")),
+                ArgumentContract = ReadArgumentContract(child.GetSection("ArgumentContract"))
             });
         }
 
@@ -117,5 +118,21 @@ public sealed class ConfigurationCapabilitySource : ICapabilitySource
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .ToArray();
+    }
+
+    private static CapabilityArgumentContract? ReadArgumentContract(IConfigurationSection section)
+    {
+        if (!section.Exists())
+        {
+            return null;
+        }
+
+        return new CapabilityArgumentContract
+        {
+            RequiredArguments = ReadStringList(section.GetSection("RequiredArguments")),
+            AllowedArguments = ReadStringList(section.GetSection("AllowedArguments")),
+            AllowAdditionalArguments = !bool.TryParse(section["AllowAdditionalArguments"], out var allowAdditional)
+                || allowAdditional
+        };
     }
 }

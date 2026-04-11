@@ -1,6 +1,6 @@
-# Operational Runtime Observability - Sprint 7
+# Operational Runtime Observability - Sprint 8
 
-Sprint 7 keeps the Sprint 6 runtime signals and tightens the meaning of fallback and adapter failures.
+Sprint 8 keeps the runtime signals and narrows bridge fallback to explicit legacy use.
 
 ## Metrics
 
@@ -17,7 +17,7 @@ Sprint 7 keeps the Sprint 6 runtime signals and tightens the meaning of fallback
 ## How To Read The Signals
 
 - Native execution should trend upward as more domain requests resolve to capabilities.
-- Bridge fallback should trend downward. A spike in `tilsoftai_runtime_bridge_fallback_total` means classification or capability coverage is missing, or callers are explicitly requesting legacy fallback.
+- Bridge fallback should trend downward. After Sprint 8, normal unmatched warehouse/accounting requests should not use the bridge; a spike should mainly indicate explicit legacy fallback.
 - `tilsoftai_runtime_adapter_failures_total` by `adapter=rest-json` or `adapter=sql` identifies integration boundaries causing failures.
 - `CAPABILITY_ACCESS_DENIED` in adapter-failure labels means capability policy stopped execution before adapter resolution.
 - `tilsoftai_runtime_capability_invocations_total` shows which domain capabilities are actually used.
@@ -50,6 +50,11 @@ REST adapter failure codes:
 - `REST_TRANSIENT_HTTP_ERROR`: final response was 408 or 429.
 - `REST_TIMEOUT`: request exceeded configured timeout.
 - `REST_TRANSPORT_ERROR`: network/transport failure after retries.
+- `REST_SECRET_POLICY_VIOLATION`: raw secret-bearing metadata was rejected.
+- `REST_SECRET_PROVIDER_UNAVAILABLE`: no platform secret provider was available for a secret reference.
+- `REST_SECRET_NOT_FOUND`: configured secret reference could not be resolved.
+- `REST_CONNECTION_NOT_FOUND`: configured `connectionName` was not present in the external connection catalog.
+- `CAPABILITY_ARGUMENT_VALIDATION_FAILED`: capability arguments failed contract validation before adapter execution.
 
 ## Operational Triage
 
@@ -60,4 +65,4 @@ REST adapter failure codes:
 
 ## Readiness
 
-`/health/ready` includes `native-runtime`, not `modules`. The native check verifies supervisor runtime resolution, warehouse/accounting capability loading, and registered adapters. Module health remains available as a legacy diagnostic check outside the ready tag.
+`/health/ready` includes `native-runtime`, not `modules`. The native check verifies supervisor runtime resolution, all loaded native capabilities, and registered adapters generically. Module health remains available as a legacy diagnostic check outside the ready tag. See `runtime_readiness.md`.

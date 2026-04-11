@@ -123,4 +123,12 @@ public sealed class CapabilityRegistryTests
             c.AdapterType == "rest-json"
             && c.CapabilityKey == "warehouse.external-stock.lookup");
     }
+
+    [Fact]
+    public void GetAll_ShouldReturnAllRegisteredCapabilities()
+    {
+        var registry = CreateRegistry();
+
+        registry.GetAll().Should().HaveCount(4);
+    }
 }

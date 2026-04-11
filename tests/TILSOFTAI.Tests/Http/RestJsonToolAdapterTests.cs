@@ -1,5 +1,8 @@
 using System.Net;
 using FluentAssertions;
+using Microsoft.Extensions.Options;
+using TILSOFTAI.Domain.Configuration;
+using TILSOFTAI.Domain.Secrets;
 using TILSOFTAI.Infrastructure.Http;
 using TILSOFTAI.Tools.Abstractions;
 using Xunit;
@@ -68,23 +71,55 @@ public sealed class RestJsonToolAdapterTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ShouldApplyAuthAndApiKeyMetadata()
+    public async Task ExecuteAsync_ShouldRejectRawSecretMetadata()
     {
-        var handler = new SequenceHandler(new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent("{}")
-        });
-        var adapter = new RestJsonToolAdapter(new HttpClient(handler));
+        var adapter = new RestJsonToolAdapter(new HttpClient(new SequenceHandler()));
 
         var result = await adapter.ExecuteAsync(CreateRequest(new Dictionary<string, string?>
         {
             ["baseUrl"] = "https://inventory.local",
             ["endpoint"] = "/stock",
             ["method"] = "GET",
-            ["authScheme"] = "Bearer",
-            ["authToken"] = "token-1",
-            ["apiKeyHeader"] = "X-Api-Key",
-            ["apiKey"] = "key-1"
+            ["authToken"] = "token-1"
+        }), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("REST_SECRET_POLICY_VIOLATION");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldApplySecretBackedAuthAndApiKeyFromConnectionCatalog()
+    {
+        var handler = new SequenceHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{}")
+        });
+        var secretProvider = new FakeSecretProvider(new Dictionary<string, string>
+        {
+            ["tilsoft/external/token"] = "token-1",
+            ["tilsoft/external/key"] = "key-1"
+        });
+        var catalog = new ConfigurationExternalConnectionCatalog(Options.Create(new ExternalConnectionCatalogOptions
+        {
+            Connections = new Dictionary<string, ExternalConnectionOptions>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["external-stock-api"] = new()
+                {
+                    BaseUrl = "https://inventory.local",
+                    AuthScheme = "Bearer",
+                    AuthTokenSecret = "tilsoft/external/token",
+                    ApiKeyHeader = "X-Api-Key",
+                    ApiKeySecret = "tilsoft/external/key"
+                }
+            }
+        }));
+        var adapter = new RestJsonToolAdapter(new HttpClient(handler), catalog, secretProvider);
+
+        var result = await adapter.ExecuteAsync(CreateRequest(new Dictionary<string, string?>
+        {
+            ["connectionName"] = "external-stock-api",
+            ["endpoint"] = "/stock",
+            ["method"] = "GET"
         }), CancellationToken.None);
 
         result.Success.Should().BeTrue();
@@ -92,6 +127,36 @@ public sealed class RestJsonToolAdapterTests
         handler.LastRequest!.Headers.Authorization!.Scheme.Should().Be("Bearer");
         handler.LastRequest.Headers.Authorization.Parameter.Should().Be("token-1");
         handler.LastRequest.Headers.GetValues("X-Api-Key").Single().Should().Be("key-1");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldFailWhenSecretIsMissing()
+    {
+        var catalog = new ConfigurationExternalConnectionCatalog(Options.Create(new ExternalConnectionCatalogOptions
+        {
+            Connections = new Dictionary<string, ExternalConnectionOptions>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["external-stock-api"] = new()
+                {
+                    BaseUrl = "https://inventory.local",
+                    AuthScheme = "Bearer",
+                    AuthTokenSecret = "tilsoft/external/missing"
+                }
+            }
+        }));
+        var adapter = new RestJsonToolAdapter(
+            new HttpClient(new SequenceHandler()),
+            catalog,
+            new FakeSecretProvider(new Dictionary<string, string>()));
+
+        var result = await adapter.ExecuteAsync(CreateRequest(new Dictionary<string, string?>
+        {
+            ["connectionName"] = "external-stock-api",
+            ["endpoint"] = "/stock"
+        }), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("REST_SECRET_NOT_FOUND");
     }
 
     private static ToolExecutionRequest CreateRequest(IReadOnlyDictionary<string, string?> metadata) => new()
@@ -127,5 +192,26 @@ public sealed class RestJsonToolAdapterTests
                 ? _responses.Dequeue()
                 : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") });
         }
+    }
+
+    private sealed class FakeSecretProvider : ISecretProvider
+    {
+        private readonly IReadOnlyDictionary<string, string> _secrets;
+
+        public FakeSecretProvider(IReadOnlyDictionary<string, string> secrets)
+        {
+            _secrets = secrets;
+        }
+
+        public string ProviderName => "fake";
+
+        public Task<string?> GetSecretAsync(string key, CancellationToken cancellationToken = default)
+        {
+            _secrets.TryGetValue(key, out var value);
+            return Task.FromResult<string?>(value);
+        }
+
+        public Task<bool> SecretExistsAsync(string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_secrets.ContainsKey(key));
     }
 }

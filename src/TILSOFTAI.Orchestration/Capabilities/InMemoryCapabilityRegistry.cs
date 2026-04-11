@@ -43,6 +43,8 @@ public sealed class InMemoryCapabilityRegistry : ICapabilityRegistry
             : Array.Empty<CapabilityDescriptor>();
     }
 
+    public IReadOnlyList<CapabilityDescriptor> GetAll() => _byKey.Values.ToArray();
+
     public CapabilityDescriptor? Resolve(string capabilityKey)
     {
         if (string.IsNullOrWhiteSpace(capabilityKey))

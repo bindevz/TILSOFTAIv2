@@ -1,6 +1,5 @@
 using System.Net;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -21,72 +20,69 @@ using Xunit;
 
 namespace TILSOFTAI.IntegrationTests.NativePaths;
 
-public sealed class WarehouseRestNativePathIntegrationTests
+public sealed class AccountingRestNativePathIntegrationTests
 {
     private static LegacyChatPipelineBridge CreateUninitializedBridge() =>
         (LegacyChatPipelineBridge)RuntimeHelpers.GetUninitializedObject(typeof(LegacyChatPipelineBridge));
 
     [Fact]
-    public async Task WarehouseExternalStockLookup_ShouldUseRestJsonAdapterThroughNativeCapabilityPath()
+    public async Task AccountingExchangeRateLookup_ShouldUseSecretBackedConnectionCatalog()
     {
         var handler = new CapturingHttpHandler();
         var catalog = new ConfigurationExternalConnectionCatalog(Options.Create(new ExternalConnectionCatalogOptions
         {
             Connections = new Dictionary<string, ExternalConnectionOptions>(StringComparer.OrdinalIgnoreCase)
             {
-                ["external-stock-api"] = new()
+                ["fx-rate-api"] = new()
                 {
-                    BaseUrl = "https://external-stock.local",
-                    AuthScheme = "Bearer",
-                    AuthTokenSecret = "tilsoft/external-stock/token",
+                    BaseUrl = "https://fx-rates.local",
+                    ApiKeyHeader = "X-Api-Key",
+                    ApiKeySecret = "tilsoft/fx/api-key",
                     RetryCount = 1,
                     RetryDelayMs = 0,
                     TimeoutSeconds = 5
                 }
             }
         }));
-        var restAdapter = new RestJsonToolAdapter(
-            new HttpClient(handler),
-            catalog,
-            new FakeSecretProvider(new Dictionary<string, string>
-            {
-                ["tilsoft/external-stock/token"] = "stock-token"
-            }));
+        var secretProvider = new FakeSecretProvider(new Dictionary<string, string>
+        {
+            ["tilsoft/fx/api-key"] = "fx-key"
+        });
+        var restAdapter = new RestJsonToolAdapter(new HttpClient(handler), catalog, secretProvider);
         var adapterRegistry = new ToolAdapterRegistry(new IToolAdapter[] { restAdapter });
-
         var capabilityResolver = new StructuredCapabilityResolver(
             new Mock<ILogger<StructuredCapabilityResolver>>().Object);
         var capabilityRegistry = new InMemoryCapabilityRegistry(new[]
         {
             new CapabilityDescriptor
             {
-                CapabilityKey = "warehouse.external-stock.lookup",
-                Domain = "warehouse",
+                CapabilityKey = "accounting.exchange-rate.lookup",
+                Domain = "accounting",
                 AdapterType = RestJsonToolAdapter.Type,
                 Operation = ToolAdapterOperationNames.ExecuteHttpJson,
-                TargetSystemId = "external-stock-api",
-                RequiredRoles = new[] { "warehouse_external_read" },
+                TargetSystemId = "fx-rate-api",
+                RequiredRoles = new[] { "accounting_external_read" },
                 ArgumentContract = new CapabilityArgumentContract
                 {
-                    RequiredArguments = new[] { "@ItemNo" },
-                    AllowedArguments = new[] { "@ItemNo" },
+                    RequiredArguments = new[] { "@CurrencyCode" },
+                    AllowedArguments = new[] { "@CurrencyCode" },
                     AllowAdditionalArguments = false
                 },
                 IntegrationBinding = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["connectionName"] = "external-stock-api",
-                    ["endpoint"] = "/warehouse/external-stock",
+                    ["connectionName"] = "fx-rate-api",
+                    ["endpoint"] = "/rates/latest",
                     ["method"] = "GET"
                 }
             }
         });
-        var warehouseAgent = new WarehouseAgent(
+        var accountingAgent = new AccountingAgent(
             CreateUninitializedBridge(),
             capabilityRegistry,
             capabilityResolver,
-            new Mock<ILogger<WarehouseAgent>>().Object);
+            new Mock<ILogger<AccountingAgent>>().Object);
         var agentRegistry = new DomainAgentRegistry(
-            new IDomainAgent[] { warehouseAgent },
+            new IDomainAgent[] { accountingAgent },
             new Mock<ILogger<DomainAgentRegistry>>().Object);
         var runtime = new SupervisorRuntime(
             new KeywordIntentClassifier(new Mock<ILogger<KeywordIntentClassifier>>().Object),
@@ -98,34 +94,30 @@ public sealed class WarehouseRestNativePathIntegrationTests
         var result = await runtime.RunAsync(
             new SupervisorRequest
             {
-                Input = "warehouse external stock lookup",
-                DomainHint = "warehouse",
+                Input = "accounting exchange rate",
+                DomainHint = "accounting",
                 Metadata = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["capabilityKey"] = "warehouse.external-stock.lookup",
-                    ["arguments"] = JsonSerializer.Serialize(new Dictionary<string, string>
-                    {
-                        ["@ItemNo"] = "CHAIR-001"
-                    })
+                    ["capabilityKey"] = "accounting.exchange-rate.lookup",
+                    ["arguments"] = "{\"@CurrencyCode\":\"USD\"}"
                 }
             },
             new TilsoftExecutionContext
             {
-                TenantId = "tenant-rest",
-                UserId = "user-rest",
-                CorrelationId = "corr-rest",
-                Roles = new[] { "warehouse_external_read" }
+                TenantId = "tenant-fx",
+                UserId = "user-fx",
+                CorrelationId = "corr-fx",
+                Roles = new[] { "accounting_external_read" }
             },
             CancellationToken.None);
 
         result.Success.Should().BeTrue();
-        result.SelectedAgentId.Should().Be("warehouse");
-        result.Output.Should().Contain("CHAIR-001");
+        result.SelectedAgentId.Should().Be("accounting");
         handler.LastRequest.Should().NotBeNull();
-        handler.LastRequest!.RequestUri!.AbsoluteUri.Should().Contain("/warehouse/external-stock");
-        handler.LastRequest!.RequestUri!.Query.Should().Contain("ItemNo=CHAIR-001");
-        handler.LastRequest.Headers.Authorization!.Parameter.Should().Be("stock-token");
-        handler.LastRequest.Headers.GetValues("X-TILSOFTAI-Tenant").Single().Should().Be("tenant-rest");
+        handler.LastRequest!.RequestUri!.AbsoluteUri.Should().Contain("/rates/latest");
+        handler.LastRequest.RequestUri.Query.Should().Contain("CurrencyCode=USD");
+        handler.LastRequest.Headers.GetValues("X-Api-Key").Single().Should().Be("fx-key");
+        handler.LastRequest.Headers.GetValues("X-TILSOFTAI-Tenant").Single().Should().Be("tenant-fx");
     }
 
     private sealed class CapturingHttpHandler : HttpMessageHandler
@@ -137,7 +129,7 @@ public sealed class WarehouseRestNativePathIntegrationTests
             LastRequest = request;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("{\"itemNo\":\"CHAIR-001\",\"available\":12}")
+                Content = new StringContent("{\"currency\":\"USD\",\"rate\":1.0}")
             });
         }
     }

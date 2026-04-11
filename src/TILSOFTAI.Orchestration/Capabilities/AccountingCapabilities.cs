@@ -51,6 +51,28 @@ public static class AccountingCapabilities
                 ["storedProcedure"] = "dbo.ai_accounting_invoice_by_number"
             },
             RequiredRoles = new[] { "accounting_read" },
+            ArgumentContract = new CapabilityArgumentContract
+            {
+                RequiredArguments = new[] { "@InvoiceNumber" },
+                AllowedArguments = new[] { "@InvoiceNumber", "@TenantId" },
+                AllowAdditionalArguments = false
+            },
+            ExecutionMode = "readonly"
+        },
+        new CapabilityDescriptor
+        {
+            CapabilityKey = "accounting.exchange-rate.lookup",
+            Domain = "accounting",
+            AdapterType = "rest-json",
+            Operation = ToolAdapterOperationNames.ExecuteHttpJson,
+            TargetSystemId = "fx-rate-api",
+            RequiredRoles = new[] { "accounting_external_read" },
+            ArgumentContract = new CapabilityArgumentContract
+            {
+                RequiredArguments = new[] { "@CurrencyCode" },
+                AllowedArguments = new[] { "@CurrencyCode" },
+                AllowAdditionalArguments = false
+            },
             ExecutionMode = "readonly"
         }
     };

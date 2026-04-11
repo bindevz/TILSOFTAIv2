@@ -50,6 +50,11 @@ public sealed class CapabilityDescriptor
     public IReadOnlyList<string> AllowedTenants { get; init; } = Array.Empty<string>();
 
     /// <summary>
+    /// Optional request contract enforced before native adapter execution.
+    /// </summary>
+    public CapabilityArgumentContract? ArgumentContract { get; init; }
+
+    /// <summary>
     /// Execution mode: "readonly" or "write".
     /// Write capabilities must route through ApprovalEngine.
     /// </summary>

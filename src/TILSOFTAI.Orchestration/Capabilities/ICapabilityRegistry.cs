@@ -7,6 +7,11 @@ namespace TILSOFTAI.Orchestration.Capabilities;
 public interface ICapabilityRegistry
 {
     /// <summary>
+    /// Returns all registered capabilities.
+    /// </summary>
+    IReadOnlyList<CapabilityDescriptor> GetAll();
+
+    /// <summary>
     /// Returns all capabilities registered for the given domain.
     /// </summary>
     IReadOnlyList<CapabilityDescriptor> GetByDomain(string domain);

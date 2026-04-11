@@ -31,9 +31,17 @@ public sealed class ModuleHealthCheck : IHealthCheck
 
         var data = new Dictionary<string, object>
         {
+            ["legacy_autoload_enabled"] = _options.EnableLegacyAutoload,
             ["enabled_modules"] = enabledModules,
             ["loaded_modules"] = loadedModules.Select(m => m.Name).ToArray()
         };
+
+        if (!_options.EnableLegacyAutoload)
+        {
+            return Task.FromResult(HealthCheckResult.Healthy(
+                "Legacy module autoload is disabled; native runtime readiness is checked separately.",
+                data: data));
+        }
 
         var missingModules = enabledModules
             .Where(enabled => !loadedModules.Any(m => 

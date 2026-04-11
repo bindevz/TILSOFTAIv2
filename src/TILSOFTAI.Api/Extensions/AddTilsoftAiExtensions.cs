@@ -147,6 +147,7 @@ public static class AddTilsoftAiExtensions
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.JwksRequestTimeoutSeconds));
         });
         services.AddHttpClient<RestJsonToolAdapter>();
+        services.AddSingleton<IExternalConnectionCatalog, ConfigurationExternalConnectionCatalog>();
         services.AddSingleton<JwtSigningKeyProvider>();
         services.AddSingleton<IJwtSigningKeyProvider>(sp => sp.GetRequiredService<JwtSigningKeyProvider>());
         services.AddHostedService<JwtSigningKeyRefreshHostedService>();
@@ -243,7 +244,10 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<IModuleActivationProvider, SqlModuleActivationProvider>();
 #pragma warning disable CS0618 // Legacy diagnostic module loader; readiness uses NativeRuntimeHealthCheck.
         services.AddSingleton<IModuleLoader, ModuleLoader>();
-        services.AddHostedService<ModuleLoaderHostedService>();
+        if (configuration.GetValue<bool>("Modules:EnableLegacyAutoload"))
+        {
+            services.AddHostedService<ModuleLoaderHostedService>();
+        }
 #pragma warning restore CS0618
         services.AddHostedService<ObservabilityPurgeHostedService>();
         services.AddHostedService<ErrorCatalogCoverageGuard>();
@@ -524,6 +528,10 @@ public static class AddTilsoftAiExtensions
 
         services.AddOptions<SecretsOptions>()
             .Bind(configuration.GetSection("Secrets"))
+            .ValidateOnStart();
+
+        services.AddOptions<ExternalConnectionCatalogOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.ExternalConnections))
             .ValidateOnStart();
         
         // Analytics options (PATCH 28)

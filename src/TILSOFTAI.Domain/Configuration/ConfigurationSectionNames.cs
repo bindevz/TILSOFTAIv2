@@ -22,4 +22,5 @@ public static class ConfigurationSectionNames
     public const string Metrics = "Metrics";
     public const string Resilience = "Resilience";
     public const string Analytics = "Analytics"; // PATCH 28: Added
+    public const string ExternalConnections = "ExternalConnections";
 }

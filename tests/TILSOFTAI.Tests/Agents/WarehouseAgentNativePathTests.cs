@@ -213,8 +213,10 @@ public sealed class WarehouseAgentNativePathTests
         var task = new AgentTask { Input = "hello how are you", DomainHint = "warehouse" };
         var context = CreateContext(new Mock<IToolAdapterRegistry>().Object);
 
-        var act = () => agent.ExecuteAsync(task, context, CancellationToken.None);
-        await act.Should().ThrowAsync<NullReferenceException>();
+        var result = await agent.ExecuteAsync(task, context, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Code.Should().Be("DOMAIN_CAPABILITY_NOT_FOUND");
     }
 
     [Fact]
@@ -245,6 +247,30 @@ public sealed class WarehouseAgentNativePathTests
 
         result.Success.Should().BeFalse();
         result.Code.Should().Be("CAPABILITY_ACCESS_DENIED");
+        mockAdapterRegistry.Verify(r => r.Resolve(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldValidateArgumentsBeforeAdapterExecution()
+    {
+        var mockAdapterRegistry = new Mock<IToolAdapterRegistry>();
+        var agent = CreateAgent();
+        var task = new AgentTask
+        {
+            Input = "warehouse.inventory.by-item",
+            DomainHint = "warehouse",
+            CapabilityHint = new CapabilityRequestHint
+            {
+                CapabilityKey = "warehouse.inventory.by-item",
+                Domain = "warehouse"
+            }
+        };
+        var context = CreateContext(mockAdapterRegistry.Object);
+
+        var result = await agent.ExecuteAsync(task, context, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Code.Should().Be("CAPABILITY_ARGUMENT_VALIDATION_FAILED");
         mockAdapterRegistry.Verify(r => r.Resolve(It.IsAny<string>()), Times.Never);
     }
 }

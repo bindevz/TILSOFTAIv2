@@ -82,25 +82,14 @@ public sealed class WarehouseAgent : DomainAgentBase
             return result;
         }
 
-        // Fallback: delegate to legacy bridge when no native capability matches
         Logger.LogInformation(
-            "AgentFallbackPath | AgentId: {AgentId} | Reason: {Reason}",
+            "AgentUnsupportedPath | AgentId: {AgentId} | Reason: {Reason}",
             AgentId, BridgeFallbackReasons.NoCapabilityMatch);
 
-        var fallbackSw = Stopwatch.StartNew();
-        var fallbackResult = await Bridge.ExecuteAsync(task, context, ct);
-        fallbackSw.Stop();
-        _instrumentation?.RecordBridgeFallback(
-            AgentId,
-            BridgeFallbackReasons.NoCapabilityMatch,
-            fallbackSw.Elapsed,
-            fallbackResult.Success);
-
-        Logger.LogInformation(
-            "AgentExecutionCompleted | AgentId: {AgentId} | Path: bridge | Success: {Success}",
-            AgentId, fallbackResult.Success);
-
-        return fallbackResult;
+        return AgentResult.Fail(
+            "No native warehouse capability matched this request.",
+            "DOMAIN_CAPABILITY_NOT_FOUND",
+            new { domain = "warehouse", reason = BridgeFallbackReasons.NoCapabilityMatch });
     }
 
     /// <summary>
@@ -197,6 +186,22 @@ public sealed class WarehouseAgent : DomainAgentBase
                     policy.Detail);
             }
 
+            var argumentsJson = ExtractArgumentsJson(task);
+            var validation = CapabilityArgumentValidator.Validate(capability, argumentsJson);
+            if (!validation.IsValid)
+            {
+                _instrumentation?.RecordAdapterFailure(
+                    AgentId,
+                    capability.CapabilityKey,
+                    adapterType,
+                    CapabilityArgumentValidator.ValidationFailedCode);
+
+                return AgentResult.Fail(
+                    "Capability argument validation failed.",
+                    CapabilityArgumentValidator.ValidationFailedCode,
+                    validation.Detail);
+            }
+
             var adapter = context.ToolAdapterRegistry!.Resolve(capability.AdapterType);
             adapterType = adapter.AdapterType;
 
@@ -209,7 +214,7 @@ public sealed class WarehouseAgent : DomainAgentBase
                 SystemId = capability.TargetSystemId,
                 CapabilityKey = capability.CapabilityKey,
                 Operation = capability.Operation,
-                ArgumentsJson = ExtractArgumentsJson(task),
+                ArgumentsJson = argumentsJson,
                 ExecutionMode = capability.ExecutionMode,
                 CorrelationId = context.RuntimeContext.CorrelationId,
                 Metadata = metadata!

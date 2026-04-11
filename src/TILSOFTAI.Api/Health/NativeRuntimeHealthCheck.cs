@@ -30,14 +30,21 @@ public sealed class NativeRuntimeHealthCheck : IHealthCheck
     {
         _ = _supervisorRuntime;
 
-        var warehouseCapabilities = _capabilityRegistry.GetByDomain("warehouse");
-        var accountingCapabilities = _capabilityRegistry.GetByDomain("accounting");
-        var capabilities = warehouseCapabilities.Concat(accountingCapabilities).ToArray();
+        var capabilities = _capabilityRegistry.GetAll()
+            .Where(capability => !string.IsNullOrWhiteSpace(capability.CapabilityKey))
+            .ToArray();
+
+        var domainCounts = capabilities
+            .GroupBy(capability => capability.Domain, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => string.IsNullOrWhiteSpace(group.Key) ? "unspecified" : group.Key,
+                group => (object)group.Count(),
+                StringComparer.OrdinalIgnoreCase);
 
         var data = new Dictionary<string, object>
         {
-            ["warehouse_capabilities"] = warehouseCapabilities.Count,
-            ["accounting_capabilities"] = accountingCapabilities.Count,
+            ["capability_count"] = capabilities.Length,
+            ["domain_counts"] = domainCounts,
             ["adapter_types"] = capabilities
                 .Select(capability => capability.AdapterType)
                 .Where(adapterType => !string.IsNullOrWhiteSpace(adapterType))
@@ -45,10 +52,10 @@ public sealed class NativeRuntimeHealthCheck : IHealthCheck
                 .ToArray()
         };
 
-        if (warehouseCapabilities.Count == 0 || accountingCapabilities.Count == 0)
+        if (capabilities.Length == 0)
         {
             return Task.FromResult(HealthCheckResult.Unhealthy(
-                "Native runtime capabilities are not fully loaded.",
+                "No native runtime capabilities are loaded.",
                 data: data));
         }
 

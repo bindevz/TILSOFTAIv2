@@ -37,6 +37,12 @@ public static class WarehouseCapabilities
                 ["storedProcedure"] = "dbo.ai_warehouse_inventory_by_item"
             },
             RequiredRoles = new[] { "warehouse_read" },
+            ArgumentContract = new CapabilityArgumentContract
+            {
+                RequiredArguments = new[] { "@ItemNo" },
+                AllowedArguments = new[] { "@ItemNo", "@TenantId" },
+                AllowAdditionalArguments = false
+            },
             ExecutionMode = "readonly"
         },
         new CapabilityDescriptor
@@ -61,6 +67,12 @@ public static class WarehouseCapabilities
             Operation = ToolAdapterOperationNames.ExecuteHttpJson,
             TargetSystemId = "external-stock-api",
             RequiredRoles = new[] { "warehouse_external_read" },
+            ArgumentContract = new CapabilityArgumentContract
+            {
+                RequiredArguments = new[] { "@ItemNo" },
+                AllowedArguments = new[] { "@ItemNo" },
+                AllowAdditionalArguments = false
+            },
             ExecutionMode = "readonly"
         }
     };
