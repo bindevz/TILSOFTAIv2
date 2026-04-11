@@ -5,6 +5,7 @@ using TILSOFTAI.Agents.Domain;
 using TILSOFTAI.Approvals;
 using TILSOFTAI.Orchestration.Analytics;
 using TILSOFTAI.Orchestration.Capabilities;
+using TILSOFTAI.Orchestration.Observability;
 using TILSOFTAI.Orchestration.Pipeline;
 using TILSOFTAI.Supervisor;
 using TILSOFTAI.Supervisor.Classification;
@@ -14,19 +15,14 @@ namespace TILSOFTAI.Orchestration;
 
 public static class OrchestrationServiceCollectionExtensions
 {
-    public static IServiceCollection AddOrchestrationEngine(this IServiceCollection services)
+    public static IServiceCollection AddSupervisorRuntime(this IServiceCollection services)
     {
         // Supervisor runtime with intent classification
         services.AddSingleton<IIntentClassifier, KeywordIntentClassifier>();
+        services.AddSingleton<RuntimeExecutionInstrumentation>();
         services.AddSingleton<ISupervisorRuntime, SupervisorRuntime>();
 
-        // Sprint 1 compatibility facade (deprecated — to be removed when all controllers use ISupervisorRuntime)
-        #pragma warning disable CS0618 // Obsolete
-        services.AddSingleton<IOrchestrationEngine, OrchestrationEngine>();
-        #pragma warning restore CS0618
-
-        // Legacy bridge — transitional shared pipeline delegation point
-        // Sprint 5: only used as fallback when no native capability matches for either domain
+        // Legacy bridge is fallback-only; native capability execution is owned by domain agents.
         services.AddSingleton<LegacyChatPipelineBridge>();
         services.AddSingleton<ChatPipeline>();
 

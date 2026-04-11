@@ -49,6 +49,21 @@ public static class WarehouseCapabilities
                 ["storedProcedure"] = "dbo.ai_warehouse_receipts_recent"
             },
             ExecutionMode = "readonly"
+        },
+        new CapabilityDescriptor
+        {
+            CapabilityKey = "warehouse.external-stock.lookup",
+            Domain = "warehouse",
+            AdapterType = "rest-json",
+            Operation = ToolAdapterOperationNames.ExecuteHttpJson,
+            TargetSystemId = "external-stock-api",
+            IntegrationBinding = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["baseUrl"] = "https://example.invalid",
+                ["endpoint"] = "/warehouse/external-stock",
+                ["method"] = "GET"
+            },
+            ExecutionMode = "readonly"
         }
     };
 }

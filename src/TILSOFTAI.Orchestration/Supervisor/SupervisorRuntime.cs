@@ -6,6 +6,7 @@ using TILSOFTAI.Agents.Abstractions;
 using TILSOFTAI.Approvals;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Capabilities;
+using TILSOFTAI.Orchestration.Observability;
 using TILSOFTAI.Supervisor.Classification;
 using TILSOFTAI.Tools.Abstractions;
 
@@ -18,19 +19,22 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
     private readonly IApprovalEngine _approvalEngine;
     private readonly IToolAdapterRegistry _toolAdapterRegistry;
     private readonly ILogger<SupervisorRuntime> _logger;
+    private readonly RuntimeExecutionInstrumentation? _instrumentation;
 
     public SupervisorRuntime(
         IIntentClassifier intentClassifier,
         IAgentRegistry agentRegistry,
         IApprovalEngine approvalEngine,
         IToolAdapterRegistry toolAdapterRegistry,
-        ILogger<SupervisorRuntime> logger)
+        ILogger<SupervisorRuntime> logger,
+        RuntimeExecutionInstrumentation? instrumentation = null)
     {
         _intentClassifier = intentClassifier ?? throw new ArgumentNullException(nameof(intentClassifier));
         _agentRegistry = agentRegistry ?? throw new ArgumentNullException(nameof(agentRegistry));
         _approvalEngine = approvalEngine ?? throw new ArgumentNullException(nameof(approvalEngine));
         _toolAdapterRegistry = toolAdapterRegistry ?? throw new ArgumentNullException(nameof(toolAdapterRegistry));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _instrumentation = instrumentation;
     }
 
     public async Task<SupervisorResult> RunAsync(SupervisorRequest request, TilsoftExecutionContext ctx, CancellationToken ct)
@@ -122,6 +126,12 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
         _logger.LogInformation(
             "SupervisorCompleted | AgentId: {AgentId} | Success: {Success} | DurationMs: {DurationMs}",
             selectedAgent.AgentId, result.Success, sw.ElapsedMilliseconds);
+
+        _instrumentation?.RecordSupervisorExecution(
+            selectedAgent.AgentId,
+            task.DomainHint,
+            sw.Elapsed,
+            result.Success);
 
         return SupervisorResult.FromAgentResult(result, selectedAgent.AgentId);
     }

@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TILSOFTAI.Agents.Abstractions;
 using TILSOFTAI.Orchestration.Capabilities;
+using TILSOFTAI.Orchestration.Observability;
 using TILSOFTAI.Tools.Abstractions;
 
 namespace TILSOFTAI.Agents.Domain;
@@ -16,16 +18,19 @@ public sealed class WarehouseAgent : DomainAgentBase
 {
     private readonly ICapabilityRegistry _capabilityRegistry;
     private readonly ICapabilityResolver _capabilityResolver;
+    private readonly RuntimeExecutionInstrumentation? _instrumentation;
 
     public WarehouseAgent(
         LegacyChatPipelineBridge bridge,
         ICapabilityRegistry capabilityRegistry,
         ICapabilityResolver capabilityResolver,
-        ILogger<WarehouseAgent> logger)
+        ILogger<WarehouseAgent> logger,
+        RuntimeExecutionInstrumentation? instrumentation = null)
         : base(bridge, logger)
     {
         _capabilityRegistry = capabilityRegistry ?? throw new ArgumentNullException(nameof(capabilityRegistry));
         _capabilityResolver = capabilityResolver ?? throw new ArgumentNullException(nameof(capabilityResolver));
+        _instrumentation = instrumentation;
     }
 
     public override string AgentId => "warehouse";
@@ -68,7 +73,14 @@ public sealed class WarehouseAgent : DomainAgentBase
             "AgentFallbackPath | AgentId: {AgentId} | Reason: {Reason}",
             AgentId, capability is null ? "no_capability_match" : "no_adapter_registry");
 
+        var fallbackSw = Stopwatch.StartNew();
         var fallbackResult = await Bridge.ExecuteAsync(task, context, ct);
+        fallbackSw.Stop();
+        _instrumentation?.RecordBridgeFallback(
+            AgentId,
+            capability is null ? "no_capability_match" : "no_adapter_registry",
+            fallbackSw.Elapsed,
+            fallbackResult.Success);
 
         Logger.LogInformation(
             "AgentExecutionCompleted | AgentId: {AgentId} | Path: bridge | Success: {Success}",
@@ -150,9 +162,14 @@ public sealed class WarehouseAgent : DomainAgentBase
         AgentExecutionContext context,
         CancellationToken ct)
     {
+        var sw = Stopwatch.StartNew();
+        var success = false;
+        var adapterType = capability.AdapterType;
+
         try
         {
             var adapter = context.ToolAdapterRegistry!.Resolve(capability.AdapterType);
+            adapterType = adapter.AdapterType;
 
             var metadata = new Dictionary<string, string?>(capability.IntegrationBinding!, StringComparer.OrdinalIgnoreCase);
 
@@ -173,21 +190,43 @@ public sealed class WarehouseAgent : DomainAgentBase
 
             if (!result.Success)
             {
+                _instrumentation?.RecordAdapterFailure(
+                    AgentId,
+                    capability.CapabilityKey,
+                    adapterType,
+                    result.ErrorCode);
                 return AgentResult.Fail(
                     $"Capability execution failed: {result.ErrorCode}",
                     result.ErrorCode,
                     result.Detail);
             }
 
+            success = true;
             return AgentResult.Ok(result.PayloadJson ?? string.Empty);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            _instrumentation?.RecordAdapterFailure(
+                AgentId,
+                capability.CapabilityKey,
+                adapterType,
+                ex.GetType().Name);
+
             Logger.LogError(ex,
                 "AgentNativePathError | AgentId: {AgentId} | CapabilityKey: {CapabilityKey}",
                 AgentId, capability.CapabilityKey);
 
             return AgentResult.Fail($"Native execution failed: {ex.Message}");
+        }
+        finally
+        {
+            sw.Stop();
+            _instrumentation?.RecordNativeExecution(
+                AgentId,
+                capability.CapabilityKey,
+                adapterType,
+                sw.Elapsed,
+                success);
         }
     }
 

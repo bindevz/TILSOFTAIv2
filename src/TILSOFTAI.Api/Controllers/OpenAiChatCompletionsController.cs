@@ -7,9 +7,9 @@ using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Sensitivity;
-using TILSOFTAI.Orchestration;
 using TILSOFTAI.Orchestration.Conversations;
 using TILSOFTAI.Orchestration.Pipeline;
+using TILSOFTAI.Supervisor;
 
 namespace TILSOFTAI.Api.Controllers;
 
@@ -18,7 +18,7 @@ namespace TILSOFTAI.Api.Controllers;
 [Route("v1/chat/completions")]
 public sealed class OpenAiChatCompletionsController : ControllerBase
 {
-    private readonly IOrchestrationEngine _engine;
+    private readonly ISupervisorRuntime _supervisorRuntime;
     private readonly IExecutionContextAccessor _contextAccessor;
     private readonly LlmOptions _llmOptions;
     private readonly ILogger<OpenAiChatCompletionsController> _logger;
@@ -26,18 +26,20 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
     private readonly IOptions<StreamingOptions> _streamingOptions;
     private readonly IOptions<ChatOptions> _chatOptions;
     private readonly ISensitivityClassifier _sensitivityClassifier;
+    private readonly SensitiveDataOptions _sensitiveDataOptions;
 
     public OpenAiChatCompletionsController(
-        IOrchestrationEngine engine,
+        ISupervisorRuntime supervisorRuntime,
         IExecutionContextAccessor contextAccessor,
         IOptions<LlmOptions> llmOptions,
         ILogger<OpenAiChatCompletionsController> logger,
         ChatStreamEnvelopeFactory envelopeFactory,
         IOptions<StreamingOptions> streamingOptions,
         IOptions<ChatOptions> chatOptions,
-        ISensitivityClassifier sensitivityClassifier)
+        ISensitivityClassifier sensitivityClassifier,
+        IOptions<SensitiveDataOptions> sensitiveDataOptions)
     {
-        _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+        _supervisorRuntime = supervisorRuntime ?? throw new ArgumentNullException(nameof(supervisorRuntime));
         _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(contextAccessor));
         _llmOptions = llmOptions?.Value ?? throw new ArgumentNullException(nameof(llmOptions));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -45,6 +47,7 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
         _streamingOptions = streamingOptions ?? throw new ArgumentNullException(nameof(streamingOptions));
         _chatOptions = chatOptions ?? throw new ArgumentNullException(nameof(chatOptions));
         _sensitivityClassifier = sensitivityClassifier ?? throw new ArgumentNullException(nameof(sensitivityClassifier));
+        _sensitiveDataOptions = sensitiveDataOptions?.Value ?? throw new ArgumentNullException(nameof(sensitiveDataOptions));
     }
 
     [HttpPost]
@@ -94,20 +97,17 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
             // Compute sensitivity server-side
             var sensitivityResult = _sensitivityClassifier.Classify(joinedInput);
 
-            var chatRequest = new ChatRequest
-            {
-                Input = joinedInput,
-                MessageHistory = BuildMessageHistory(request.Messages),
-                AllowCache = true,
-                ContainsSensitive = sensitivityResult.ContainsSensitive,
-                SensitivityReasons = sensitivityResult.Reasons
-            };
+            var supervisorRequest = BuildSupervisorRequest(
+                joinedInput,
+                BuildMessageHistory(request.Messages),
+                sensitivityResult,
+                stream: true);
 
             try
             {
-                await foreach (var evt in _engine.RunChatStreamAsync(chatRequest, context, linkedToken))
+                await foreach (var evt in _supervisorRuntime.RunStreamAsync(supervisorRequest, context, linkedToken))
                 {
-                    var envelope = _envelopeFactory.Create(evt, context);
+                    var envelope = _envelopeFactory.Create(ToChatStreamEvent(evt), context);
                     var hasChunk = translator.TryTranslate(envelope, out var chunk, out var isTerminal, out var isError);
 
                     if (hasChunk && chunk is not null)
@@ -146,16 +146,13 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
         // Compute sensitivity server-side
         var sensitivityResultNonStream = _sensitivityClassifier.Classify(joinedInput);
 
-        var chatRequestNonStream = new ChatRequest
-        {
-            Input = joinedInput,
-            MessageHistory = BuildMessageHistory(request.Messages),
-            AllowCache = true,
-            ContainsSensitive = sensitivityResultNonStream.ContainsSensitive,
-            SensitivityReasons = sensitivityResultNonStream.Reasons
-        };
+        var supervisorRequestNonStream = BuildSupervisorRequest(
+            joinedInput,
+            BuildMessageHistory(request.Messages),
+            sensitivityResultNonStream,
+            stream: false);
 
-        var resultNonStream = await _engine.RunChatAsync(chatRequestNonStream, context, cancellationToken);
+        var resultNonStream = await _supervisorRuntime.RunAsync(supervisorRequestNonStream, context, cancellationToken);
         if (!resultNonStream.Success)
         {
             var code = string.IsNullOrWhiteSpace(resultNonStream.Code) ? ErrorCode.ChatFailed : resultNonStream.Code;
@@ -178,7 +175,7 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
                     Message = new OpenAiChatMessage
                     {
                         Role = "assistant",
-                        Content = resultNonStream.Content ?? string.Empty
+                        Content = resultNonStream.Output ?? string.Empty
                     },
                     FinishReason = "stop"
                 }
@@ -251,4 +248,32 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
     {
         return string.Equals(eventType, "delta", StringComparison.OrdinalIgnoreCase);
     }
+
+    private SupervisorRequest BuildSupervisorRequest(
+        string input,
+        IReadOnlyList<ChatMessage> messageHistory,
+        SensitivityResult sensitivityResult,
+        bool stream)
+    {
+        return new SupervisorRequest
+        {
+            Input = input,
+            MessageHistory = messageHistory,
+            AllowCache = true,
+            ContainsSensitive = sensitivityResult.ContainsSensitive,
+            SensitivityReasons = sensitivityResult.Reasons,
+            RequestPolicy = new RequestPolicy
+            {
+                ContainsSensitive = sensitivityResult.ContainsSensitive,
+                HandlingMode = _sensitiveDataOptions.HandlingMode,
+                DisableCachingWhenSensitive = _sensitiveDataOptions.DisableCachingWhenSensitive,
+                DisableToolResultPersistenceWhenSensitive = _sensitiveDataOptions.DisableToolResultPersistenceWhenSensitive
+            },
+            IntentType = "chat",
+            Stream = stream
+        };
+    }
+
+    private static ChatStreamEvent ToChatStreamEvent(SupervisorStreamEvent evt) =>
+        new(evt.Type, evt.Payload);
 }

@@ -8,4 +8,5 @@ public static class ToolAdapterOperationNames
     public const string ExecuteDiagnostics = "execute_diagnostics";
     public const string ExecuteScalar = "execute_scalar";
     public const string ExecuteQuery = "execute_query";
+    public const string ExecuteHttpJson = "execute_http_json";
 }

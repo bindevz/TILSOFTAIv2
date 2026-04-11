@@ -12,7 +12,7 @@ namespace TILSOFTAI.Tests.Streaming;
 public class ChatStreamCoalescingTests
 {
     /// <summary>
-    /// Simulates the delta coalescing logic from OrchestrationEngine.
+    /// Simulates the delta coalescing logic used by the streaming edge.
     /// Given many small delta chars, the coalescer should:
     /// (1) Not drop any characters
     /// (2) Preserve total length

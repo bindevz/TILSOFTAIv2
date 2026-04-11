@@ -1,50 +1,40 @@
-# Sprint 1 Cleanup Report
+# Sprint Cleanup Report
 
-## Deprecated runtime paths
+## Deleted In Sprint 6
 
-Compatibility or deprecated paths kept after Sprint 1:
 - `src/TILSOFTAI.Orchestration/IOrchestrationEngine.cs`
 - `src/TILSOFTAI.Orchestration/OrchestrationEngine.cs`
 - `src/TILSOFTAI.Orchestration/Actions/ActionApprovalService.cs`
+- `src/TILSOFTAI.Orchestration/Capabilities/ICapabilityPackProvider.cs`
+- `src/TILSOFTAI.Orchestration/Capabilities/ModuleBackedCapabilityPack.cs`
+- `tests/TILSOFTAI.Tests/Approvals/ActionApprovalServiceFacadeTests.cs`
+
+## Remaining Deprecated Runtime Paths
+
+- `src/TILSOFTAI.Orchestration/Agents/LegacyChatPipelineBridge.cs`
+- `src/TILSOFTAI.Orchestration/Agents/LegacyChatDomainAgent.cs`
+- `src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs`
 - `src/TILSOFTAI.Orchestration/Modules/IModuleScopeResolver.cs`
 - `src/TILSOFTAI.Orchestration/Modules/ModuleScopeResolver.cs`
 - `src/TILSOFTAI.Infrastructure/Modules/IModuleLoader.cs`
 - `src/TILSOFTAI.Infrastructure/Modules/ModuleLoader.cs`
 - `src/TILSOFTAI.Infrastructure/Modules/ModuleLoaderHostedService.cs`
 
-## Exact deletion candidates once Sprint 2 replacements exist
+## Why These Are Not Deleted Yet
 
-Delete after agent/capability migration is active:
-- `src/TILSOFTAI.Orchestration/IOrchestrationEngine.cs`
-- `src/TILSOFTAI.Orchestration/OrchestrationEngine.cs`
+- Bridge fallback still handles requests that no native capability resolves.
+- `LegacyChatDomainAgent` is still the catch-all for unclassified requests.
+- `ChatPipeline` still owns legacy LLM/tool behavior behind the fallback path.
+- Module loader and module scope resolver still support the legacy pipeline and module health diagnostics.
+- SQL-backed action request persistence remains the production approval persistence boundary.
 
-Delete after approval consumers stop using compatibility surface:
-- `src/TILSOFTAI.Orchestration/Actions/ActionApprovalService.cs`
+## Sprint 6 Cleanup Outcome
 
-Delete after capability-pack loader replaces module-first bootstrap:
-- `src/TILSOFTAI.Infrastructure/Modules/IModuleLoader.cs`
-- `src/TILSOFTAI.Infrastructure/Modules/ModuleLoader.cs`
-- `src/TILSOFTAI.Infrastructure/Modules/ModuleLoaderHostedService.cs`
-- `src/TILSOFTAI.Orchestration/Modules/IModuleScopeResolver.cs`
-- `src/TILSOFTAI.Orchestration/Modules/ModuleScopeResolver.cs`
+Native runtime execution no longer depends on module scope resolution or the old orchestration facade. Module-era infrastructure is now explicitly bridge/legacy-only. Runtime telemetry makes native usage, bridge fallback, approval execution, capability invocation, adapter failures, and duration visible.
 
-Delete or rewrite after module packages stop owning runtime behavior:
-- `src/TILSOFTAI.Modules.Core/*Module*.cs`
-- `src/TILSOFTAI.Modules.Model/ModelModule.cs`
-- `src/TILSOFTAI.Modules.Platform/PlatformModule.cs`
-- `src/TILSOFTAI.Modules.Analytics/AnalyticsModule.cs`
+## Sprint 7 Cleanup Prerequisites
 
-## Why these are not deleted yet
-
-- API controllers and hubs still use `IOrchestrationEngine`.
-- current chat behavior still depends on `ChatPipeline`, module scope resolution, and module-driven tool catalogs.
-- startup still depends on reflection-based module loading.
-- write approval persistence still depends on the existing SQL-backed action request store.
-
-## Sprint 2 prerequisites
-
-- first real domain-agent implementations with owned capabilities
-- capability-pack loader and registration model
-- migration plan for module catalog and module scope SQL tables
-- adapter selection rules beyond SQL
-- approval policy source that is not hard-wired to SQL-only metadata
+- Native general/chat agent or equivalent fallback replacement.
+- Capability-pack loader for legacy tool catalog replacement.
+- Expanded non-SQL capability configuration and production endpoint policy.
+- Decision on whether module health remains a legacy diagnostic or is removed with module loading.

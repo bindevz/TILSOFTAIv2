@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using TILSOFTAI.Agents.Abstractions;
+using TILSOFTAI.Orchestration.Observability;
 
 namespace TILSOFTAI.Agents;
 
@@ -18,10 +20,14 @@ public sealed class LegacyChatDomainAgent : IDomainAgent
     public const string AgentIdValue = "legacy-chat";
 
     private readonly LegacyChatPipelineBridge _bridge;
+    private readonly RuntimeExecutionInstrumentation? _instrumentation;
 
-    public LegacyChatDomainAgent(LegacyChatPipelineBridge bridge)
+    public LegacyChatDomainAgent(
+        LegacyChatPipelineBridge bridge,
+        RuntimeExecutionInstrumentation? instrumentation = null)
     {
         _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
+        _instrumentation = instrumentation;
     }
 
     public string AgentId => AgentIdValue;
@@ -48,8 +54,12 @@ public sealed class LegacyChatDomainAgent : IDomainAgent
             || string.Equals(task.DomainHint, "cross-domain", StringComparison.OrdinalIgnoreCase);
     }
 
-    public Task<AgentResult> ExecuteAsync(AgentTask task, AgentExecutionContext context, CancellationToken ct)
+    public async Task<AgentResult> ExecuteAsync(AgentTask task, AgentExecutionContext context, CancellationToken ct)
     {
-        return _bridge.ExecuteAsync(task, context, ct);
+        var sw = Stopwatch.StartNew();
+        var result = await _bridge.ExecuteAsync(task, context, ct);
+        sw.Stop();
+        _instrumentation?.RecordBridgeFallback(AgentId, "legacy_agent", sw.Elapsed, result.Success);
+        return result;
     }
 }

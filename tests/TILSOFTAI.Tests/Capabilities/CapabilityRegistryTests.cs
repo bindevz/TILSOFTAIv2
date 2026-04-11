@@ -16,12 +16,13 @@ public sealed class CapabilityRegistryTests
 
         var capabilities = registry.GetByDomain("warehouse");
 
-        capabilities.Should().HaveCount(3);
+        capabilities.Should().HaveCount(4);
         capabilities.Select(c => c.CapabilityKey).Should().Contain(new[]
         {
             "warehouse.inventory.summary",
             "warehouse.inventory.by-item",
-            "warehouse.receipts.recent"
+            "warehouse.receipts.recent",
+            "warehouse.external-stock.lookup"
         });
     }
 
@@ -32,7 +33,7 @@ public sealed class CapabilityRegistryTests
 
         var capabilities = registry.GetByDomain("Warehouse");
 
-        capabilities.Should().HaveCount(3);
+        capabilities.Should().HaveCount(4);
     }
 
     [Fact]
@@ -112,11 +113,14 @@ public sealed class CapabilityRegistryTests
     }
 
     [Fact]
-    public void AllWarehouseCapabilities_ShouldUseSqlAdapter()
+    public void WarehouseCapabilities_ShouldIncludeSqlAndRestAdapters()
     {
         var registry = CreateRegistry();
         var capabilities = registry.GetByDomain("warehouse");
 
-        capabilities.Should().OnlyContain(c => c.AdapterType == "sql");
+        capabilities.Where(c => c.AdapterType == "sql").Should().HaveCount(3);
+        capabilities.Should().ContainSingle(c =>
+            c.AdapterType == "rest-json"
+            && c.CapabilityKey == "warehouse.external-stock.lookup");
     }
 }

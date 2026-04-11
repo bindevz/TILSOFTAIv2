@@ -7,8 +7,8 @@ using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Sensitivity;
-using TILSOFTAI.Orchestration;
 using TILSOFTAI.Orchestration.Pipeline;
+using TILSOFTAI.Supervisor;
 
 namespace TILSOFTAI.Api.Controllers;
 
@@ -21,30 +21,33 @@ namespace TILSOFTAI.Api.Controllers;
 [Route("api/chats")]
 public sealed class ChatController : ControllerBase
 {
-    private readonly IOrchestrationEngine _engine;
+    private readonly ISupervisorRuntime _supervisorRuntime;
     private readonly IExecutionContextAccessor _contextAccessor;
     private readonly ILogger<ChatController> _logger;
     private readonly ChatStreamEnvelopeFactory _envelopeFactory;
     private readonly IOptions<StreamingOptions> _streamingOptions;
     private readonly IOptions<ChatOptions> _chatOptions;
     private readonly ISensitivityClassifier _sensitivityClassifier;
+    private readonly SensitiveDataOptions _sensitiveDataOptions;
 
     public ChatController(
-        IOrchestrationEngine engine,
+        ISupervisorRuntime supervisorRuntime,
         IExecutionContextAccessor contextAccessor,
         ILogger<ChatController> logger,
         ChatStreamEnvelopeFactory envelopeFactory,
         IOptions<StreamingOptions> streamingOptions,
         IOptions<ChatOptions> chatOptions,
-        ISensitivityClassifier sensitivityClassifier)
+        ISensitivityClassifier sensitivityClassifier,
+        IOptions<SensitiveDataOptions> sensitiveDataOptions)
     {
-        _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+        _supervisorRuntime = supervisorRuntime ?? throw new ArgumentNullException(nameof(supervisorRuntime));
         _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(contextAccessor));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _envelopeFactory = envelopeFactory ?? throw new ArgumentNullException(nameof(envelopeFactory));
         _streamingOptions = streamingOptions ?? throw new ArgumentNullException(nameof(streamingOptions));
         _chatOptions = chatOptions ?? throw new ArgumentNullException(nameof(chatOptions));
         _sensitivityClassifier = sensitivityClassifier ?? throw new ArgumentNullException(nameof(sensitivityClassifier));
+        _sensitiveDataOptions = sensitiveDataOptions?.Value ?? throw new ArgumentNullException(nameof(sensitiveDataOptions));
     }
 
     [HttpPost]
@@ -65,15 +68,9 @@ public sealed class ChatController : ControllerBase
         }
         var sensitivityResult = _sensitivityClassifier.Classify(input);
         
-        var chatRequest = new ChatRequest
-        {
-            Input = input,
-            AllowCache = request?.AllowCache ?? true,
-            ContainsSensitive = sensitivityResult.ContainsSensitive,
-            SensitivityReasons = sensitivityResult.Reasons
-        };
+        var supervisorRequest = BuildSupervisorRequest(input, request?.AllowCache ?? true, sensitivityResult, stream: false);
 
-        var result = await _engine.RunChatAsync(chatRequest, context, cancellationToken);
+        var result = await _supervisorRuntime.RunAsync(supervisorRequest, context, cancellationToken);
         
         if (!result.Success)
         {
@@ -87,7 +84,7 @@ public sealed class ChatController : ControllerBase
         var response = new ChatApiResponse
         {
             Success = true,
-            Content = result.Content ?? string.Empty,
+            Content = result.Output ?? string.Empty,
             ConversationId = context.ConversationId,
             CorrelationId = context.CorrelationId,
             TraceId = context.TraceId,
@@ -120,13 +117,7 @@ public sealed class ChatController : ControllerBase
         }
         var sensitivityResult = _sensitivityClassifier.Classify(input);
 
-        var chatRequest = new ChatRequest
-        {
-            Input = input,
-            AllowCache = request?.AllowCache ?? true,
-            ContainsSensitive = sensitivityResult.ContainsSensitive,
-            SensitivityReasons = sensitivityResult.Reasons
-        };
+        var supervisorRequest = BuildSupervisorRequest(input, request?.AllowCache ?? true, sensitivityResult, stream: true);
 
 #if DEBUG
         // Test-only hook: Trigger deterministic error for contract testing
@@ -143,9 +134,9 @@ public sealed class ChatController : ControllerBase
 
         try
         {
-            await foreach (var evt in _engine.RunChatStreamAsync(chatRequest, context, linkedToken))
+            await foreach (var evt in _supervisorRuntime.RunStreamAsync(supervisorRequest, context, linkedToken))
             {
-                var envelope = _envelopeFactory.Create(evt, context);
+                var envelope = _envelopeFactory.Create(ToChatStreamEvent(evt), context);
                 await SseWriter.WriteEventAsync(Response, envelope.Type, envelope, linkedToken);
 
                 if (IsTerminal(evt.Type))
@@ -174,4 +165,31 @@ public sealed class ChatController : ControllerBase
     {
         return string.Equals(eventType, "delta", StringComparison.OrdinalIgnoreCase);
     }
+
+    private SupervisorRequest BuildSupervisorRequest(
+        string input,
+        bool allowCache,
+        SensitivityResult sensitivityResult,
+        bool stream)
+    {
+        return new SupervisorRequest
+        {
+            Input = input,
+            AllowCache = allowCache,
+            ContainsSensitive = sensitivityResult.ContainsSensitive,
+            SensitivityReasons = sensitivityResult.Reasons,
+            RequestPolicy = new RequestPolicy
+            {
+                ContainsSensitive = sensitivityResult.ContainsSensitive,
+                HandlingMode = _sensitiveDataOptions.HandlingMode,
+                DisableCachingWhenSensitive = _sensitiveDataOptions.DisableCachingWhenSensitive,
+                DisableToolResultPersistenceWhenSensitive = _sensitiveDataOptions.DisableToolResultPersistenceWhenSensitive
+            },
+            IntentType = "chat",
+            Stream = stream
+        };
+    }
+
+    private static ChatStreamEvent ToChatStreamEvent(SupervisorStreamEvent evt) =>
+        new(evt.Type, evt.Payload);
 }

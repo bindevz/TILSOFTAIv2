@@ -38,5 +38,14 @@ namespace TILSOFTAI.Domain.Metrics
         public const string ChatStreamDeltasOutTotal = "tilsoftai_chat_stream_deltas_out_total";
         public const string ChatStreamDeltaFlushTotal = "tilsoftai_chat_stream_delta_flush_total";
         public const string ChatStreamDropTotal = "tilsoftai_chat_stream_drop_total";
+
+        // Sprint 6: supervisor-driven runtime observability
+        public const string RuntimeSupervisorExecutionsTotal = "tilsoftai_runtime_supervisor_executions_total";
+        public const string RuntimeNativeExecutionsTotal = "tilsoftai_runtime_native_executions_total";
+        public const string RuntimeBridgeFallbackTotal = "tilsoftai_runtime_bridge_fallback_total";
+        public const string RuntimeApprovalExecutionsTotal = "tilsoftai_runtime_approval_executions_total";
+        public const string RuntimeCapabilityInvocationsTotal = "tilsoftai_runtime_capability_invocations_total";
+        public const string RuntimeAdapterFailuresTotal = "tilsoftai_runtime_adapter_failures_total";
+        public const string RuntimeExecutionDurationSeconds = "tilsoftai_runtime_execution_duration_seconds";
     }
 }

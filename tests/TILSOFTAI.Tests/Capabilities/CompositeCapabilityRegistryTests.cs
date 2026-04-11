@@ -21,7 +21,7 @@ public sealed class CompositeCapabilityRegistryTests
             new StaticCapabilitySource("warehouse", WarehouseCapabilities.All),
             new StaticCapabilitySource("accounting", AccountingCapabilities.All));
 
-        registry.GetByDomain("warehouse").Should().HaveCount(3);
+        registry.GetByDomain("warehouse").Should().HaveCount(4);
         registry.GetByDomain("accounting").Should().HaveCount(3);
     }
 

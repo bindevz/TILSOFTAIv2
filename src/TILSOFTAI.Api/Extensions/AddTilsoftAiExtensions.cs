@@ -30,6 +30,7 @@ using TILSOFTAI.Infrastructure.Actions;
 using TILSOFTAI.Infrastructure.Caching;
 using TILSOFTAI.Infrastructure.ExecutionContext;
 using TILSOFTAI.Infrastructure.Errors;
+using TILSOFTAI.Infrastructure.Http;
 using TILSOFTAI.Infrastructure.Normalization;
 using TILSOFTAI.Infrastructure.Modules;
 using TILSOFTAI.Infrastructure.Conversations;
@@ -145,11 +146,12 @@ public static class AddTilsoftAiExtensions
             var options = sp.GetRequiredService<IOptions<AuthOptions>>().Value;
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.JwksRequestTimeoutSeconds));
         });
+        services.AddHttpClient<RestJsonToolAdapter>();
         services.AddSingleton<JwtSigningKeyProvider>();
         services.AddSingleton<IJwtSigningKeyProvider>(sp => sp.GetRequiredService<JwtSigningKeyProvider>());
         services.AddHostedService<JwtSigningKeyRefreshHostedService>();
 
-        services.AddOrchestrationEngine();
+        services.AddSupervisorRuntime();
         services.AddSingleton<IToolRegistry, ToolRegistry>();
         services.AddSingleton<INamedToolHandlerRegistry>(sp =>
         {
@@ -172,6 +174,7 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<IToolHandler, ToolHandlerRouter>();
         services.AddSingleton<ISqlExecutor, SqlExecutor>();
         services.AddSingleton<IToolAdapter, SqlToolAdapter>();
+        services.AddSingleton<IToolAdapter>(sp => sp.GetRequiredService<RestJsonToolAdapter>());
         services.AddSingleton<SqlContractValidator>();
         services.AddHostedService<SqlContractValidatorHostedService>();
         services.AddSingleton<IConversationStore, SqlConversationStore>();

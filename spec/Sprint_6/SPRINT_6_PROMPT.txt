@@ -1,0 +1,256 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 6.
+
+Baseline repository reality (after Sprint 5):
+- SupervisorRuntime is the real orchestration runtime.
+- WarehouseAgent and AccountingAgent both have native read-path execution through capability resolution and ToolAdapterRegistry.
+- Structured capability resolution now exists through CapabilityRequestHint and ICapabilityResolver.
+- CompositeCapabilityRegistry now loads capabilities from static and configuration sources.
+- ApprovalEngine and IWriteActionGuard govern write execution.
+- Auth middleware and controller authorization are in place.
+- Compatibility debt is now explicitly documented.
+- However, the repository is still not fully enterprise-grade because obsolete facades and legacy-era runtime dependencies still own too much of the execution story.
+
+Critical Sprint 5 debt that must drive Sprint 6:
+- Controllers and hubs still depend on IOrchestrationEngine / OrchestrationEngine instead of ISupervisorRuntime directly.
+- ActionApprovalService still exists as a compatibility facade and should be removed if no longer needed.
+- LegacyChatDomainAgent and LegacyChatPipelineBridge still exist as fallback infrastructure.
+- Module system / module scope resolution still survives as part of legacy runtime behavior and still distorts architecture.
+- Integration tests are better than before, but are still not strong enough to count as fully production-realistic validation.
+- The platform is still SQL-heavy in practice, even though the architecture suggests adapter generality.
+- Runtime observability is still not strong enough to support enterprise operations confidently.
+
+Sprint 6 mission:
+Move the platform from repeatable architecture into enterprise-grade hardening and waste removal.
+
+Sprint 6 must prove all of the following:
+1. Obsolete entrypoint facades are being removed, not merely marked obsolete.
+2. Native runtime no longer appears wrapped inside old orchestration ownership.
+3. Compatibility debt is materially reduced.
+4. Runtime behavior is observable enough for enterprise operations.
+5. The adapter model is real beyond SQL.
+6. Integration validation is closer to production reality.
+7. The codebase is cleaner after Sprint 6 than before Sprint 6.
+
+Primary objective:
+Remove obsolete compatibility ownership and harden the runtime so the platform behaves more like a production enterprise system than a transitional architecture.
+
+Strategic success condition:
+After Sprint 6, the repository should no longer look like “modern runtime inside old wrappers”.
+It should look like a real supervisor-driven platform with bounded, diminishing compatibility residue.
+
+Target architecture principles:
+1. SupervisorRuntime owns orchestration.
+2. Domain agents own domain execution.
+3. Capability contracts remain the native execution boundary.
+4. Tool adapters remain the integration boundary.
+5. ApprovalEngine remains the only write governance owner.
+6. LegacyChatPipelineBridge remains fallback-only and must continue losing significance.
+7. Module-era infrastructure must not own native runtime execution.
+8. Observability is a first-class runtime requirement, not a later add-on.
+9. Enterprise-grade progress must come from real deletions, real runtime changes, and real tests.
+
+Primary Sprint 6 goals:
+
+A. Remove obsolete orchestration facade
+- Migrate ChatController, OpenAiChatCompletionsController, and ChatHub away from IOrchestrationEngine.
+- Use ISupervisorRuntime directly.
+- Move any leftover mapping or envelope behavior into the correct layer.
+- Delete IOrchestrationEngine / OrchestrationEngine if no required callers remain.
+- If full deletion is not safe, reduce them to the smallest possible shim and document exact removal conditions.
+
+B. Remove obsolete approval facade
+- Audit all references to ActionApprovalService.
+- Replace all remaining callers with IApprovalEngine.
+- Delete ActionApprovalService if unused after migration.
+- Update compatibility debt documentation.
+
+C. Reduce module-era ownership
+- Native capability execution must not depend on module scope resolution or module loading.
+- Identify which legacy module pieces are:
+  1. still needed only for bridge fallback
+  2. still needed for native runtime
+  3. dead and removable
+- Remove or isolate dead registrations and dead abstractions where safe.
+- Make sure README and architecture docs clearly separate:
+  - native runtime path
+  - bridge-only / legacy runtime path
+
+D. Add enterprise-grade observability
+- Add runtime instrumentation for:
+  - selected agent
+  - execution path: native / bridge / approval
+  - capability key
+  - adapter type
+  - duration
+  - success / failure
+- Add metrics or equivalent counters for:
+  - native execution count
+  - bridge fallback count
+  - approval executions
+  - capability invocation count
+  - adapter failure count
+- Add one operational document explaining how to interpret these signals.
+
+E. Prove adapter generality beyond SQL
+- Implement one real non-SQL adapter and at least one capability that uses it.
+- Recommended adapter target:
+  - REST / HTTP JSON adapter
+  - gRPC adapter
+- Recommended capability target:
+  - warehouse external stock lookup
+  - accounting invoice status lookup
+  - ERP connector proof capability
+- The non-SQL path must still use:
+  - capability registry
+  - capability resolver
+  - adapter registry
+  - agent-owned native execution
+- Do not bypass the platform pattern.
+
+F. Stronger integration validation
+- Add at least one authenticated HTTP-level integration test using the ASP.NET pipeline.
+- Add stronger runtime-realistic integration tests for:
+  1. one warehouse native path
+  2. one accounting native path
+  3. one approval lifecycle path
+  4. one authorization failure path
+  5. one bridge fallback observability path
+- Preferred: use WebApplicationFactory or equivalent.
+- Preferred: use a real SQL test harness or the strongest realistic boundary available.
+- If any limitation remains, document it explicitly.
+
+G. Documentation and debt alignment
+- Update README to Sprint 6 truth.
+- Update architecture docs.
+- Update compatibility debt report with actual reductions.
+- Add an enterprise readiness gap report that states exactly what still blocks full enterprise-grade status.
+
+Non-negotiable rules:
+1. Do not add new domain agents in Sprint 6.
+2. Do not add planner or graph orchestration.
+3. Do not add multi-agent collaboration.
+4. Do not add speculative abstractions without real Sprint 6 runtime use.
+5. Do not increase dependency on LegacyChatPipelineBridge.
+6. Do not add new domain logic to legacy compatibility shims.
+7. Do not re-center architecture around module loading.
+8. Do not bypass ApprovalEngine or IWriteActionGuard.
+9. Do not claim enterprise-grade progress from docs-only updates.
+10. Prefer deleting dead code over wrapping it one more time.
+
+Explicitly in scope:
+- orchestration facade removal or major reduction
+- approval facade removal
+- module-era dependency reduction
+- observability upgrades
+- one non-SQL adapter path
+- runtime-realistic integration tests
+- compatibility debt update
+- enterprise readiness gap documentation
+
+Explicitly out of scope:
+- new agents
+- broad new business domains
+- planner runtime
+- multi-agent systems
+- full LegacyChatPipelineBridge removal
+- full ChatPipeline removal
+- aggressive rewrite of every old subsystem
+- large UI or product workflow work
+
+Recommended implementation order:
+1. Migrate controllers and hubs to ISupervisorRuntime.
+2. Audit and remove ActionApprovalService.
+3. Isolate or reduce module-era runtime dependencies.
+4. Add execution-path observability.
+5. Implement one non-SQL adapter and one non-SQL capability.
+6. Add HTTP-level and stronger integration tests.
+7. Delete dead code and dead registrations where safe.
+8. Update README, architecture docs, compatibility debt report, and enterprise readiness gap report.
+
+Required architectural outcomes:
+1. Edge entrypoints are closer to the real runtime.
+2. Approval callers use IApprovalEngine directly.
+3. Native runtime is less distorted by module-era ownership.
+4. Native vs bridge execution is measurable.
+5. The platform has at least one real non-SQL capability path.
+6. Integration validation is stronger and more operationally credible.
+7. Compatibility debt is materially smaller than after Sprint 5.
+
+Definition of done:
+- IOrchestrationEngine and OrchestrationEngine are removed or reduced to a minimal shim with documented removal conditions.
+- ActionApprovalService is removed or reduced to zero meaningful ownership.
+- Native runtime no longer depends on module-era components in the same way it did before Sprint 6.
+- Runtime telemetry exists for execution path and capability usage.
+- One non-SQL adapter-backed capability executes through the platform pattern.
+- HTTP-level authenticated integration testing exists.
+- Authorization failure path is tested.
+- README and architecture docs reflect Sprint 6 runtime truth.
+- Compatibility debt report is updated honestly.
+- The codebase is cleaner after Sprint 6 than before.
+
+Must-fail conditions:
+- controllers and hubs still rely primarily on IOrchestrationEngine
+- ActionApprovalService remains as untouched compatibility residue
+- module system still appears central to native runtime ownership
+- there is no real non-SQL adapter proof
+- native vs bridge execution still cannot be measured
+- tests remain mainly mock-based
+- Sprint 6 adds architecture without deleting or reducing debt
+- docs claim enterprise-grade progress that runtime has not earned
+
+Preferred implementation style:
+- explicit contracts
+- small cohesive services
+- measurable runtime behavior
+- production-facing observability
+- safe deletions
+- honest limitations
+- no cosmetic-only refactors
+
+Required deliverables:
+1. Edge entrypoint migration to ISupervisorRuntime.
+2. Approval facade audit and removal.
+3. Module-era dependency reduction in native runtime paths.
+4. Execution-path observability.
+5. One non-SQL adapter and one non-SQL capability.
+6. Stronger integration tests:
+   - authenticated HTTP path
+   - native execution path
+   - approval path
+   - authorization failure path
+   - fallback observability path
+7. Updated documentation:
+   - README
+   - architecture notes
+   - compatibility debt report
+   - enterprise readiness gap report
+
+Required reporting after implementation:
+1. Summary of Sprint 6 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Obsolete facades removed or reduced
+6. Module-era components reduced or isolated
+7. Telemetry / observability changes
+8. Non-SQL adapter and capability paths added
+9. Integration tests added
+10. Remaining compatibility components
+11. Exact reason each remaining compatibility component still exists
+12. Enterprise-grade blockers still remaining
+13. Recommended Sprint 7 priorities
+
+Review discipline:
+- Do not count obsolescence attributes as removal.
+- Do not count bridge fallback as native progress.
+- Do not count new abstraction as value unless runtime uses it.
+- Do not count docs-only cleanup as platform hardening.
+- Do not preserve old code paths “just in case” without a current dependency.
+- Prefer one real non-SQL adapter path over many fake adapter interfaces.
+
+Final instruction:
+Sprint 6 is about making the codebase behave like the architecture it claims to have.
+Do not spend this sprint on architectural theater.
+Spend it on deleting obsolete ownership, adding observability, proving adapter generality, and hardening the runtime toward enterprise-grade operation.

@@ -1,102 +1,72 @@
-# Compatibility Debt Report — Sprint 5
+# Compatibility Debt Report - Sprint 6
 
-This document tracks all transitional components that exist for backward compatibility.
-Each entry documents **why it exists**, **what depends on it**, and **what removes it**.
+This document tracks transitional components that still exist after Sprint 6, plus the components removed during the sprint.
 
----
+## Removed In Sprint 6
 
-## 1. IOrchestrationEngine / OrchestrationEngine
+| Component | Result | Notes |
+|-----------|--------|-------|
+| `IOrchestrationEngine` | Deleted | Edge entrypoints now call `ISupervisorRuntime` directly. |
+| `OrchestrationEngine` | Deleted | Mapping moved to API edge code; exception/error handling remains in API middleware. |
+| `ActionApprovalService` | Deleted | Approval callers use `IApprovalEngine` directly. |
+| `ICapabilityPackProvider` | Deleted | No runtime references remained. |
+| `ModuleBackedCapabilityPack` | Deleted | Dead module-era capability wrapper. |
 
-| Field | Value |
-|-------|-------|
-| **Status** | `[Obsolete]` — marked in Sprint 5 |
-| **Location** | `TILSOFTAI.Orchestration/IOrchestrationEngine.cs`, `OrchestrationEngine.cs` |
-| **Why it still exists** | Controllers (`ChatController`, `OpenAiChatCompletionsController`) and hubs (`ChatHub`) reference `IOrchestrationEngine` instead of `ISupervisorRuntime` directly. The facade maps `ChatRequest` → `SupervisorRequest` and `SupervisorResult` → `ChatResult`, and also handles sensitivity classification and error logging. |
-| **What depends on it** | `ChatController`, `OpenAiChatCompletionsController`, `ChatHub` |
-| **What removes it** | Sprint 6+ — migrate all controllers/hubs to use `ISupervisorRuntime` directly. Move sensitivity classification and error-log persistence to middleware or a decorator. Then delete both files. |
+## Remaining Compatibility Components
 
----
-
-## 2. LegacyChatPipelineBridge
+### 1. LegacyChatPipelineBridge
 
 | Field | Value |
 |-------|-------|
-| **Status** | Transitional — documented in Sprint 5 |
-| **Location** | `TILSOFTAI.Orchestration/Agents/LegacyChatPipelineBridge.cs` |
-| **Why it still exists** | Fallback execution path for domain agents when no native capability matches. `LegacyChatDomainAgent` (catch-all) relies on it entirely. Warehouse and Accounting agents fall back to it for unrecognized requests. |
-| **What depends on it** | `DomainAgentBase.ExecuteAsync` (default implementation), `LegacyChatDomainAgent`, warehouse/accounting fallback paths |
-| **What removes it** | Sprint 7+ — when all domain agents have full native capability coverage for their domains, and the catch-all `LegacyChatDomainAgent` is replaced with a proper "general" agent. |
+| Status | Fallback-only, measured in Sprint 6 |
+| Location | `src/TILSOFTAI.Orchestration/Agents/LegacyChatPipelineBridge.cs` |
+| Why it exists | Domain agents still need a fallback when no native capability resolves. `LegacyChatDomainAgent` depends on it entirely. |
+| What depends on it | `WarehouseAgent` fallback, `AccountingAgent` fallback, `LegacyChatDomainAgent` |
+| Removal condition | Replace fallback coverage with native capabilities or a purpose-built general/chat agent. |
 
----
-
-## 3. LegacyChatDomainAgent
+### 2. LegacyChatDomainAgent
 
 | Field | Value |
 |-------|-------|
-| **Status** | Transitional — documented in Sprint 5 |
-| **Location** | `TILSOFTAI.Orchestration/Agents/LegacyChatDomainAgent.cs` |
-| **Why it still exists** | Catch-all agent for requests where intent classification doesn't resolve to any known domain. Handles null/empty `DomainHint` or `"legacy-chat"`. |
-| **What depends on it** | `DomainAgentRegistry` fallback logic — without this, requests with no domain classification would have no agent to handle them. |
-| **What removes it** | Sprint 6+ — when intent classification reliably covers all production domains, or a purpose-built "general"/"chat" agent replaces this catch-all pattern. |
+| Status | Transitional catch-all, measured through bridge fallback instrumentation |
+| Location | `src/TILSOFTAI.Orchestration/Agents/LegacyChatDomainAgent.cs` |
+| Why it exists | Requests with no known domain hint still need a bounded fallback response path. |
+| What depends on it | `DomainAgentRegistry` fallback behavior |
+| Removal condition | Intent classification plus native/general agent coverage handles all production request classes. |
 
----
-
-## 4. ChatPipeline
+### 3. ChatPipeline
 
 | Field | Value |
 |-------|-------|
-| **Status** | Active — core pipeline still in use |
-| **Location** | `TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs` |
-| **Why it still exists** | The full ChatPipeline with tool resolution, LLM interaction, and multi-step execution is still needed by the bridge fallback path. |
-| **What depends on it** | `LegacyChatPipelineBridge`, and through it every agent's fallback path. |
-| **What removes it** | Sprint 7+ — when native capability paths replace all pipeline-mediated execution. The pipeline's LLM interaction layer may be refactored into a separate `ILlmClient` for agent use. |
+| Status | Legacy fallback pipeline |
+| Location | `src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs` |
+| Why it exists | The bridge still delegates legacy multi-step chat/tool behavior to it. |
+| What depends on it | `LegacyChatPipelineBridge` |
+| Removal condition | Native agents own full execution, or remaining LLM/tool behavior is refactored behind supervisor-native services. |
 
----
-
-## 5. Module System (IModuleLoader, IModuleScopeResolver)
+### 4. Module Loader And Module Scope Resolver
 
 | Field | Value |
 |-------|-------|
-| **Status** | `[Obsolete]` — marked in Sprint 1 |
-| **Location** | `TILSOFTAI.Domain/Modules/`, `TILSOFTAI.Infrastructure/Modules/` |
-| **Why it still exists** | Module-based tool handler registration and scope resolution is still used by `ChatPipeline` to discover which tools are available. |
-| **What depends on it** | `ChatPipeline`, `AddTilsoftAiExtensions`, `ModuleHealthCheck` |
-| **What removes it** | Sprint 6+ — capability-pack migration replaces module-based tool discovery with `ICapabilityRegistry` + `IToolAdapterRegistry`. |
+| Status | Bridge/legacy pipeline only |
+| Location | `src/TILSOFTAI.Infrastructure/Modules/*`, `src/TILSOFTAI.Orchestration/Modules/*` |
+| Why it exists | `ChatPipeline`, module health checks, and legacy tool catalog behavior still use module loading/scope resolution. |
+| What depends on it | `ChatPipeline`, `ModuleHealthCheck`, `ModuleLoaderHostedService`, module packages |
+| Removal condition | Capability-pack loading replaces module-first tool discovery for the legacy path. |
 
----
-
-## 6. ActionApprovalService
+### 5. InMemoryCapabilityRegistry
 
 | Field | Value |
 |-------|-------|
-| **Status** | `[Obsolete]` — marked in Sprint 3 |
-| **Location** | `TILSOFTAI.Orchestration/Approvals/ActionApprovalService.cs` |
-| **Why it still exists** | Sprint 1 compatibility facade that delegates to `IApprovalEngine`. May still be referenced by legacy API endpoints. |
-| **What depends on it** | Legacy API endpoints (if any) |
-| **What removes it** | Sprint 6 — audit all API references and replace with `IApprovalEngine`. |
+| Status | Test fixture |
+| Location | `src/TILSOFTAI.Orchestration/Capabilities/InMemoryCapabilityRegistry.cs` |
+| Why it exists | Unit and integration tests use constructor-driven capability sets. Production uses `CompositeCapabilityRegistry`. |
+| Removal condition | None required; may become internal test support in a later cleanup. |
 
----
+## Sprint 7 Debt Priorities
 
-## 7. InMemoryCapabilityRegistry
-
-| Field | Value |
-|-------|-------|
-| **Status** | Active — demoted to test/fallback in Sprint 5 |
-| **Location** | `TILSOFTAI.Orchestration/Capabilities/InMemoryCapabilityRegistry.cs` |
-| **Why it still exists** | Used in unit tests as a simple, constructor-driven registry. Production now uses `CompositeCapabilityRegistry`. |
-| **What depends on it** | Unit tests (`CapabilityRegistryTests`, `WarehouseAgentNativePathTests`, etc.) |
-| **What removes it** | Not removed — remains as a testing fixture. May be marked `internal` in a future sprint. |
-
----
-
-## Summary
-
-| Component | Sprint Marked | Removal Target | Risk |
-|-----------|--------------|----------------|------|
-| IOrchestrationEngine | Sprint 5 | Sprint 6 | Controller migration scope |
-| LegacyChatPipelineBridge | Sprint 5 docs | Sprint 7 | Full native coverage required |
-| LegacyChatDomainAgent | Sprint 5 docs | Sprint 6 | Intent classification coverage |
-| ChatPipeline | N/A | Sprint 7 | LLM interaction refactoring |
-| Module System | Sprint 1 | Sprint 6 | Capability-pack migration |
-| ActionApprovalService | Sprint 3 | Sprint 6 | API audit |
-| InMemoryCapabilityRegistry | Sprint 5 demoted | Never (test fixture) | None |
+1. Replace `LegacyChatDomainAgent` with a supervisor-native general/chat agent.
+2. Move legacy tool catalog behavior away from module scope resolution.
+3. Convert module loader health into a legacy-only diagnostic or remove it after capability-pack loading lands.
+4. Expand REST/JSON capability configuration beyond the static proof binding.
+5. Resolve analytics test regressions and IdentityModel version conflicts in the integration test project.
