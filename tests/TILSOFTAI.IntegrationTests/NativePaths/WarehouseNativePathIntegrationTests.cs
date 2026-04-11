@@ -85,7 +85,8 @@ public sealed class WarehouseNativePathIntegrationTests
         {
             TenantId = "tenant-wh",
             UserId = "user-wh",
-            CorrelationId = "corr-wh"
+            CorrelationId = "corr-wh",
+            Roles = new[] { "warehouse_read" }
         };
 
         var result = await runtime.RunAsync(request, ctx, CancellationToken.None);
@@ -121,7 +122,8 @@ public sealed class WarehouseNativePathIntegrationTests
         var ctx = new TilsoftExecutionContext
         {
             TenantId = "tenant-explicit",
-            CorrelationId = "corr-explicit"
+            CorrelationId = "corr-explicit",
+            Roles = new[] { "warehouse_read" }
         };
 
         var result = await runtime.RunAsync(request, ctx, CancellationToken.None);
@@ -151,7 +153,7 @@ public sealed class WarehouseNativePathIntegrationTests
         {
             var result = await runtime.RunAsync(
                 new SupervisorRequest { Input = input },
-                new TilsoftExecutionContext { TenantId = "t1", CorrelationId = "c1" },
+                new TilsoftExecutionContext { TenantId = "t1", CorrelationId = "c1", Roles = new[] { "warehouse_read" } },
                 CancellationToken.None);
 
             result.Success.Should().BeTrue($"Input '{input}' should succeed");

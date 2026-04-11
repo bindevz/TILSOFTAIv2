@@ -39,7 +39,8 @@ public sealed class WarehouseAgentNativePathTests
             {
                 TenantId = "tenant-1",
                 UserId = "user-1",
-                CorrelationId = "corr-1"
+                CorrelationId = "corr-1",
+                Roles = new[] { "warehouse_read", "warehouse_external_read" }
             },
             ApprovalEngine = new Mock<IApprovalEngine>().Object,
             ToolAdapterRegistry = adapterRegistry
@@ -225,7 +226,25 @@ public sealed class WarehouseAgentNativePathTests
         var context = CreateContext(null); // no adapter registry
 
         // Bridge will throw because it's uninitialized — proves fallback path was taken
-        var act = () => agent.ExecuteAsync(task, context, CancellationToken.None);
-        await act.Should().ThrowAsync<NullReferenceException>();
+        var result = await agent.ExecuteAsync(task, context, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Code.Should().Be("TOOL_ADAPTER_REGISTRY_UNAVAILABLE");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldDenyNativeCapability_WhenRoleMissing()
+    {
+        var mockAdapterRegistry = new Mock<IToolAdapterRegistry>();
+        var agent = CreateAgent();
+        var task = new AgentTask { Input = "show me inventory summary", DomainHint = "warehouse" };
+        var context = CreateContext(mockAdapterRegistry.Object);
+        context.RuntimeContext.Roles = new[] { "accounting_read" };
+
+        var result = await agent.ExecuteAsync(task, context, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Code.Should().Be("CAPABILITY_ACCESS_DENIED");
+        mockAdapterRegistry.Verify(r => r.Resolve(It.IsAny<string>()), Times.Never);
     }
 }

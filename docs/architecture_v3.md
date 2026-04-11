@@ -1,4 +1,4 @@
-# Architecture V3 - Sprint 6
+# Architecture V3 - Sprint 7
 
 ## Runtime Shape
 
@@ -10,7 +10,7 @@ API / Hub / OpenAI surface
      -> IAgentRegistry
         -> WarehouseAgent          (native capability path: sql, rest-json)
         -> AccountingAgent         (native capability path: sql)
-        -> LegacyChatDomainAgent   (fallback only)
+        -> GeneralChatAgent        (native general response, explicit legacy fallback only)
            -> LegacyChatPipelineBridge
               -> ChatPipeline -> legacy module/tool pipeline
 
@@ -18,11 +18,12 @@ Native capability path:
   DomainAgent
     -> ICapabilityRegistry.GetByDomain(domain)
     -> ICapabilityResolver.Resolve(hint, candidates)
+    -> CapabilityAccessPolicy.Evaluate(required roles, allowed tenants)
     -> IToolAdapterRegistry.Resolve(adapterType)
     -> IToolAdapter.ExecuteAsync(request)
 
 Bridge fallback path:
-  LegacyChatDomainAgent or unmatched domain capability
+  Explicit legacy request or unmatched domain capability
     -> LegacyChatPipelineBridge
     -> ChatPipeline
     -> module-era tool catalog/scope resolution
@@ -45,6 +46,16 @@ Write path:
 | Module system | Still used by `ChatPipeline`, module health, and legacy tool catalog behavior; no longer part of native capability ownership. |
 | Observability | Runtime path, selected agent, capability, adapter, duration, and success/failure are emitted via structured logs and metrics. |
 
+## Sprint 7 Ownership Changes
+
+| Area | Sprint 7 state |
+|------|----------------|
+| General chat | `GeneralChatAgent` owns unclassified/general requests. It returns native bounded guidance or a deterministic unsupported result. |
+| Legacy fallback | `legacy-chat` and `legacyFallback=true` are explicit fallback requests; bridge usage is recorded with a reason. |
+| Capability policy | `RequiredRoles` and `AllowedTenants` are evaluated before adapter resolution. Denials return `CAPABILITY_ACCESS_DENIED`. |
+| REST capabilities | REST endpoint, method, timeout, retry, and auth metadata are configuration-driven through `IntegrationBinding`. |
+| Readiness | `/health/ready` uses `NativeRuntimeHealthCheck`; module health is legacy diagnostic only. |
+
 ## Capabilities
 
 | Key | Domain | Adapter | Binding |
@@ -52,7 +63,7 @@ Write path:
 | `warehouse.inventory.summary` | warehouse | sql | `dbo.ai_warehouse_inventory_summary` |
 | `warehouse.inventory.by-item` | warehouse | sql | `dbo.ai_warehouse_inventory_by_item` |
 | `warehouse.receipts.recent` | warehouse | sql | `dbo.ai_warehouse_receipts_recent` |
-| `warehouse.external-stock.lookup` | warehouse | rest-json | `GET /warehouse/external-stock` |
+| `warehouse.external-stock.lookup` | warehouse | rest-json | Configured `baseUrl`, `endpoint`, `method`, retry, timeout, auth metadata |
 | `accounting.receivables.summary` | accounting | sql | `dbo.ai_accounting_receivables_summary` |
 | `accounting.payables.summary` | accounting | sql | `dbo.ai_accounting_payables_summary` |
 | `accounting.invoice.by-number` | accounting | sql | `dbo.ai_accounting_invoice_by_number` |
@@ -70,6 +81,14 @@ Runtime instrumentation emits:
 
 See `operational_runtime_observability.md` for interpretation guidance.
 
+## Capability Policy
+
+Capabilities may specify:
+- `RequiredRoles`: at least one caller role must match.
+- `AllowedTenants`: caller tenant must be in the list when the list is non-empty.
+
+Policy denial happens before adapter resolution and is returned as `CAPABILITY_ACCESS_DENIED`.
+
 ## Transition State
 
-The native path is supervisor-driven and adapter-backed. The bridge and module system remain only for legacy chat/tool fallback. Sprint 7 should focus on reducing `LegacyChatDomainAgent`, shrinking `ChatPipeline` dependency, and replacing module-era tool catalog behavior with capability-pack loading.
+The native path is supervisor-driven, policy-gated, and adapter-backed. The bridge and module system remain only for legacy chat/tool fallback and diagnostics. Sprint 8 should focus on shrinking `ChatPipeline` dependency and replacing module-era tool catalog behavior with capability-pack loading.

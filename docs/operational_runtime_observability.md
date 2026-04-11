@@ -1,6 +1,6 @@
-# Operational Runtime Observability - Sprint 6
+# Operational Runtime Observability - Sprint 7
 
-Sprint 6 adds runtime signals for supervisor routing, native capability execution, bridge fallback, approval execution, capability invocation, adapter failures, and duration.
+Sprint 7 keeps the Sprint 6 runtime signals and tightens the meaning of fallback and adapter failures.
 
 ## Metrics
 
@@ -17,8 +17,9 @@ Sprint 6 adds runtime signals for supervisor routing, native capability executio
 ## How To Read The Signals
 
 - Native execution should trend upward as more domain requests resolve to capabilities.
-- Bridge fallback should trend downward. A spike in `tilsoftai_runtime_bridge_fallback_total` means classification or capability coverage is missing.
+- Bridge fallback should trend downward. A spike in `tilsoftai_runtime_bridge_fallback_total` means classification or capability coverage is missing, or callers are explicitly requesting legacy fallback.
 - `tilsoftai_runtime_adapter_failures_total` by `adapter=rest-json` or `adapter=sql` identifies integration boundaries causing failures.
+- `CAPABILITY_ACCESS_DENIED` in adapter-failure labels means capability policy stopped execution before adapter resolution.
 - `tilsoftai_runtime_capability_invocations_total` shows which domain capabilities are actually used.
 - `tilsoftai_runtime_approval_executions_total` confirms writes are still governed by `IApprovalEngine` and adapter-level guards.
 - Duration histograms split by `path` let operations compare native, bridge, approval, and supervisor latency.
@@ -37,9 +38,26 @@ Look for these fields:
 - `Reason` for bridge fallback
 - `ErrorCode` for adapter failures
 
+Bridge fallback reasons are now explicit:
+- `no_capability_match`: domain agent could not resolve a native capability.
+- `explicit_legacy_fallback`: request used `legacy-chat` or `legacyFallback=true`.
+- `unsupported_general_request`: general agent declined a non-general unmatched request without invoking the bridge.
+
+REST adapter failure codes:
+- `REST_BINDING_INVALID`: endpoint/base URL/argument binding is invalid.
+- `REST_CLIENT_ERROR`: final HTTP response was 4xx.
+- `REST_SERVER_ERROR`: final HTTP response was 5xx.
+- `REST_TRANSIENT_HTTP_ERROR`: final response was 408 or 429.
+- `REST_TIMEOUT`: request exceeded configured timeout.
+- `REST_TRANSPORT_ERROR`: network/transport failure after retries.
+
 ## Operational Triage
 
 1. If user traffic succeeds but native counts are low, inspect bridge fallback reasons and capability resolution logs.
 2. If native failure counts rise for one capability, inspect adapter failures for the same `capability` and `adapter` labels.
 3. If approval execution failures rise, inspect write-action catalog, role validation, and `IWriteActionGuard` rejection logs.
 4. If bridge duration is high, prioritize migrating that request class to a native capability or replacing the catch-all agent.
+
+## Readiness
+
+`/health/ready` includes `native-runtime`, not `modules`. The native check verifies supervisor runtime resolution, warehouse/accounting capability loading, and registered adapters. Module health remains available as a legacy diagnostic check outside the ready tag.

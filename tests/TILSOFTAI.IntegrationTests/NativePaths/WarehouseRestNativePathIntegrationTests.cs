@@ -32,7 +32,27 @@ public sealed class WarehouseRestNativePathIntegrationTests
 
         var capabilityResolver = new StructuredCapabilityResolver(
             new Mock<ILogger<StructuredCapabilityResolver>>().Object);
-        var capabilityRegistry = new InMemoryCapabilityRegistry(WarehouseCapabilities.All);
+        var capabilityRegistry = new InMemoryCapabilityRegistry(new[]
+        {
+            new CapabilityDescriptor
+            {
+                CapabilityKey = "warehouse.external-stock.lookup",
+                Domain = "warehouse",
+                AdapterType = RestJsonToolAdapter.Type,
+                Operation = ToolAdapterOperationNames.ExecuteHttpJson,
+                TargetSystemId = "external-stock-api",
+                RequiredRoles = new[] { "warehouse_external_read" },
+                IntegrationBinding = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["baseUrl"] = "https://external-stock.local",
+                    ["endpoint"] = "/warehouse/external-stock",
+                    ["method"] = "GET",
+                    ["retryCount"] = "1",
+                    ["retryDelayMs"] = "0",
+                    ["timeoutSeconds"] = "5"
+                }
+            }
+        });
         var warehouseAgent = new WarehouseAgent(
             CreateUninitializedBridge(),
             capabilityRegistry,
@@ -66,7 +86,8 @@ public sealed class WarehouseRestNativePathIntegrationTests
             {
                 TenantId = "tenant-rest",
                 UserId = "user-rest",
-                CorrelationId = "corr-rest"
+                CorrelationId = "corr-rest",
+                Roles = new[] { "warehouse_external_read" }
             },
             CancellationToken.None);
 

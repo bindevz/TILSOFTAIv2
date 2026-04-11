@@ -33,7 +33,7 @@ public class ToolCatalogPackScopedTests
             {
                 Name = "tool.list",
                 Description = "List available tools",
-                Module = null  // core tool
+                Module = string.Empty  // core tool
             }
         };
 

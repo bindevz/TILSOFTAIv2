@@ -162,7 +162,9 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<ToolCatalogSyncService>();
         services.AddSingleton<IToolCatalogResolver>(sp => sp.GetRequiredService<ToolCatalogSyncService>());
         services.AddSingleton<IScopedToolCatalogResolver>(sp => sp.GetRequiredService<ToolCatalogSyncService>());
+#pragma warning disable CS0618 // Legacy ChatPipeline compatibility registration.
         services.AddSingleton<Orchestration.Modules.IModuleScopeResolver, Orchestration.Modules.ModuleScopeResolver>();
+#pragma warning restore CS0618
         services.AddSingleton<Orchestration.Policies.IRuntimePolicyProvider, Infrastructure.Policies.SqlRuntimePolicyProvider>();
         services.AddSingleton<Orchestration.Policies.IReActFollowUpRuleProvider, Infrastructure.Policies.SqlReActFollowUpRuleProvider>();
         services.AddSingleton<Orchestration.Policies.ReActFollowUpEvaluator>();
@@ -239,8 +241,10 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<AtomicDataEngine>();
 
         services.AddSingleton<IModuleActivationProvider, SqlModuleActivationProvider>();
+#pragma warning disable CS0618 // Legacy diagnostic module loader; readiness uses NativeRuntimeHealthCheck.
         services.AddSingleton<IModuleLoader, ModuleLoader>();
         services.AddHostedService<ModuleLoaderHostedService>();
+#pragma warning restore CS0618
         services.AddHostedService<ObservabilityPurgeHostedService>();
         services.AddHostedService<ErrorCatalogCoverageGuard>();
 
@@ -297,7 +301,8 @@ public static class AddTilsoftAiExtensions
             .AddCheck<LlmHealthCheck>("llm", tags: new[] { "ready", "external" })
             .AddCheck<CircuitBreakerHealthCheck>("circuits", tags: new[] { "ready", "resilience" })
             .AddCheck<ToolCatalogHealthCheck>("toolcatalog", tags: new[] { "ready", "runtime" })
-            .AddCheck<ModuleHealthCheck>("modules", tags: new[] { "ready", "runtime" });
+            .AddCheck<NativeRuntimeHealthCheck>("native-runtime", tags: new[] { "ready", "runtime", "native" })
+            .AddCheck<ModuleHealthCheck>("modules", tags: new[] { "legacy", "diagnostic" });
         
         if (redisEnabled)
         {

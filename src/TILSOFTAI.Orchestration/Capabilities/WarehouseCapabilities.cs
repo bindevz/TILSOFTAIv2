@@ -22,6 +22,7 @@ public static class WarehouseCapabilities
             {
                 ["storedProcedure"] = "dbo.ai_warehouse_inventory_summary"
             },
+            RequiredRoles = new[] { "warehouse_read" },
             ExecutionMode = "readonly"
         },
         new CapabilityDescriptor
@@ -35,6 +36,7 @@ public static class WarehouseCapabilities
             {
                 ["storedProcedure"] = "dbo.ai_warehouse_inventory_by_item"
             },
+            RequiredRoles = new[] { "warehouse_read" },
             ExecutionMode = "readonly"
         },
         new CapabilityDescriptor
@@ -48,6 +50,7 @@ public static class WarehouseCapabilities
             {
                 ["storedProcedure"] = "dbo.ai_warehouse_receipts_recent"
             },
+            RequiredRoles = new[] { "warehouse_read" },
             ExecutionMode = "readonly"
         },
         new CapabilityDescriptor
@@ -57,12 +60,7 @@ public static class WarehouseCapabilities
             AdapterType = "rest-json",
             Operation = ToolAdapterOperationNames.ExecuteHttpJson,
             TargetSystemId = "external-stock-api",
-            IntegrationBinding = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["baseUrl"] = "https://example.invalid",
-                ["endpoint"] = "/warehouse/external-stock",
-                ["method"] = "GET"
-            },
+            RequiredRoles = new[] { "warehouse_external_read" },
             ExecutionMode = "readonly"
         }
     };

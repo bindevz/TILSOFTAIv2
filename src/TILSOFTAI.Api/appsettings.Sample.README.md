@@ -27,3 +27,34 @@ Create `appsettings.Local.json`:
 ```
 
 > **Note:** Never commit passwords to source control.
+
+## Capability Configuration
+
+Runtime capabilities can be supplied in the `Capabilities` array. Configuration entries override static fallback capabilities by `CapabilityKey`.
+
+```json
+{
+  "CapabilityKey": "warehouse.external-stock.lookup",
+  "Domain": "warehouse",
+  "AdapterType": "rest-json",
+  "Operation": "execute_http_json",
+  "TargetSystemId": "external-stock-api",
+  "ExecutionMode": "readonly",
+  "RequiredRoles": [ "warehouse_external_read" ],
+  "AllowedTenants": [],
+  "IntegrationBinding": {
+    "baseUrl": "https://external-stock.example.com",
+    "endpoint": "/warehouse/external-stock",
+    "method": "GET",
+    "timeoutSeconds": "10",
+    "retryCount": "2",
+    "retryDelayMs": "100",
+    "authScheme": "Bearer",
+    "authToken": "ENV_OR_SECRET_VALUE",
+    "apiKeyHeader": "X-Api-Key",
+    "apiKey": "ENV_OR_SECRET_VALUE"
+  }
+}
+```
+
+`RequiredRoles` and `AllowedTenants` are enforced before adapter resolution. REST adapter failures are classified as binding, client, server, timeout, transient HTTP, or transport failures.

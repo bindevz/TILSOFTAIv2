@@ -81,7 +81,9 @@ public sealed class ConfigurationCapabilitySource : ICapabilitySource
                 Operation = child["Operation"] ?? "execute_query",
                 TargetSystemId = child["TargetSystemId"] ?? "sql",
                 ExecutionMode = child["ExecutionMode"] ?? "readonly",
-                IntegrationBinding = binding
+                IntegrationBinding = binding,
+                RequiredRoles = ReadStringList(child.GetSection("RequiredRoles")),
+                AllowedTenants = ReadStringList(child.GetSection("AllowedTenants"))
             });
         }
 
@@ -91,5 +93,29 @@ public sealed class ConfigurationCapabilitySource : ICapabilitySource
             string.Join(", ", capabilities.Select(c => c.Domain).Distinct()));
 
         return capabilities;
+    }
+
+    private static IReadOnlyList<string> ReadStringList(IConfigurationSection section)
+    {
+        if (!section.Exists())
+        {
+            return Array.Empty<string>();
+        }
+
+        var children = section.GetChildren()
+            .Select(child => child.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .ToArray();
+
+        if (children.Length > 0)
+        {
+            return children;
+        }
+
+        return (section.Value ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToArray();
     }
 }

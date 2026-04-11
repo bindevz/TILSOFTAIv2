@@ -8,6 +8,7 @@ namespace TILSOFTAI.Api.Health;
 /// <summary>
 /// Health check that verifies enabled modules are loaded.
 /// </summary>
+#pragma warning disable CS0618 // Legacy diagnostic endpoint only; not part of /health/ready.
 public sealed class ModuleHealthCheck : IHealthCheck
 {
     private readonly IModuleLoader _moduleLoader;
@@ -51,3 +52,4 @@ public sealed class ModuleHealthCheck : IHealthCheck
             data: data));
     }
 }
+#pragma warning restore CS0618

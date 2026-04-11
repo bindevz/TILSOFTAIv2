@@ -43,14 +43,14 @@ public sealed class DomainAgentRegistry : IAgentRegistry
 
         if (candidates.Count > 0)
         {
-            // Score: domain-specific agents first, legacy catch-all last
+            // Score: domain-specific agents first, general catch-all last
             candidates.Sort((a, b) =>
             {
-                var aIsLegacy = string.Equals(a.AgentId, LegacyChatDomainAgent.AgentIdValue, StringComparison.OrdinalIgnoreCase);
-                var bIsLegacy = string.Equals(b.AgentId, LegacyChatDomainAgent.AgentIdValue, StringComparison.OrdinalIgnoreCase);
+                var aIsGeneral = string.Equals(a.AgentId, GeneralChatAgent.AgentIdValue, StringComparison.OrdinalIgnoreCase);
+                var bIsGeneral = string.Equals(b.AgentId, GeneralChatAgent.AgentIdValue, StringComparison.OrdinalIgnoreCase);
 
-                if (aIsLegacy && !bIsLegacy) return 1;  // legacy sorts last
-                if (!aIsLegacy && bIsLegacy) return -1; // domain-specific sorts first
+                if (aIsGeneral && !bIsGeneral) return 1;
+                if (!aIsGeneral && bIsGeneral) return -1;
 
                 // Among domain-specific agents, prefer exact domain match
                 if (!string.IsNullOrWhiteSpace(task.DomainHint))
@@ -75,14 +75,14 @@ public sealed class DomainAgentRegistry : IAgentRegistry
             return candidates;
         }
 
-        // Fallback: use legacy agent if no domain agent matches
-        if (_lookup.TryGetValue(LegacyChatDomainAgent.AgentIdValue, out var legacyAgent))
+        // Fallback: use supervisor-native general agent if no domain agent matches
+        if (_lookup.TryGetValue(GeneralChatAgent.AgentIdValue, out var generalAgent))
         {
             _logger.LogDebug(
                 "AgentCandidatesFallback | DomainHint: {DomainHint} | Using: {AgentId}",
-                task.DomainHint ?? "none", legacyAgent.AgentId);
+                task.DomainHint ?? "none", generalAgent.AgentId);
 
-            return new[] { legacyAgent };
+            return new[] { generalAgent };
         }
 
         _logger.LogWarning(

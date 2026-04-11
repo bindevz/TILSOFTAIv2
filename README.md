@@ -1,8 +1,8 @@
 # TILSOFTAI V3
 
-TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 6 removes obsolete edge and approval facades, adds runtime execution telemetry, and proves the adapter model with a REST/JSON capability path in addition to SQL-backed capabilities.
+TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 7 replaces the legacy catch-all agent with a supervisor-native general agent, policy-gates native capability execution, productionizes the REST/JSON adapter path, and separates native readiness from legacy diagnostics.
 
-## Current Runtime Shape (Sprint 6)
+## Current Runtime Shape (Sprint 7)
 
 ```text
 API / Hub / OpenAI surface
@@ -12,7 +12,7 @@ API / Hub / OpenAI surface
      -> IAgentRegistry
         -> WarehouseAgent          (native capability path, SQL + REST/JSON)
         -> AccountingAgent         (native capability path, SQL)
-        -> LegacyChatDomainAgent   (fallback only)
+        -> GeneralChatAgent        (native general response, explicit legacy fallback only)
            -> LegacyChatPipelineBridge
               -> ChatPipeline -> legacy tool/module path
 
@@ -20,6 +20,7 @@ Native capability path:
   DomainAgent
     -> ICapabilityRegistry.GetByDomain(domain)
     -> ICapabilityResolver.Resolve(hint, candidates)
+    -> CapabilityAccessPolicy.Evaluate(required roles, allowed tenants)
     -> IToolAdapterRegistry.Resolve(adapterType)
     -> IToolAdapter.ExecuteAsync(request)
 
@@ -35,34 +36,33 @@ Write requests:
      -> SqlToolAdapter
 ```
 
-## Sprint 6 Changes
+## Sprint 7 Changes
 
-### Removed obsolete facades
-- `ChatController`, `OpenAiChatCompletionsController`, and `ChatHub` now call `ISupervisorRuntime` directly.
-- `IOrchestrationEngine` and `OrchestrationEngine` were deleted.
-- `ActionApprovalService` was deleted; approval callers use `IApprovalEngine` directly.
+### General fallback modernization
+- `LegacyChatDomainAgent` was deleted.
+- `GeneralChatAgent` owns unclassified/general requests without blindly proxying to the legacy bridge.
+- Explicit legacy fallback remains available through `legacy-chat` or `legacyFallback=true` and is measured separately.
 
-### Native runtime observability
-- Added `RuntimeExecutionInstrumentation` for supervisor, native, bridge, approval, capability, and adapter-failure signals.
-- Added Prometheus metric names for native execution count, bridge fallback count, approval executions, capability invocation count, adapter failures, and runtime duration.
-- Native and bridge paths now emit structured logs and counters with agent, capability, adapter, duration, and success labels.
+### Governed capability execution
+- `CapabilityDescriptor` supports `RequiredRoles` and `AllowedTenants`.
+- `WarehouseAgent` and `AccountingAgent` deny unauthorized native execution before adapter resolution.
+- Policy denials return `CAPABILITY_ACCESS_DENIED`.
 
-### Non-SQL adapter proof
-- Added `RestJsonToolAdapter` with adapter type `rest-json`.
-- Added `warehouse.external-stock.lookup`, a warehouse native capability that executes through REST/JSON via the standard registry, resolver, adapter registry, and agent-owned native execution path.
+### REST/JSON productionization
+- REST endpoint binding is supplied through configuration/capability metadata.
+- `RestJsonToolAdapter` supports timeout, retry, auth token, API key/header metadata, tenant/correlation propagation, and classified failures.
 
-### Integration validation
-- Added HTTP-level ASP.NET pipeline tests for authenticated chat and authorization failure.
-- Added REST-backed warehouse native integration coverage.
-- Existing native warehouse, native accounting, approval lifecycle, and auth context threading integration tests remain in place.
+### Readiness and validation
+- `/health/ready` now uses `NativeRuntimeHealthCheck`; module health is legacy diagnostic only.
+- Full unit and integration suites are green, with one intentionally skipped deep analytics E2E test.
+- Integration dependency prune warnings were removed by dropping unnecessary direct package references.
 
 ## Remaining Transitional Components
 
 These components remain intentionally bounded:
-- `LegacyChatPipelineBridge`: fallback only when no native capability matches.
-- `LegacyChatDomainAgent`: catch-all for unclassified or explicitly legacy requests.
+- `LegacyChatPipelineBridge`: fallback only when no native capability matches or a request explicitly asks for legacy fallback.
 - `ChatPipeline`: still required behind the bridge fallback path.
-- Module loader and module scope resolver: still required by the legacy `ChatPipeline`, health checks, and module-backed tool catalog behavior. They do not own native domain capability execution.
+- Module loader and module scope resolver: still required by the legacy `ChatPipeline`, diagnostic module health, and module-backed tool catalog behavior. They do not own native readiness or native domain capability execution.
 - `InMemoryCapabilityRegistry`: test fixture only.
 
 See `docs/compatibility_debt_report.md` and `docs/enterprise_readiness_gap_report.md` for removal conditions and blockers.

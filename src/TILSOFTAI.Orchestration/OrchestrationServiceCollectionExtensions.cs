@@ -42,7 +42,7 @@ public static class OrchestrationServiceCollectionExtensions
         // Domain agents
         services.AddSingleton<IDomainAgent, AccountingAgent>();   // Sprint 5: native capability path
         services.AddSingleton<IDomainAgent, WarehouseAgent>();    // Sprint 4+5: native capability path
-        services.AddSingleton<IDomainAgent, LegacyChatDomainAgent>(); // catch-all fallback
+        services.AddSingleton<IDomainAgent, GeneralChatAgent>();  // Sprint 7: supervisor-native general fallback
 
         // Agent registry
         services.AddSingleton<IAgentRegistry, DomainAgentRegistry>();

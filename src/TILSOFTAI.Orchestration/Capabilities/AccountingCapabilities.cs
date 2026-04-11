@@ -22,6 +22,7 @@ public static class AccountingCapabilities
             {
                 ["storedProcedure"] = "dbo.ai_accounting_receivables_summary"
             },
+            RequiredRoles = new[] { "accounting_read" },
             ExecutionMode = "readonly"
         },
         new CapabilityDescriptor
@@ -35,6 +36,7 @@ public static class AccountingCapabilities
             {
                 ["storedProcedure"] = "dbo.ai_accounting_payables_summary"
             },
+            RequiredRoles = new[] { "accounting_read" },
             ExecutionMode = "readonly"
         },
         new CapabilityDescriptor
@@ -48,6 +50,7 @@ public static class AccountingCapabilities
             {
                 ["storedProcedure"] = "dbo.ai_accounting_invoice_by_number"
             },
+            RequiredRoles = new[] { "accounting_read" },
             ExecutionMode = "readonly"
         }
     };

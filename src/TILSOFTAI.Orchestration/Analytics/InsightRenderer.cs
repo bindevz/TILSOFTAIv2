@@ -43,7 +43,7 @@ public sealed class InsightRenderer
             }
         }
 
-        return sb.ToString().TrimEnd();
+        return sb.ToString().Replace("\r\n", "\n").TrimEnd();
     }
 
     private void RenderTable(StringBuilder sb, InsightTable table)

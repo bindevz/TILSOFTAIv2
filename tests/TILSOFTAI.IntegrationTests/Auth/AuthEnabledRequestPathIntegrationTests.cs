@@ -140,7 +140,8 @@ public sealed class AuthEnabledRequestPathIntegrationTests
         {
             TenantId = "",
             UserId = "user-empty",
-            CorrelationId = "corr-empty"
+            CorrelationId = "corr-empty",
+            Roles = new[] { "warehouse_read" }
         };
 
         var request = new SupervisorRequest

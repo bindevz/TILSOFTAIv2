@@ -1,0 +1,246 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 7.
+
+Baseline repository reality (after Sprint 6):
+- Edge entrypoints now call `ISupervisorRuntime` directly.
+- `IOrchestrationEngine`, `OrchestrationEngine`, and `ActionApprovalService` were deleted.
+- Warehouse and Accounting both have native SQL-backed capability paths.
+- Warehouse also has one REST/JSON-backed capability proof path.
+- Runtime execution telemetry now exists for supervisor, native, bridge, approval, capability invocation, and adapter failure paths.
+- Compatibility debt is explicitly documented.
+- However, the repository is still not fully enterprise-grade because legacy fallback and module-era infrastructure still retain too much influence, and the validation baseline is not yet strong enough to support a full enterprise-grade claim.
+
+Sprint 7 mission:
+Move the platform from enterprise-ready foundation into a more credible enterprise-grade operating core.
+
+Sprint 7 must prove all of the following:
+1. Catch-all fallback is no longer owned by `LegacyChatDomainAgent` in its current form.
+2. Bridge fallback is smaller, more explicit, and more operationally diagnosable.
+3. Module-era runtime influence is reduced again.
+4. Non-SQL adapter support is productionized rather than left as proof-only behavior.
+5. Validation confidence improves materially.
+6. Capability execution policies become stricter and more testable.
+7. The repository becomes cleaner and more operationally trustworthy.
+
+Primary objective:
+Reduce legacy fallback dependence, productionize external adapter behavior, and improve the trustworthiness of the runtime and validation baseline.
+
+Strategic success condition:
+After Sprint 7, the platform should no longer look like “native runtime plus a large legacy catch-all safety net”.
+It should look like a supervisor-native platform with bounded legacy residue and governed external integrations.
+
+Target architecture principles:
+1. SupervisorRuntime owns orchestration.
+2. Domain agents own domain execution.
+3. A general/chat agent, if needed, must also be supervisor-native.
+4. Capability contracts remain the native execution boundary.
+5. Tool adapters remain the integration boundary.
+6. ApprovalEngine remains the only write governance owner.
+7. Legacy fallback must be exceptional, measured, and shrinking.
+8. Module-era infrastructure must not define the platform’s active identity.
+9. Enterprise-grade progress must be validated by real deletions, real policy enforcement, and stronger test credibility.
+
+Primary Sprint 7 goals:
+
+A. Replace or reduce LegacyChatDomainAgent
+- Introduce a supervisor-native general/chat agent or equivalent bounded replacement.
+- Move catch-all conversational handling away from the current legacy catch-all agent pattern.
+- Do not let the replacement simply proxy blindly to LegacyChatPipelineBridge.
+- Define explicit fallback ownership for:
+  - unsupported requests
+  - conversational general requests
+  - cross-domain requests
+- Delete LegacyChatDomainAgent if safe.
+- If deletion is not yet safe, reduce it to the smallest possible compatibility shim with explicit removal conditions.
+
+B. Reduce and classify bridge fallback
+- Improve fallback reason classification.
+- Make bridge fallback operationally diagnosable.
+- Reduce the set of requests that reach bridge fallback.
+- Add counters/logging/telemetry details that distinguish:
+  - no domain hint
+  - no capability match
+  - no adapter available
+  - general-chat fallback
+  - explicit legacy fallback
+- Do not let bridge fallback silently hide architecture gaps.
+
+C. Extract module-era tool discovery from the runtime story
+- Replace module-first legacy tool discovery with a capability-pack style legacy support mechanism or a similarly bounded alternative.
+- Make it explicit that module loading is legacy-only support if it still remains.
+- Reduce active dependency on:
+  - IModuleLoader
+  - ModuleLoader
+  - ModuleLoaderHostedService
+  - IModuleScopeResolver
+  - ModuleScopeResolver
+  where safe.
+- Health and readiness must clearly separate native runtime readiness from module-era fallback diagnostics.
+
+D. Productionize the REST/JSON adapter path
+- Move REST endpoint binding fully into configuration or connection metadata rather than proof-only hardcoded binding assumptions.
+- Add external integration policy support:
+  - timeout
+  - retry or resilience policy
+  - optional auth/header policy
+  - stronger failure classification
+- Preserve tenant and correlation propagation.
+- Add tests that validate realistic external adapter behavior, not just happy-path request capture.
+
+E. Improve validation baseline credibility
+- Fix or isolate known failing analytics and renderer tests.
+- Address IdentityModel dependency/version mismatch or isolate affected HTTP integration tests cleanly.
+- Produce a documented “green baseline” for the repository.
+- Do not leave known suite failures unaccounted for.
+
+F. Strengthen capability-level authorization/policy enforcement
+- Add capability execution denial paths by tenant and/or role policy.
+- Ensure unauthorized capability invocation fails deterministically.
+- Add tests for denied execution.
+- Keep write-path governance unchanged or stronger.
+
+G. Documentation and readiness alignment
+- Update README to Sprint 7 truth.
+- Update architecture docs.
+- Update compatibility debt report.
+- Update enterprise readiness gap report.
+- Add or update a readiness note that separates:
+  - native runtime readiness
+  - legacy fallback readiness
+  - external integration readiness
+
+Non-negotiable rules:
+1. Do not add new business domains in Sprint 7.
+2. Do not add broad new domain agents beyond a general/chat agent replacement.
+3. Do not add planner or graph orchestration.
+4. Do not preserve LegacyChatDomainAgent unchanged.
+5. Do not add new fallback layers.
+6. Do not re-center architecture around module loading.
+7. Do not leave REST adapter support as a proof-only path.
+8. Do not weaken approval or write governance.
+9. Do not ignore known failing tests.
+10. Prefer deleting and replacing dead or weak legacy structures over wrapping them again.
+
+Explicitly in scope:
+- general/chat agent replacement or reduction of LegacyChatDomainAgent
+- bridge fallback reduction and classification
+- module-era extraction or isolation
+- REST adapter productionization
+- capability-level policy enforcement
+- validation baseline repair or isolation
+- readiness/docs/debt updates
+
+Explicitly out of scope:
+- new business domains
+- planner runtime
+- multi-agent graph systems
+- full ChatPipeline deletion
+- full LegacyChatPipelineBridge deletion
+- large UI or product workflow work
+
+Recommended implementation order:
+1. Replace or reduce LegacyChatDomainAgent.
+2. Improve bridge fallback classification and diagnostics.
+3. Introduce capability-pack style legacy discovery or isolate module loading as legacy-only.
+4. Productionize RestJsonToolAdapter configuration and resilience behavior.
+5. Add capability-policy denial handling and tests.
+6. Fix or isolate failing analytics/test baseline issues.
+7. Update readiness and debt documentation.
+8. Delete dead code and dead registrations where safe.
+
+Required architectural outcomes:
+1. Catch-all fallback is no longer owned by LegacyChatDomainAgent in the same way as Sprint 6.
+2. Bridge fallback is smaller and more diagnosable.
+3. Module-era runtime influence is reduced again.
+4. REST/JSON adapter support looks like governed enterprise integration behavior.
+5. Validation confidence is stronger than after Sprint 6.
+6. Capability-level denial paths are real and tested.
+7. Documentation and readiness narrative match runtime truth.
+
+Definition of done:
+- LegacyChatDomainAgent is deleted, replaced, or reduced to trivial residue.
+- A supervisor-native general/chat fallback path exists if needed.
+- Bridge fallback reasons are explicit and measurable.
+- Module loading and module scope resolution no longer dominate the legacy support story.
+- RestJsonToolAdapter is configuration/policy/resilience aware.
+- Capability-level denial behavior is implemented and tested.
+- Validation baseline is stronger and documented.
+- README, compatibility debt, readiness, and enterprise gap docs are updated honestly.
+- The codebase is cleaner after Sprint 7 than before Sprint 7.
+
+Must-fail conditions:
+- LegacyChatDomainAgent remains unchanged as catch-all fallback
+- bridge fallback remains vague and under-classified
+- module system still appears central to platform runtime identity
+- RestJsonToolAdapter remains proof-only and hardwired
+- known validation problems remain neither fixed nor isolated
+- capability-level denial paths are absent
+- Sprint 7 adds architecture but does not materially reduce legacy influence
+
+Preferred implementation style:
+- explicit ownership
+- bounded legacy support
+- governed external integration
+- real policy enforcement
+- measurable runtime behavior
+- safe deletions
+- honest documentation
+- no cosmetic-only refactors
+
+Required deliverables:
+1. General/chat agent modernization:
+   - replace or reduce LegacyChatDomainAgent
+   - exact ownership of general fallback documented
+2. Bridge fallback reduction:
+   - reason classification
+   - telemetry updates
+   - reduced scope if possible
+3. Module-era extraction:
+   - capability-pack style legacy discovery or equivalent
+   - isolated legacy diagnostics
+4. REST adapter productionization:
+   - config-driven endpoint behavior
+   - resilience policy
+   - header/auth support
+   - realistic tests
+5. Validation baseline improvement:
+   - analytics/renderer or dependency issues fixed or isolated
+   - documented green baseline
+6. Capability policy enforcement:
+   - denial path
+   - tests
+7. Updated documentation:
+   - README
+   - architecture notes
+   - compatibility debt report
+   - enterprise readiness gap report
+   - readiness note
+
+Required reporting after implementation:
+1. Summary of Sprint 7 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. General/chat agent changes
+6. Bridge fallback reductions
+7. Module-era components reduced or isolated
+8. REST adapter productionization changes
+9. Validation baseline improvements
+10. Capability-policy enforcement changes
+11. Remaining compatibility components
+12. Remaining enterprise-grade blockers
+13. Recommended Sprint 8 priorities
+
+Review discipline:
+- Do not count docs-only debt updates as runtime progress.
+- Do not count bridge proxying as general-agent modernization.
+- Do not count a non-SQL adapter as productionized unless config/policy/resilience behavior is real.
+- Do not count test exclusions as success unless they are explicitly justified and bounded.
+- Do not keep old runtime paths “just in case” without a current dependency.
+- Prefer one real cleanup with ownership improvement over many shallow changes.
+
+Final instruction:
+Sprint 7 is about making the platform operationally trustworthy.
+Do not spend this sprint on architecture theater.
+Spend it on shrinking fallback dependence, extracting module-era influence, governing external integrations, repairing test confidence, and hardening capability policy behavior.

@@ -19,6 +19,7 @@ using TILSOFTAI.Domain.Metrics;
 
 namespace TILSOFTAI.Orchestration.Pipeline;
 
+#pragma warning disable CS0618 // Legacy ChatPipeline compatibility path; supervisor-native routing is the ready path.
 public sealed class ChatPipeline
 {
     private readonly INormalizationService _normalizationService;

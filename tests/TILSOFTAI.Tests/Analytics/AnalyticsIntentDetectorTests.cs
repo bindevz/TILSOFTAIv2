@@ -126,6 +126,7 @@ public class AnalyticsIntentDetectorTests
     {
         var result = _detector.Detect(input);
 
+        expectedSeasonHint.Should().StartWith("season:");
         result.Hints.Should().Contain(h => h.StartsWith("season:"));
     }
 
@@ -152,6 +153,7 @@ public class AnalyticsIntentDetectorTests
     {
         var result = _detector.Detect(input);
 
+        expectedEntity.Should().StartWith("entity:");
         result.Hints.Should().Contain(h => h.StartsWith("entity:"));
     }
 

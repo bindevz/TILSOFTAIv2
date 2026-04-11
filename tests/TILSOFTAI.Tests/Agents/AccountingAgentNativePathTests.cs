@@ -34,7 +34,8 @@ public sealed class AccountingAgentNativePathTests
             {
                 TenantId = "tenant-1",
                 UserId = "user-1",
-                CorrelationId = "corr-1"
+                CorrelationId = "corr-1",
+                Roles = new[] { "accounting_read" }
             },
             ApprovalEngine = new Mock<IApprovalEngine>().Object,
             ToolAdapterRegistry = adapterRegistry
@@ -298,7 +299,34 @@ public sealed class AccountingAgentNativePathTests
         };
         var context = CreateContext(null);
 
-        var act = () => agent.ExecuteAsync(task, context, CancellationToken.None);
-        await act.Should().ThrowAsync<NullReferenceException>();
+        var result = await agent.ExecuteAsync(task, context, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Code.Should().Be("TOOL_ADAPTER_REGISTRY_UNAVAILABLE");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldDenyNativeCapability_WhenRoleMissing()
+    {
+        var mockAdapterRegistry = new Mock<IToolAdapterRegistry>();
+        var agent = CreateAgent();
+        var task = new AgentTask
+        {
+            Input = "receivables summary",
+            DomainHint = "accounting",
+            CapabilityHint = new CapabilityRequestHint
+            {
+                Domain = "accounting",
+                SubjectKeywords = new[] { "receivables", "summary" }
+            }
+        };
+        var context = CreateContext(mockAdapterRegistry.Object);
+        context.RuntimeContext.Roles = new[] { "warehouse_read" };
+
+        var result = await agent.ExecuteAsync(task, context, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Code.Should().Be("CAPABILITY_ACCESS_DENIED");
+        mockAdapterRegistry.Verify(r => r.Resolve(It.IsAny<string>()), Times.Never);
     }
 }

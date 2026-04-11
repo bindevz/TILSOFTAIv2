@@ -40,6 +40,16 @@ public sealed class CapabilityDescriptor
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Role names required to execute this capability. Empty means no capability-specific role gate.
+    /// </summary>
+    public IReadOnlyList<string> RequiredRoles { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Tenant ids allowed to execute this capability. Empty means all tenants are allowed.
+    /// </summary>
+    public IReadOnlyList<string> AllowedTenants { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Execution mode: "readonly" or "write".
     /// Write capabilities must route through ApprovalEngine.
     /// </summary>

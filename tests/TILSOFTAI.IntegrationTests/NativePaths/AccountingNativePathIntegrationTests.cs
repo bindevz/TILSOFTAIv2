@@ -89,7 +89,8 @@ public sealed class AccountingNativePathIntegrationTests
         {
             TenantId = "tenant-test",
             UserId = "user-test",
-            CorrelationId = "corr-test"
+            CorrelationId = "corr-test",
+            Roles = new[] { "accounting_read" }
         };
 
         var result = await runtime.RunAsync(request, ctx, CancellationToken.None);
@@ -126,7 +127,8 @@ public sealed class AccountingNativePathIntegrationTests
         var ctx = new TilsoftExecutionContext
         {
             TenantId = "tenant-explicit",
-            CorrelationId = "corr-explicit"
+            CorrelationId = "corr-explicit",
+            Roles = new[] { "accounting_read" }
         };
 
         var result = await runtime.RunAsync(request, ctx, CancellationToken.None);
@@ -155,7 +157,8 @@ public sealed class AccountingNativePathIntegrationTests
         {
             TenantId = "tenant-isolated",
             UserId = "user-isolated",
-            CorrelationId = "corr-isolated"
+            CorrelationId = "corr-isolated",
+            Roles = new[] { "accounting_read" }
         };
 
         var result = await runtime.RunAsync(request, ctx, CancellationToken.None);

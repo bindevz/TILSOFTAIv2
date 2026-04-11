@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
@@ -68,6 +70,34 @@ public sealed class AnalyticsIntentDetector
         "viết bài", "write article", "compose"
     };
 
+    private static readonly string[] ViMetricTriggersNormalized =
+    {
+        "bao nhieu", "co bao nhieu", "tong cong", "tong so",
+        "dem", "tinh tong", "trung binh",
+        "phan bo", "phan tich", "thong ke",
+        "top", "cao nhat", "thap nhat", "nhieu nhat", "it nhat"
+    };
+
+    private static readonly string[] EntityHintsNormalized =
+    {
+        "model", "mau", "style", "kieu",
+        "order", "don hang", "don",
+        "product", "san pham", "hang",
+        "customer", "khach hang", "khach",
+        "supplier", "nha cung cap",
+        "collection", "bo suu tap",
+        "quantity", "quantities"
+    };
+
+    private static readonly string[] NonAnalyticsPatternsNormalized =
+    {
+        "xin chao", "chao", "hello", "hi", "hey",
+        "cam on", "thank you", "thanks",
+        "tam biet", "goodbye", "bye",
+        "viet code", "write code", "generate code",
+        "viet bai", "write article", "compose"
+    };
+
     public AnalyticsIntentDetector()
     {
     }
@@ -89,7 +119,7 @@ public sealed class AnalyticsIntentDetector
             return new AnalyticsIntentResult { IsAnalytics = false, Confidence = 0 };
         }
 
-        var normalized = input.ToLowerInvariant().Trim();
+        var normalized = NormalizeForRules(input);
 
         // Step 1: Lightweight pre-check for obvious non-analytics
         if (IsObviousNonAnalytics(normalized))
@@ -136,7 +166,7 @@ public sealed class AnalyticsIntentDetector
             return new AnalyticsIntentResult { IsAnalytics = false, Confidence = 0 };
         }
 
-        var normalized = input.ToLowerInvariant().Trim();
+        var normalized = NormalizeForRules(input);
 
         if (IsObviousNonAnalytics(normalized))
         {
@@ -220,7 +250,7 @@ Rules:
             }
 
             // Determine language from content
-            var hasViPattern = ViMetricTriggers.Any(t => userText.ToLowerInvariant().Contains(t));
+            var hasViPattern = ViMetricTriggersNormalized.Any(t => NormalizeForRules(userText).Contains(t));
             var language = hasViPattern ? "vi" : "en";
 
             // Apply thresholds
@@ -257,7 +287,7 @@ Rules:
         decimal confidence = 0;
 
         // Check metric triggers (soft boost, not hard gate)
-        var hasViTrigger = ViMetricTriggers.Any(t => normalized.Contains(t));
+        var hasViTrigger = ViMetricTriggersNormalized.Any(t => normalized.Contains(t));
         var hasEnTrigger = EnMetricTriggers.Any(t => normalized.Contains(t));
         var hasMetricTrigger = hasViTrigger || hasEnTrigger;
 
@@ -269,7 +299,7 @@ Rules:
         }
 
         // Check entity hints
-        var matchedEntities = EntityHints
+        var matchedEntities = EntityHintsNormalized
             .Where(e => normalized.Contains(e.ToLowerInvariant()))
             .ToList();
         
@@ -304,6 +334,12 @@ Rules:
             hints.Add("implicit_analytics");
         }
 
+        if (hasMetricTrigger && matchedEntities.Count == 0 && (seasonMatch.Success || dateMatch.Success))
+        {
+            confidence += 0.05m;
+            hints.Add("metric_with_time_context");
+        }
+
         // Apply thresholds
         var isAnalytics = confidence >= RouteToAnalytics;
         var isBorderline = confidence >= SkipAnalytics && confidence < RouteToAnalytics;
@@ -319,7 +355,7 @@ Rules:
             IsBorderline = isBorderline,
             Confidence = Math.Min(confidence, 1.0m),
             Hints = hints,
-            DetectedLanguage = hasViTrigger && !hasEnTrigger ? "vi" : "en",
+            DetectedLanguage = IsLikelyVietnamese(normalized) ? "vi" : "en",
             EntityHint = matchedEntities.FirstOrDefault()
         };
     }
@@ -329,7 +365,50 @@ Rules:
     /// </summary>
     private static bool IsObviousNonAnalytics(string normalized)
     {
-        return NonAnalyticsPatterns.Any(p => normalized.Contains(p));
+        return NonAnalyticsPatternsNormalized.Any(pattern => ContainsWholePhrase(normalized, pattern));
+    }
+
+    private static string NormalizeForRules(string input)
+    {
+        var lower = input.ToLowerInvariant().Trim();
+        var formD = lower.Normalize(NormalizationForm.FormD);
+        var buffer = new char[formD.Length];
+        var index = 0;
+
+        foreach (var c in formD)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            buffer[index++] = c switch
+            {
+                '\u0111' => 'd',
+                _ => c
+            };
+        }
+
+        return new string(buffer, 0, index).Normalize(NormalizationForm.FormC);
+    }
+
+    private static bool ContainsWholePhrase(string normalized, string phrase)
+    {
+        var pattern = $@"(?<![\p{{L}}\p{{Nd}}]){Regex.Escape(phrase)}(?![\p{{L}}\p{{Nd}}])";
+        return Regex.IsMatch(normalized, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    private static bool IsLikelyVietnamese(string normalized)
+    {
+        var viSignals = new[]
+        {
+            "mua", "mau", "don", "khach", "hang", "ban chay", "bo suu tap"
+        };
+
+        var viOnlyTriggers = ViMetricTriggersNormalized.Where(trigger => trigger != "top");
+
+        return viOnlyTriggers.Any(trigger => normalized.Contains(trigger))
+            || viSignals.Any(signal => ContainsWholePhrase(normalized, signal));
     }
 }
 

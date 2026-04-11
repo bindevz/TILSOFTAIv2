@@ -53,11 +53,25 @@ public sealed class AccountingAgent : DomainAgentBase
         var candidates = _capabilityRegistry.GetByDomain("accounting");
         var capability = ResolveCapability(task, candidates);
 
-        if (capability is not null && context.ToolAdapterRegistry is not null)
+        if (capability is not null)
         {
             Logger.LogInformation(
                 "AgentNativePath | AgentId: {AgentId} | CapabilityKey: {CapabilityKey} | AdapterType: {AdapterType}",
                 AgentId, capability.CapabilityKey, capability.AdapterType);
+
+            if (context.ToolAdapterRegistry is null)
+            {
+                _instrumentation?.RecordAdapterFailure(
+                    AgentId,
+                    capability.CapabilityKey,
+                    capability.AdapterType,
+                    "TOOL_ADAPTER_REGISTRY_UNAVAILABLE");
+
+                return AgentResult.Fail(
+                    "Tool adapter registry is unavailable for native capability execution.",
+                    "TOOL_ADAPTER_REGISTRY_UNAVAILABLE",
+                    new { capabilityKey = capability.CapabilityKey, adapterType = capability.AdapterType });
+            }
 
             var result = await ExecuteNativeAsync(capability, task, context, ct);
 
@@ -71,14 +85,14 @@ public sealed class AccountingAgent : DomainAgentBase
         // Fallback: delegate to legacy bridge when no native capability matches
         Logger.LogInformation(
             "AgentFallbackPath | AgentId: {AgentId} | Reason: {Reason}",
-            AgentId, capability is null ? "no_capability_match" : "no_adapter_registry");
+            AgentId, BridgeFallbackReasons.NoCapabilityMatch);
 
         var fallbackSw = Stopwatch.StartNew();
         var fallbackResult = await Bridge.ExecuteAsync(task, context, ct);
         fallbackSw.Stop();
         _instrumentation?.RecordBridgeFallback(
             AgentId,
-            capability is null ? "no_capability_match" : "no_adapter_registry",
+            BridgeFallbackReasons.NoCapabilityMatch,
             fallbackSw.Elapsed,
             fallbackResult.Success);
 
@@ -132,6 +146,21 @@ public sealed class AccountingAgent : DomainAgentBase
 
         try
         {
+            var policy = CapabilityAccessPolicy.Evaluate(capability, context.RuntimeContext);
+            if (!policy.Allowed)
+            {
+                _instrumentation?.RecordAdapterFailure(
+                    AgentId,
+                    capability.CapabilityKey,
+                    adapterType,
+                    policy.Code);
+
+                return AgentResult.Fail(
+                    "Capability access denied.",
+                    policy.Code,
+                    policy.Detail);
+            }
+
             var adapter = context.ToolAdapterRegistry!.Resolve(capability.AdapterType);
             adapterType = adapter.AdapterType;
 
@@ -167,6 +196,23 @@ public sealed class AccountingAgent : DomainAgentBase
 
             success = true;
             return AgentResult.Ok(result.PayloadJson ?? string.Empty);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _instrumentation?.RecordAdapterFailure(
+                AgentId,
+                capability.CapabilityKey,
+                adapterType,
+                "TOOL_ADAPTER_UNAVAILABLE");
+
+            Logger.LogWarning(ex,
+                "AgentNativeAdapterUnavailable | AgentId: {AgentId} | CapabilityKey: {CapabilityKey} | AdapterType: {AdapterType}",
+                AgentId, capability.CapabilityKey, adapterType);
+
+            return AgentResult.Fail(
+                "Tool adapter is not registered for this capability.",
+                "TOOL_ADAPTER_UNAVAILABLE",
+                new { capabilityKey = capability.CapabilityKey, adapterType });
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
