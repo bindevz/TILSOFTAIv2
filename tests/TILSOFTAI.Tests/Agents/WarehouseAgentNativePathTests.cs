@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -15,20 +14,12 @@ namespace TILSOFTAI.Tests.Agents;
 
 public sealed class WarehouseAgentNativePathTests
 {
-    /// <summary>
-    /// Creates a LegacyChatPipelineBridge without calling its constructor.
-    /// This avoids the null-check on ChatPipeline. The instance is only valid
-    /// for native-path tests where Bridge.ExecuteAsync is never called.
-    /// </summary>
-    private static LegacyChatPipelineBridge CreateUninitializedBridge() =>
-        (LegacyChatPipelineBridge)RuntimeHelpers.GetUninitializedObject(typeof(LegacyChatPipelineBridge));
-
     private static WarehouseAgent CreateAgent(ICapabilityRegistry? capabilityRegistry = null)
     {
         var capReg = capabilityRegistry ?? new InMemoryCapabilityRegistry(WarehouseCapabilities.All);
         var resolver = new StructuredCapabilityResolver(new Mock<ILogger<StructuredCapabilityResolver>>().Object);
         var logger = new Mock<ILogger<WarehouseAgent>>().Object;
-        return new WarehouseAgent(CreateUninitializedBridge(), capReg, resolver, logger);
+        return new WarehouseAgent(capReg, resolver, logger);
     }
 
     private static AgentExecutionContext CreateContext(IToolAdapterRegistry? adapterRegistry = null)

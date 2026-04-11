@@ -41,7 +41,26 @@ public static class WarehouseCapabilities
             {
                 RequiredArguments = new[] { "@ItemNo" },
                 AllowedArguments = new[] { "@ItemNo", "@TenantId" },
-                AllowAdditionalArguments = false
+                AllowAdditionalArguments = false,
+                Arguments = new[]
+                {
+                    new CapabilityArgumentRule
+                    {
+                        Name = "@ItemNo",
+                        Type = "string",
+                        Format = "item-number",
+                        MinLength = 1,
+                        MaxLength = 50
+                    },
+                    new CapabilityArgumentRule
+                    {
+                        Name = "@TenantId",
+                        Type = "string",
+                        Format = "tenant-id",
+                        MinLength = 1,
+                        MaxLength = 80
+                    }
+                }
             },
             ExecutionMode = "readonly"
         },
@@ -71,7 +90,18 @@ public static class WarehouseCapabilities
             {
                 RequiredArguments = new[] { "@ItemNo" },
                 AllowedArguments = new[] { "@ItemNo" },
-                AllowAdditionalArguments = false
+                AllowAdditionalArguments = false,
+                Arguments = new[]
+                {
+                    new CapabilityArgumentRule
+                    {
+                        Name = "@ItemNo",
+                        Type = "string",
+                        Format = "item-number",
+                        MinLength = 1,
+                        MaxLength = 50
+                    }
+                }
             },
             ExecutionMode = "readonly"
         }

@@ -1,6 +1,6 @@
-# Operational Runtime Observability - Sprint 8
+# Operational Runtime Observability - Sprint 9
 
-Sprint 8 keeps the runtime signals and narrows bridge fallback to explicit legacy use.
+Sprint 9 removes the legacy bridge/ChatPipeline execution path. Bridge metrics remain as historical instrumentation and to record explicit retired-legacy attempts, but there is no production bridge executor.
 
 ## Metrics
 
@@ -8,7 +8,7 @@ Sprint 8 keeps the runtime signals and narrows bridge fallback to explicit legac
 |--------|---------|------------------|
 | `tilsoftai_runtime_supervisor_executions_total` | Supervisor requests completed. | `agent`, `domain`, `success` |
 | `tilsoftai_runtime_native_executions_total` | Native domain-agent capability executions. | `agent`, `capability`, `adapter`, `success` |
-| `tilsoftai_runtime_bridge_fallback_total` | Requests that fell back to the legacy bridge. | `agent`, `reason`, `success` |
+| `tilsoftai_runtime_bridge_fallback_total` | Retired legacy fallback attempts or historical bridge observations. | `agent`, `reason`, `success` |
 | `tilsoftai_runtime_approval_executions_total` | Approval lifecycle operations. | `operation`, `adapter`, `success` |
 | `tilsoftai_runtime_capability_invocations_total` | Capability invocations by key and adapter. | `agent`, `capability`, `adapter`, `success` |
 | `tilsoftai_runtime_adapter_failures_total` | Adapter-level failures from native execution. | `agent`, `capability`, `adapter`, `error` |
@@ -17,16 +17,16 @@ Sprint 8 keeps the runtime signals and narrows bridge fallback to explicit legac
 ## How To Read The Signals
 
 - Native execution should trend upward as more domain requests resolve to capabilities.
-- Bridge fallback should trend downward. After Sprint 8, normal unmatched warehouse/accounting requests should not use the bridge; a spike should mainly indicate explicit legacy fallback.
+- Bridge fallback should remain zero except for explicit retired-legacy requests that return `LEGACY_RUNTIME_RETIRED`.
 - `tilsoftai_runtime_adapter_failures_total` by `adapter=rest-json` or `adapter=sql` identifies integration boundaries causing failures.
 - `CAPABILITY_ACCESS_DENIED` in adapter-failure labels means capability policy stopped execution before adapter resolution.
 - `tilsoftai_runtime_capability_invocations_total` shows which domain capabilities are actually used.
 - `tilsoftai_runtime_approval_executions_total` confirms writes are still governed by `IApprovalEngine` and adapter-level guards.
-- Duration histograms split by `path` let operations compare native, bridge, approval, and supervisor latency.
+- Duration histograms split by `path` let operations compare native, approval, and supervisor latency. Bridge labels are historical/retired-path signals only.
 
 ## Structured Log Events
 
-Runtime instrumentation emits `RuntimeExecutionObserved` for supervisor, native, bridge, and approval paths. Adapter failures emit `RuntimeAdapterFailureObserved`.
+Runtime instrumentation emits `RuntimeExecutionObserved` for supervisor, native, retired bridge, and approval paths. Adapter failures emit `RuntimeAdapterFailureObserved`.
 
 Look for these fields:
 - `Path`: `supervisor`, `native`, `bridge`, or `approval`
@@ -38,9 +38,8 @@ Look for these fields:
 - `Reason` for bridge fallback
 - `ErrorCode` for adapter failures
 
-Bridge fallback reasons are now explicit:
-- `no_capability_match`: domain agent could not resolve a native capability.
-- `explicit_legacy_fallback`: request used `legacy-chat` or `legacyFallback=true`.
+Retired bridge reasons are explicit:
+- `explicit_legacy_fallback`: request used `legacy-chat` or `legacyFallback=true` and was rejected with `LEGACY_RUNTIME_RETIRED`.
 - `unsupported_general_request`: general agent declined a non-general unmatched request without invoking the bridge.
 
 REST adapter failure codes:
@@ -55,13 +54,14 @@ REST adapter failure codes:
 - `REST_SECRET_NOT_FOUND`: configured secret reference could not be resolved.
 - `REST_CONNECTION_NOT_FOUND`: configured `connectionName` was not present in the external connection catalog.
 - `CAPABILITY_ARGUMENT_VALIDATION_FAILED`: capability arguments failed contract validation before adapter execution.
+- `LEGACY_RUNTIME_RETIRED`: explicit legacy fallback was requested after bridge/ChatPipeline retirement.
 
 ## Operational Triage
 
-1. If user traffic succeeds but native counts are low, inspect bridge fallback reasons and capability resolution logs.
+1. If user traffic succeeds but native counts are low, inspect capability resolution logs and unsupported general responses.
 2. If native failure counts rise for one capability, inspect adapter failures for the same `capability` and `adapter` labels.
 3. If approval execution failures rise, inspect write-action catalog, role validation, and `IWriteActionGuard` rejection logs.
-4. If bridge duration is high, prioritize migrating that request class to a native capability or replacing the catch-all agent.
+4. If `LEGACY_RUNTIME_RETIRED` appears, map the request class to a native capability or a supported supervisor-native general workflow.
 
 ## Readiness
 

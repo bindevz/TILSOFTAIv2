@@ -1,4 +1,4 @@
-# Architecture V3 - Sprint 8
+# Architecture V3 - Sprint 9
 
 ## Runtime Shape
 
@@ -9,25 +9,17 @@ API / Hub / OpenAI surface
      -> CapabilityRequestHint
      -> IAgentRegistry
         -> WarehouseAgent          (native capability path: sql, rest-json)
-        -> AccountingAgent         (native capability path: sql)
-        -> GeneralChatAgent        (native general response, explicit legacy fallback only)
-           -> LegacyChatPipelineBridge
-              -> ChatPipeline -> legacy module/tool pipeline
+        -> AccountingAgent         (native capability path: sql, rest-json)
+        -> GeneralChatAgent        (native general response, unsupported/retired legacy responses)
 
 Native capability path:
   DomainAgent
     -> ICapabilityRegistry.GetByDomain(domain)
     -> ICapabilityResolver.Resolve(hint, candidates)
     -> CapabilityAccessPolicy.Evaluate(required roles, allowed tenants)
-    -> CapabilityArgumentValidator.Validate(argument contract)
+    -> CapabilityArgumentValidator.Validate(typed argument contract)
     -> IToolAdapterRegistry.Resolve(adapterType)
     -> IToolAdapter.ExecuteAsync(request)
-
-Bridge fallback path:
-  Explicit legacy request
-    -> LegacyChatPipelineBridge
-    -> ChatPipeline
-    -> module-era tool catalog/scope resolution
 
 Write path:
   IApprovalEngine
@@ -68,6 +60,17 @@ Write path:
 | Contracts | Representative SQL and REST capabilities enforce `ArgumentContract` before adapter resolution. |
 | Readiness | `NativeRuntimeHealthCheck` uses all loaded capabilities and required adapter registrations, without domain hardcoding. |
 | Modules | `ModuleLoaderHostedService` is disabled unless `Modules:EnableLegacyAutoload=true`; module health is diagnostic only. |
+
+## Sprint 9 Ownership Changes
+
+| Area | Sprint 9 state |
+|------|----------------|
+| Legacy runtime | `LegacyChatPipelineBridge`, `ChatPipeline`, `ChatRequest`, and `ChatResult` are deleted. Explicit legacy requests return `LEGACY_RUNTIME_RETIRED`. |
+| Capability sourcing | Static fallback and bootstrap config records are overridden by durable platform catalog records. |
+| External connections | Platform catalog records are primary; bootstrap `ExternalConnections` only apply when fallback is enabled. |
+| Contract validation | Representative capabilities validate names, types, formats, enum values, and length/range constraints. |
+| Module-era registration | Module scope/ReAct legacy pipeline services are no longer registered by default. Module loader remains diagnostic and opt-in. |
+| Deep analytics | Deep SQL-backed analytics E2E is isolated as an external workflow boundary owned by Analytics. |
 
 ## Capabilities
 
@@ -110,9 +113,10 @@ Capabilities may specify `ArgumentContract`:
 - `RequiredArguments`: all must be present.
 - `AllowedArguments`: permitted argument names when additional arguments are disabled.
 - `AllowAdditionalArguments`: when false, unknown arguments fail validation.
+- `Arguments`: typed value rules for type, format, enum, pattern, length, and numeric range.
 
 Validation failure returns `CAPABILITY_ARGUMENT_VALIDATION_FAILED` before adapter resolution.
 
 ## Transition State
 
-The native path is supervisor-driven, policy-gated, contract-validated, and adapter-backed. The bridge remains only for explicit legacy fallback. Module autoload is off by default and module health is diagnostic. Sprint 9 should focus on shrinking `ChatPipeline` dependency and replacing module-era tool catalog behavior with capability-pack loading.
+The native path is supervisor-driven, policy-gated, contract-validated, and adapter-backed. The bridge and ChatPipeline are retired. Remaining compatibility debt is limited to opt-in module diagnostics, bootstrap catalog fallback, and incomplete admin-managed catalog mutation workflows.

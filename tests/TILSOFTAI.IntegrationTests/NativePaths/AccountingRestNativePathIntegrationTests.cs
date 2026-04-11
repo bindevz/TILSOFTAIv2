@@ -1,5 +1,4 @@
 using System.Net;
-using System.Runtime.CompilerServices;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -22,9 +21,6 @@ namespace TILSOFTAI.IntegrationTests.NativePaths;
 
 public sealed class AccountingRestNativePathIntegrationTests
 {
-    private static LegacyChatPipelineBridge CreateUninitializedBridge() =>
-        (LegacyChatPipelineBridge)RuntimeHelpers.GetUninitializedObject(typeof(LegacyChatPipelineBridge));
-
     [Fact]
     public async Task AccountingExchangeRateLookup_ShouldUseSecretBackedConnectionCatalog()
     {
@@ -77,7 +73,6 @@ public sealed class AccountingRestNativePathIntegrationTests
             }
         });
         var accountingAgent = new AccountingAgent(
-            CreateUninitializedBridge(),
             capabilityRegistry,
             capabilityResolver,
             new Mock<ILogger<AccountingAgent>>().Object);

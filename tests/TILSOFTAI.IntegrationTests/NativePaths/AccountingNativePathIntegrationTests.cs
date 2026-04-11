@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -22,9 +21,6 @@ namespace TILSOFTAI.IntegrationTests.NativePaths;
 /// </summary>
 public sealed class AccountingNativePathIntegrationTests
 {
-    private static LegacyChatPipelineBridge CreateUninitializedBridge() =>
-        (LegacyChatPipelineBridge)RuntimeHelpers.GetUninitializedObject(typeof(LegacyChatPipelineBridge));
-
     /// <summary>
     /// Builds a fully-wired SupervisorRuntime with real components (not mocks),
     /// using a stub adapter that returns canned data.
@@ -45,13 +41,11 @@ public sealed class AccountingNativePathIntegrationTests
             WarehouseCapabilities.All.Concat(AccountingCapabilities.All));
 
         var accountingAgent = new AccountingAgent(
-            CreateUninitializedBridge(),
             capabilityRegistry,
             capabilityResolver,
             new Mock<ILogger<AccountingAgent>>().Object);
 
         var warehouseAgent = new WarehouseAgent(
-            CreateUninitializedBridge(),
             capabilityRegistry,
             capabilityResolver,
             new Mock<ILogger<WarehouseAgent>>().Object);

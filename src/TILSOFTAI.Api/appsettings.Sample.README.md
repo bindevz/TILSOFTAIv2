@@ -28,9 +28,31 @@ Create `appsettings.Local.json`:
 
 > **Note:** Never commit passwords to source control.
 
-## Capability Configuration
+## Platform Catalog Configuration
 
-Runtime capabilities can be supplied in the `Capabilities` array. Configuration entries override static fallback capabilities by `CapabilityKey`.
+Production capability and external connection records are loaded from the platform catalog, not primarily from `appsettings.json`.
+
+```json
+{
+  "PlatformCatalog": {
+    "Enabled": true,
+    "CatalogPath": "catalog/platform-catalog.json",
+    "AllowBootstrapConfigurationFallback": true
+  },
+  "Capabilities": [],
+  "ExternalConnections": {
+    "Connections": {}
+  }
+}
+```
+
+Source precedence is:
+
+1. Static fallback capabilities.
+2. Bootstrap app configuration, when present.
+3. Durable platform catalog records from `PlatformCatalog:CatalogPath`.
+
+Catalog capability records use the same shape as bootstrap capability records:
 
 ```json
 {
@@ -50,12 +72,21 @@ Runtime capabilities can be supplied in the `Capabilities` array. Configuration 
   "ArgumentContract": {
     "RequiredArguments": [ "@ItemNo" ],
     "AllowedArguments": [ "@ItemNo" ],
-    "AllowAdditionalArguments": false
+    "AllowAdditionalArguments": false,
+    "Arguments": [
+      {
+        "Name": "@ItemNo",
+        "Type": "string",
+        "Format": "item-number",
+        "MinLength": 1,
+        "MaxLength": 50
+      }
+    ]
   }
 }
 ```
 
-`RequiredRoles`, `AllowedTenants`, and `ArgumentContract` are enforced before adapter resolution.
+`RequiredRoles`, `AllowedTenants`, and typed `ArgumentContract` rules are enforced before adapter resolution.
 
 External auth belongs in the connection catalog, not raw capability metadata:
 

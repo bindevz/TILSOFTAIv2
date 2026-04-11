@@ -1,5 +1,4 @@
 using System.Net;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -23,9 +22,6 @@ namespace TILSOFTAI.IntegrationTests.NativePaths;
 
 public sealed class WarehouseRestNativePathIntegrationTests
 {
-    private static LegacyChatPipelineBridge CreateUninitializedBridge() =>
-        (LegacyChatPipelineBridge)RuntimeHelpers.GetUninitializedObject(typeof(LegacyChatPipelineBridge));
-
     [Fact]
     public async Task WarehouseExternalStockLookup_ShouldUseRestJsonAdapterThroughNativeCapabilityPath()
     {
@@ -81,7 +77,6 @@ public sealed class WarehouseRestNativePathIntegrationTests
             }
         });
         var warehouseAgent = new WarehouseAgent(
-            CreateUninitializedBridge(),
             capabilityRegistry,
             capabilityResolver,
             new Mock<ILogger<WarehouseAgent>>().Object);

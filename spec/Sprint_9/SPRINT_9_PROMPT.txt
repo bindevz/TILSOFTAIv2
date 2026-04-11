@@ -1,0 +1,148 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 9.
+
+Baseline repository reality (after Sprint 8):
+- External REST integrations are governed through `ExternalConnections` and `ISecretProvider`.
+- Raw secret-bearing REST metadata is rejected.
+- Representative capabilities use `ArgumentContract`.
+- Domain agents validate capability policy and argument contracts before adapter execution.
+- `NativeRuntimeHealthCheck` is domain-agnostic.
+- Unmatched warehouse/accounting requests no longer fall through to bridge fallback; they return `DOMAIN_CAPABILITY_NOT_FOUND`.
+- A second governed REST-backed capability path exists: `accounting.exchange-rate.lookup`.
+- Module legacy autoload is disabled by default.
+- The platform is still not fully enterprise-grade because `LegacyChatPipelineBridge` and `ChatPipeline` still exist, module-era infrastructure still matters in legacy mode, the production catalog is still configuration-backed, and contracts still validate names/object shape rather than typed/schema constraints.
+
+Sprint 9 mission:
+Retire the remaining legacy runtime structures and move production truth into durable governed catalogs with stronger typed contract semantics.
+
+Primary objective:
+1. Replace `ChatPipeline` legacy tool catalog behavior.
+2. Delete or neutralize `LegacyChatPipelineBridge`.
+3. Move capabilities and external connections from config-primary to durable platform catalogs.
+4. Deepen contract validation from required/allowed names to typed/schema validation.
+5. Reduce module-era runtime registration further.
+6. Resolve or formally isolate the remaining skipped deep analytics workflow boundary.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the orchestration owner.
+2. Domain agents remain the execution owners.
+3. `GeneralChatAgent` remains supervisor-native and bounded.
+4. Capabilities and external connections must become durably governed production records.
+5. Adapters remain the integration boundary.
+6. ApprovalEngine remains the only write-governance owner.
+7. Legacy bridge and module-era behaviors must now move from bounded debt toward actual retirement.
+8. Contract validation must become materially stronger than name-based checks.
+9. Readiness and observability must continue to reflect runtime truth honestly.
+10. Enterprise-grade progress must be measured by deletions, durable ownership, stronger contracts, and smaller legacy runtime footprint.
+
+Primary Sprint 9 goals:
+
+A. Replace `ChatPipeline` legacy tool catalog behavior
+- remove `ChatPipeline` as the active owner of legacy tool execution behavior if safe
+- if full deletion is not yet safe, replace the module-era catalog behavior with capability-pack or equivalent bounded compatibility support and reduce `ChatPipeline` to minimal residue
+
+B. Delete or neutralize `LegacyChatPipelineBridge`
+- remove the bridge as a meaningful production dependency
+- replace explicit legacy fallback with supervisor-native general workflow handling or deterministic unsupported paths
+- do not introduce a new fallback layer
+
+C. Introduce durable platform catalogs
+- move production capability and external connection definitions away from `appsettings.json` as the primary source of truth
+- introduce a durable governed catalog for capabilities, external connections, and connection policy metadata
+- make source precedence explicit between static defaults, bootstrap config, and durable platform catalog records
+- add tests for load and override precedence
+- document audit/change-control expectations
+
+D. Deepen contract validation to typed/schema-level semantics
+- extend representative contracts to validate more than required/allowed argument names
+- support type, format, enum, and useful value/range constraints where appropriate
+- keep validation deterministic and operator-safe
+- validate before adapter execution
+- add tests for invalid types/formats/ranges
+
+E. Reduce module-era runtime registration further
+- remove or isolate default registration of module-era services where safe
+- default runtime boot should look clearly supervisor-native and capability-native
+
+F. Resolve or formally isolate the remaining skipped deep analytics boundary
+- either restore the skipped deep analytics E2E workflow into supported validation,
+- or move it into a clearly bounded external/deep workflow validation suite with explicit ownership and execution rules
+
+Non-negotiable rules:
+1. Do not add new compatibility wrappers unless they directly enable deletion of older ones.
+2. Do not preserve `ChatPipeline` out of habit or convenience.
+3. Do not preserve `LegacyChatPipelineBridge` as a permanent safety hatch.
+4. Do not leave `appsettings.json` as the primary production catalog after Sprint 9.
+5. Do not claim contract maturity if validation still only checks names and object shape.
+6. Do not reintroduce module-first runtime identity.
+7. Do not weaken approval or write governance.
+8. Do not count docs-only work as platform progress.
+9. Prefer deletion and replacement over abstraction layering.
+10. Keep remaining transitional debt explicit and measurable.
+
+Explicitly in scope:
+- `ChatPipeline` replacement or strong reduction
+- `LegacyChatPipelineBridge` deletion or neutralization
+- durable capability/connection catalog introduction
+- typed/schema contract validation
+- default runtime registration cleanup for module-era services
+- deep analytics validation boundary cleanup
+- docs/debt/readiness/catalog governance updates
+
+Explicitly out of scope:
+- broad new business domains
+- planner runtime
+- graph orchestration
+- large multi-agent expansion
+- major UI/product expansion
+- performance certification
+
+Definition of done:
+- `LegacyChatPipelineBridge` is deleted or operationally irrelevant
+- `ChatPipeline` is deleted, replaced, or reduced to tightly bounded non-primary residue
+- durable catalogs exist for production capability and external connection records
+- source precedence is explicit and tested
+- representative capabilities use stronger typed/schema validation
+- invalid contract values fail before adapter execution with deterministic details
+- default runtime boot is more clearly native and less module-era dependent
+- deep analytics validation boundary is restored or explicitly isolated with ownership
+- docs reflect runtime truth honestly
+- the codebase is cleaner and less legacy-dependent after Sprint 9
+
+Must-fail conditions:
+- `LegacyChatPipelineBridge` still matters for production runtime behavior
+- `ChatPipeline` still owns the main compatibility execution story
+- app configuration remains the primary production capability/connection catalog
+- contract validation still stops at required/allowed argument names
+- module-era services remain visibly central to default runtime boot
+- Sprint 9 adds abstractions without deleting meaningful legacy structures
+
+Required deliverables:
+1. Bridge/ChatPipeline retirement changes
+2. Durable catalog changes
+3. Typed contract validation changes
+4. Module-era runtime reductions
+5. Validation boundary cleanup
+6. Validation/test improvements
+7. Documentation updates
+
+Required reporting after implementation:
+1. Summary of Sprint 9 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Bridge/ChatPipeline retirement changes
+6. Durable catalog changes
+7. Typed contract validation changes
+8. Module-era runtime reductions
+9. Validation boundary cleanup
+10. Validation/test improvements
+11. Remaining compatibility components
+12. Remaining enterprise-grade blockers
+13. Recommended Sprint 10 priorities
+
+Final instruction:
+Sprint 9 is about durable platform ownership and legacy retirement.
+Do not spend Sprint 9 polishing the old compatibility story.
+Spend it replacing it, deleting it where safe, and moving production truth into durable platform-owned catalogs with stronger contract semantics.

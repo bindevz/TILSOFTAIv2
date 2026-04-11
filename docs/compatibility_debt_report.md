@@ -1,6 +1,25 @@
-# Compatibility Debt Report - Sprint 8
+# Compatibility Debt Report - Sprint 9
 
-This document tracks transitional components that still exist after Sprint 8, plus the components removed or reduced during the sprint.
+This document tracks transitional components that still exist after Sprint 9, plus the components removed or reduced during the sprint.
+
+## Removed In Sprint 9
+
+| Component | Result | Notes |
+|-----------|--------|-------|
+| `LegacyChatPipelineBridge` | Deleted | Explicit legacy fallback no longer executes `ChatPipeline`; `GeneralChatAgent` returns `LEGACY_RUNTIME_RETIRED`. |
+| `ChatPipeline` | Deleted | The legacy multi-step chat/tool owner is no longer registered or compiled. |
+| `ChatRequest` / `ChatResult` | Deleted | These existed only for the retired pipeline path. |
+| `ChatPipelineInstrumentation` | Deleted | Legacy pipeline span source removed from default runtime registration. |
+
+## Changed In Sprint 9
+
+| Component | Result | Notes |
+|-----------|--------|-------|
+| `GeneralChatAgent` | Supervisor-native only | Handles simple general requests and deterministic unsupported/retired legacy responses. |
+| Capability catalog | Platform-owned | `catalog/platform-catalog.json` overrides static/bootstrap records. |
+| External connection catalog | Platform-owned | Durable platform connection records override bootstrap configuration. |
+| Capability contracts | Typed | Representative contracts now validate type, format, enum, and length/range rules. |
+| Deep analytics E2E | External boundary | Marked `Category=ExternalDeepWorkflow`, owned by Analytics, and gated by `TEST_SQL_CONNECTION`. |
 
 ## Removed In Sprint 7
 
@@ -39,37 +58,27 @@ This document tracks transitional components that still exist after Sprint 8, pl
 
 ## Remaining Compatibility Components
 
-### 1. LegacyChatPipelineBridge
+### 1. Module Loader And Module Packages
 
 | Field | Value |
 |-------|-------|
-| Status | Explicit fallback-only, measured |
-| Location | `src/TILSOFTAI.Orchestration/Agents/LegacyChatPipelineBridge.cs` |
-| Why it exists | `GeneralChatAgent` uses it only for explicit `legacy-chat` / `legacyFallback=true` requests. |
-| What depends on it | Explicit legacy fallback in `GeneralChatAgent` |
-| Removal condition | Native capabilities or supervisor-native general workflows cover all remaining production request classes. |
-
-### 2. ChatPipeline
-
-| Field | Value |
-|-------|-------|
-| Status | Legacy fallback pipeline |
-| Location | `src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs` |
-| Why it exists | The bridge still delegates legacy multi-step chat/tool behavior to it. |
-| What depends on it | `LegacyChatPipelineBridge` |
-| Removal condition | Native agents own full execution, or remaining LLM/tool behavior is refactored behind supervisor-native services. |
-
-### 3. Module Loader And Module Scope Resolver
-
-| Field | Value |
-|-------|-------|
-| Status | Legacy diagnostic and ChatPipeline compatibility; autoload disabled by default |
+| Status | Legacy diagnostic only; autoload disabled by default |
 | Location | `src/TILSOFTAI.Infrastructure/Modules/*`, `src/TILSOFTAI.Orchestration/Modules/*` |
-| Why it exists | `ChatPipeline`, legacy tool catalog behavior, and diagnostic module health still use module loading/scope resolution when legacy autoload is enabled. |
-| What depends on it | `ChatPipeline`, `ModuleHealthCheck`, `ModuleLoaderHostedService`, module packages |
-| Removal condition | Capability-pack loading replaces module-first tool discovery for the legacy path. |
+| Why it exists | Diagnostic module health and existing module packages still use module loading when legacy autoload is explicitly enabled. |
+| What depends on it | `ModuleHealthCheck`, `ModuleLoaderHostedService`, module packages |
+| Removal condition | Module packages are converted to platform catalog/tool records or explicitly retained as non-runtime packaging. |
 
-### 4. InMemoryCapabilityRegistry
+### 2. Bootstrap Configuration Sources
+
+| Field | Value |
+|-------|-------|
+| Status | Bootstrap fallback |
+| Location | `ConfigurationCapabilitySource`, `ConfigurationExternalConnectionCatalog` |
+| Why it exists | Local bootstrap and emergency fallback when durable catalog records are unavailable. |
+| What depends on it | `CompositeCapabilityRegistry`, `CompositeExternalConnectionCatalog` |
+| Removal condition | SQL/admin platform catalog write path and operational bootstrap process are fully established. |
+
+### 3. InMemoryCapabilityRegistry
 
 | Field | Value |
 |-------|-------|
@@ -80,7 +89,4 @@ This document tracks transitional components that still exist after Sprint 8, pl
 
 ## Sprint 9 Debt Priorities
 
-1. Replace `ChatPipeline` legacy tool catalog behavior with capability-pack loading.
-2. Delete `LegacyChatPipelineBridge` after explicit legacy fallback is no longer needed.
-3. Move capability definitions from app configuration to a durable platform catalog.
-4. Add schema-level typed value validation beyond required/allowed argument names.
+Completed. See Sprint 10 priorities in the enterprise readiness report.

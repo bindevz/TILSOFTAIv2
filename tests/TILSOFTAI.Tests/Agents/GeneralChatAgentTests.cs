@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
-using System.Runtime.CompilerServices;
 using TILSOFTAI.Agents;
 using TILSOFTAI.Agents.Abstractions;
 using TILSOFTAI.Approvals;
@@ -50,7 +49,6 @@ public sealed class GeneralChatAgentTests
     }
 
     private static GeneralChatAgent CreateAgent() => new(
-        (LegacyChatPipelineBridge)RuntimeHelpers.GetUninitializedObject(typeof(LegacyChatPipelineBridge)),
         new Mock<ILogger<GeneralChatAgent>>().Object);
 
     private static AgentExecutionContext CreateContext() => new()

@@ -6,24 +6,20 @@ using TILSOFTAI.Orchestration.Observability;
 namespace TILSOFTAI.Agents;
 
 /// <summary>
-/// Supervisor-native general agent for unclassified chat and explicit legacy fallback.
-/// It does not silently proxy every unresolved request to the legacy pipeline.
+/// Supervisor-native general agent for unclassified chat and unsupported general requests.
 /// </summary>
 public sealed class GeneralChatAgent : IDomainAgent
 {
     public const string AgentIdValue = "general-chat";
     public const string LegacyDomainHint = "legacy-chat";
 
-    private readonly LegacyChatPipelineBridge _bridge;
     private readonly ILogger<GeneralChatAgent> _logger;
     private readonly RuntimeExecutionInstrumentation? _instrumentation;
 
     public GeneralChatAgent(
-        LegacyChatPipelineBridge bridge,
         ILogger<GeneralChatAgent> logger,
         RuntimeExecutionInstrumentation? instrumentation = null)
     {
-        _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _instrumentation = instrumentation;
     }
@@ -55,14 +51,14 @@ public sealed class GeneralChatAgent : IDomainAgent
             string.Equals(domain, task.DomainHint, StringComparison.OrdinalIgnoreCase));
     }
 
-    public async Task<AgentResult> ExecuteAsync(AgentTask task, AgentExecutionContext context, CancellationToken ct)
+    public Task<AgentResult> ExecuteAsync(AgentTask task, AgentExecutionContext context, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(context);
 
         if (ShouldUseLegacyFallback(task))
         {
-            return await ExecuteLegacyFallbackAsync(task, context, ct);
+            return Task.FromResult(ExecuteRetiredLegacyFallback(task));
         }
 
         if (IsGeneralConversation(task.Input))
@@ -72,7 +68,7 @@ public sealed class GeneralChatAgent : IDomainAgent
                 "GeneralAgentNativeResponse | AgentId: {AgentId} | DomainHint: {DomainHint}",
                 AgentId,
                 task.DomainHint ?? "none");
-            return AgentResult.Ok(response);
+            return Task.FromResult(AgentResult.Ok(response));
         }
 
         _logger.LogInformation(
@@ -81,38 +77,40 @@ public sealed class GeneralChatAgent : IDomainAgent
             BridgeFallbackReasons.UnsupportedGeneralRequest,
             task.DomainHint ?? "none");
 
-        return AgentResult.Fail(
+        return Task.FromResult(AgentResult.Fail(
             "No native domain capability matched this request. Provide a warehouse/accounting domain or an explicit capability key.",
             "GENERAL_REQUEST_UNSUPPORTED",
             new
             {
                 reason = BridgeFallbackReasons.UnsupportedGeneralRequest,
                 domainHint = task.DomainHint
-            });
+            }));
     }
 
-    private async Task<AgentResult> ExecuteLegacyFallbackAsync(
-        AgentTask task,
-        AgentExecutionContext context,
-        CancellationToken ct)
+    private AgentResult ExecuteRetiredLegacyFallback(AgentTask task)
     {
         var sw = Stopwatch.StartNew();
-        var result = await _bridge.ExecuteAsync(task, context, ct);
         sw.Stop();
 
         _instrumentation?.RecordBridgeFallback(
             AgentId,
             BridgeFallbackReasons.ExplicitLegacyFallback,
             sw.Elapsed,
-            result.Success);
+            success: false);
 
         _logger.LogInformation(
-            "GeneralAgentLegacyFallback | AgentId: {AgentId} | Reason: {Reason} | Success: {Success}",
+            "GeneralAgentLegacyFallbackRetired | AgentId: {AgentId} | Reason: {Reason}",
             AgentId,
-            BridgeFallbackReasons.ExplicitLegacyFallback,
-            result.Success);
+            BridgeFallbackReasons.ExplicitLegacyFallback);
 
-        return result;
+        return AgentResult.Fail(
+            "Legacy chat fallback has been retired. Use supervisor-native warehouse/accounting capabilities or a supported general request.",
+            "LEGACY_RUNTIME_RETIRED",
+            new
+            {
+                reason = BridgeFallbackReasons.ExplicitLegacyFallback,
+                domainHint = task.DomainHint
+            });
     }
 
     private static bool ShouldUseLegacyFallback(AgentTask task)

@@ -55,7 +55,26 @@ public static class AccountingCapabilities
             {
                 RequiredArguments = new[] { "@InvoiceNumber" },
                 AllowedArguments = new[] { "@InvoiceNumber", "@TenantId" },
-                AllowAdditionalArguments = false
+                AllowAdditionalArguments = false,
+                Arguments = new[]
+                {
+                    new CapabilityArgumentRule
+                    {
+                        Name = "@InvoiceNumber",
+                        Type = "string",
+                        Format = "invoice-number",
+                        MinLength = 1,
+                        MaxLength = 50
+                    },
+                    new CapabilityArgumentRule
+                    {
+                        Name = "@TenantId",
+                        Type = "string",
+                        Format = "tenant-id",
+                        MinLength = 1,
+                        MaxLength = 80
+                    }
+                }
             },
             ExecutionMode = "readonly"
         },
@@ -71,7 +90,17 @@ public static class AccountingCapabilities
             {
                 RequiredArguments = new[] { "@CurrencyCode" },
                 AllowedArguments = new[] { "@CurrencyCode" },
-                AllowAdditionalArguments = false
+                AllowAdditionalArguments = false,
+                Arguments = new[]
+                {
+                    new CapabilityArgumentRule
+                    {
+                        Name = "@CurrencyCode",
+                        Type = "string",
+                        Format = "currency-code",
+                        Enum = new[] { "USD", "EUR", "VND", "THB" }
+                    }
+                }
             },
             ExecutionMode = "readonly"
         }

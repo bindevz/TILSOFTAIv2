@@ -12,7 +12,6 @@ namespace TILSOFTAI.Agents.Domain;
 /// Sprint 5: Accounting domain agent with native capability execution.
 /// Resolves accounting capabilities from ICapabilityRegistry using ICapabilityResolver
 /// and executes via ToolAdapterRegistry.
-/// Falls back to LegacyChatPipelineBridge when no native capability matches.
 /// </summary>
 public sealed class AccountingAgent : DomainAgentBase
 {
@@ -21,12 +20,11 @@ public sealed class AccountingAgent : DomainAgentBase
     private readonly RuntimeExecutionInstrumentation? _instrumentation;
 
     public AccountingAgent(
-        LegacyChatPipelineBridge bridge,
         ICapabilityRegistry capabilityRegistry,
         ICapabilityResolver capabilityResolver,
         ILogger<AccountingAgent> logger,
         RuntimeExecutionInstrumentation? instrumentation = null)
-        : base(bridge, logger)
+        : base(logger)
     {
         _capabilityRegistry = capabilityRegistry ?? throw new ArgumentNullException(nameof(capabilityRegistry));
         _capabilityResolver = capabilityResolver ?? throw new ArgumentNullException(nameof(capabilityResolver));

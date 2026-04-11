@@ -1,9 +1,9 @@
-# External Integration Governance - Sprint 8
+# External Integration Governance - Sprint 9
 
 External capabilities must not carry secret values as ordinary capability metadata. REST-backed capabilities use two layers:
 
 1. `IntegrationBinding` on the capability descriptor chooses endpoint behavior, such as `connectionName`, `endpoint`, and `method`.
-2. `ExternalConnections:Connections` owns platform-governed connection metadata, such as `BaseUrl`, retry, timeout, auth scheme, API key header, and secret references.
+2. The platform catalog owns connection metadata, such as `BaseUrl`, retry, timeout, auth scheme, API key header, and secret references.
 
 ## Secret Rules
 
@@ -13,10 +13,13 @@ External capabilities must not carry secret values as ordinary capability metada
 - Missing secret provider returns `REST_SECRET_PROVIDER_UNAVAILABLE`.
 - Missing secret values return `REST_SECRET_NOT_FOUND`.
 
-## Configuration Shape
+## Platform Catalog Shape
 
 ```json
 {
+  "PlatformCatalog": {
+    "CatalogPath": "catalog/platform-catalog.json"
+  },
   "ExternalConnections": {
     "Connections": {
       "external-stock-api": {
@@ -48,10 +51,15 @@ Capability binding:
 
 ## Source Precedence
 
-Capability source precedence remains explicit:
+Capability source precedence is explicit:
 
 1. Static fallback capability descriptors provide development/test defaults and stable keys.
-2. Configuration capability source overrides static descriptors by `CapabilityKey`.
-3. External connection catalog supplies production connection/auth/resilience metadata by `connectionName`.
+2. Bootstrap configuration source overrides static descriptors by `CapabilityKey`.
+3. Durable platform catalog source overrides both by `CapabilityKey`.
 
-Production endpoint/auth shape should live in configuration and secret-backed connection catalog entries, not static code literals.
+External connection precedence is:
+
+1. Durable platform catalog records.
+2. Bootstrap configuration records only when `PlatformCatalog:AllowBootstrapConfigurationFallback=true`.
+
+Production endpoint/auth shape should live in platform catalog records with secret references, not static code literals or raw app configuration secrets.

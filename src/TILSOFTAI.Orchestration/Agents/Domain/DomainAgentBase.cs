@@ -5,20 +5,16 @@ namespace TILSOFTAI.Agents.Domain;
 
 /// <summary>
 /// Abstract base for domain agent skeletons.
-/// Default execution delegates to LegacyChatPipelineBridge.
-/// Subclasses may override ExecuteAsync to implement domain-native execution (Sprint 4+).
+/// Default execution is deterministic and native-first; domain agents own their execution paths.
 /// </summary>
 public abstract class DomainAgentBase : IDomainAgent
 {
-    private readonly LegacyChatPipelineBridge _bridge;
     private readonly ILogger _logger;
 
-    protected LegacyChatPipelineBridge Bridge => _bridge;
     protected ILogger Logger => _logger;
 
-    protected DomainAgentBase(LegacyChatPipelineBridge bridge, ILogger logger)
+    protected DomainAgentBase(ILogger logger)
     {
-        _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -55,13 +51,15 @@ public abstract class DomainAgentBase : IDomainAgent
         // Sprint 3: enforce write governance before delegation
         AgentWritePolicy.EnforceWriteGovernance(task, AgentId, _logger);
 
-        // Delegate to legacy bridge; future sprints will add domain-specific logic
-        var result = await _bridge.ExecuteAsync(task, context, ct);
+        await Task.CompletedTask;
 
         _logger.LogInformation(
-            "AgentExecutionCompleted | AgentId: {AgentId} | Success: {Success}",
-            AgentId, result.Success);
+            "AgentExecutionCompleted | AgentId: {AgentId} | Success: false | Reason: native_path_not_implemented",
+            AgentId);
 
-        return result;
+        return AgentResult.Fail(
+            "This domain agent does not have a native execution path for the request.",
+            "DOMAIN_NATIVE_PATH_NOT_IMPLEMENTED",
+            new { agentId = AgentId });
     }
 }

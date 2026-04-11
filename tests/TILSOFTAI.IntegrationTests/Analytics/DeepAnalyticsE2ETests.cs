@@ -21,7 +21,8 @@ namespace TILSOFTAI.IntegrationTests.Analytics;
 /// These tests require a test database with seeded analytics catalog.
 /// Mark as [Trait("Category", "Integration")] to exclude from unit test runs.
 /// </remarks>
-[Trait("Category", "Integration")]
+[Trait("Category", "ExternalDeepWorkflow")]
+[Trait("Owner", "Analytics")]
 public class DeepAnalyticsE2ETests
 {
     /// <summary>

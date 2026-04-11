@@ -1,4 +1,4 @@
-# Runtime Readiness - Sprint 8
+# Runtime Readiness - Sprint 9
 
 Readiness is split by runtime responsibility.
 
@@ -21,13 +21,16 @@ It does not require warehouse/accounting-specific hardcoding.
 
 `Modules:EnableLegacyAutoload` controls whether the old module loader hosted service starts. When disabled, module health reports that legacy autoload is off and native readiness should be used for platform readiness.
 
+`ChatPipeline` and `LegacyChatPipelineBridge` are no longer part of readiness because they are deleted.
+
 ## External Readiness
 
 External REST capability readiness is represented by:
 
 - registered `rest-json` adapter,
 - loaded external capability descriptors,
-- configured `ExternalConnections:Connections` entries,
+- platform catalog external connection records,
+- bootstrap `ExternalConnections:Connections` entries only when fallback is enabled,
 - secret provider availability at execution time.
 
 The readiness check verifies adapter registration generically. Secret presence is validated during execution to avoid exposing secret-bearing checks in readiness output.

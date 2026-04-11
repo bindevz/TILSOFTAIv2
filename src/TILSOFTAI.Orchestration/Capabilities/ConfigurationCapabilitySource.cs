@@ -132,7 +132,32 @@ public sealed class ConfigurationCapabilitySource : ICapabilitySource
             RequiredArguments = ReadStringList(section.GetSection("RequiredArguments")),
             AllowedArguments = ReadStringList(section.GetSection("AllowedArguments")),
             AllowAdditionalArguments = !bool.TryParse(section["AllowAdditionalArguments"], out var allowAdditional)
-                || allowAdditional
+                || allowAdditional,
+            Arguments = ReadArgumentRules(section.GetSection("Arguments"))
         };
+    }
+
+    private static IReadOnlyList<CapabilityArgumentRule> ReadArgumentRules(IConfigurationSection section)
+    {
+        if (!section.Exists())
+        {
+            return Array.Empty<CapabilityArgumentRule>();
+        }
+
+        return section.GetChildren()
+            .Select(child => new CapabilityArgumentRule
+            {
+                Name = child["Name"] ?? string.Empty,
+                Type = child["Type"] ?? string.Empty,
+                Format = child["Format"] ?? string.Empty,
+                Enum = ReadStringList(child.GetSection("Enum")),
+                Min = decimal.TryParse(child["Min"], out var min) ? min : null,
+                Max = decimal.TryParse(child["Max"], out var max) ? max : null,
+                MinLength = int.TryParse(child["MinLength"], out var minLength) ? minLength : null,
+                MaxLength = int.TryParse(child["MaxLength"], out var maxLength) ? maxLength : null,
+                Pattern = child["Pattern"] ?? string.Empty
+            })
+            .Where(rule => !string.IsNullOrWhiteSpace(rule.Name))
+            .ToArray();
     }
 }

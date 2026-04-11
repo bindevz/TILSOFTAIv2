@@ -9,11 +9,20 @@
 - `src/TILSOFTAI.Orchestration/Capabilities/ModuleBackedCapabilityPack.cs`
 - `tests/TILSOFTAI.Tests/Approvals/ActionApprovalServiceFacadeTests.cs`
 
-## Remaining Deprecated Runtime Paths
+## Deleted In Sprint 7
+
+- `src/TILSOFTAI.Orchestration/Agents/LegacyChatDomainAgent.cs`
+
+## Deleted In Sprint 9
 
 - `src/TILSOFTAI.Orchestration/Agents/LegacyChatPipelineBridge.cs`
-- `src/TILSOFTAI.Orchestration/Agents/LegacyChatDomainAgent.cs`
 - `src/TILSOFTAI.Orchestration/Pipeline/ChatPipeline.cs`
+- `src/TILSOFTAI.Orchestration/Pipeline/ChatRequest.cs`
+- `src/TILSOFTAI.Orchestration/Pipeline/ChatResult.cs`
+- `src/TILSOFTAI.Orchestration/Observability/ChatPipelineInstrumentation.cs`
+
+## Remaining Deprecated Runtime Paths
+
 - `src/TILSOFTAI.Orchestration/Modules/IModuleScopeResolver.cs`
 - `src/TILSOFTAI.Orchestration/Modules/ModuleScopeResolver.cs`
 - `src/TILSOFTAI.Infrastructure/Modules/IModuleLoader.cs`
@@ -22,10 +31,8 @@
 
 ## Why These Are Not Deleted Yet
 
-- Bridge fallback still handles requests that no native capability resolves.
-- `LegacyChatDomainAgent` is still the catch-all for unclassified requests.
-- `ChatPipeline` still owns legacy LLM/tool behavior behind the fallback path.
-- Module loader and module scope resolver still support the legacy pipeline and module health diagnostics.
+- Bridge fallback and `ChatPipeline` were deleted in Sprint 9.
+- Module loader and module scope resolver remain for opt-in diagnostics and module package support.
 - SQL-backed action request persistence remains the production approval persistence boundary.
 
 ## Sprint 6 Cleanup Outcome

@@ -12,7 +12,6 @@ namespace TILSOFTAI.Agents.Domain;
 /// Sprint 5: Warehouse domain agent with native capability execution.
 /// Resolves warehouse capabilities from ICapabilityRegistry using ICapabilityResolver
 /// and executes via ToolAdapterRegistry.
-/// Falls back to LegacyChatPipelineBridge when no native capability matches.
 /// </summary>
 public sealed class WarehouseAgent : DomainAgentBase
 {
@@ -21,12 +20,11 @@ public sealed class WarehouseAgent : DomainAgentBase
     private readonly RuntimeExecutionInstrumentation? _instrumentation;
 
     public WarehouseAgent(
-        LegacyChatPipelineBridge bridge,
         ICapabilityRegistry capabilityRegistry,
         ICapabilityResolver capabilityResolver,
         ILogger<WarehouseAgent> logger,
         RuntimeExecutionInstrumentation? instrumentation = null)
-        : base(bridge, logger)
+        : base(logger)
     {
         _capabilityRegistry = capabilityRegistry ?? throw new ArgumentNullException(nameof(capabilityRegistry));
         _capabilityResolver = capabilityResolver ?? throw new ArgumentNullException(nameof(capabilityResolver));

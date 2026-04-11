@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -15,15 +14,12 @@ namespace TILSOFTAI.Tests.Agents;
 
 public sealed class AccountingAgentNativePathTests
 {
-    private static LegacyChatPipelineBridge CreateUninitializedBridge() =>
-        (LegacyChatPipelineBridge)RuntimeHelpers.GetUninitializedObject(typeof(LegacyChatPipelineBridge));
-
     private static AccountingAgent CreateAgent(ICapabilityRegistry? capabilityRegistry = null)
     {
         var capReg = capabilityRegistry ?? new InMemoryCapabilityRegistry(AccountingCapabilities.All);
         var resolver = new StructuredCapabilityResolver(new Mock<ILogger<StructuredCapabilityResolver>>().Object);
         var logger = new Mock<ILogger<AccountingAgent>>().Object;
-        return new AccountingAgent(CreateUninitializedBridge(), capReg, resolver, logger);
+        return new AccountingAgent(capReg, resolver, logger);
     }
 
     private static AgentExecutionContext CreateContext(IToolAdapterRegistry? adapterRegistry = null)

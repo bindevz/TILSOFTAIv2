@@ -6,7 +6,6 @@ using TILSOFTAI.Approvals;
 using TILSOFTAI.Orchestration.Analytics;
 using TILSOFTAI.Orchestration.Capabilities;
 using TILSOFTAI.Orchestration.Observability;
-using TILSOFTAI.Orchestration.Pipeline;
 using TILSOFTAI.Supervisor;
 using TILSOFTAI.Supervisor.Classification;
 using TILSOFTAI.Tools.Abstractions;
@@ -23,8 +22,6 @@ public static class OrchestrationServiceCollectionExtensions
         services.AddSingleton<ISupervisorRuntime, SupervisorRuntime>();
 
         // Legacy bridge is fallback-only; native capability execution is owned by domain agents.
-        services.AddSingleton<LegacyChatPipelineBridge>();
-        services.AddSingleton<ChatPipeline>();
 
         // Sprint 5: Capability resolver — structured resolution replacing string matching
         services.AddSingleton<ICapabilityResolver, StructuredCapabilityResolver>();
@@ -34,7 +31,6 @@ public static class OrchestrationServiceCollectionExtensions
             new StaticCapabilitySource("static-warehouse", WarehouseCapabilities.All));
         services.AddSingleton<ICapabilitySource>(
             new StaticCapabilitySource("static-accounting", AccountingCapabilities.All));
-        services.AddSingleton<ICapabilitySource, ConfigurationCapabilitySource>();
 
         // Sprint 5: Composite capability registry — loads from all ICapabilitySource instances
         services.AddSingleton<ICapabilityRegistry, CompositeCapabilityRegistry>();

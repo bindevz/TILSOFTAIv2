@@ -1,0 +1,199 @@
+{
+  "Version": "2026.04-sprint-9",
+  "Owner": "TILSOFTAI Platform",
+  "ChangeControl": "Production capability and external connection records are platform-owned. Changes require reviewed migration, audit trail, and role/tenant policy review.",
+  "ExternalConnections": {
+    "Connections": {
+      "external-stock-api": {
+        "BaseUrl": "https://external-stock.example.com",
+        "AuthScheme": "Bearer",
+        "AuthTokenSecret": "tilsoft/external-stock-api/token",
+        "TimeoutSeconds": 10,
+        "RetryCount": 2,
+        "RetryDelayMs": 100,
+        "Headers": {
+          "X-Integration-System": "external-stock"
+        }
+      },
+      "fx-rate-api": {
+        "BaseUrl": "https://fx-rates.example.com",
+        "ApiKeyHeader": "X-Api-Key",
+        "ApiKeySecret": "tilsoft/fx-rate-api/api-key",
+        "TimeoutSeconds": 10,
+        "RetryCount": 2,
+        "RetryDelayMs": 100
+      }
+    }
+  },
+  "Capabilities": [
+    {
+      "CapabilityKey": "warehouse.inventory.summary",
+      "Domain": "warehouse",
+      "AdapterType": "sql",
+      "Operation": "execute_query",
+      "TargetSystemId": "sql",
+      "ExecutionMode": "readonly",
+      "RequiredRoles": [ "warehouse_read" ],
+      "IntegrationBinding": {
+        "storedProcedure": "dbo.ai_warehouse_inventory_summary"
+      }
+    },
+    {
+      "CapabilityKey": "warehouse.inventory.by-item",
+      "Domain": "warehouse",
+      "AdapterType": "sql",
+      "Operation": "execute_query",
+      "TargetSystemId": "sql",
+      "ExecutionMode": "readonly",
+      "RequiredRoles": [ "warehouse_read" ],
+      "IntegrationBinding": {
+        "storedProcedure": "dbo.ai_warehouse_inventory_by_item"
+      },
+      "ArgumentContract": {
+        "RequiredArguments": [ "@ItemNo" ],
+        "AllowedArguments": [ "@ItemNo", "@TenantId" ],
+        "AllowAdditionalArguments": false,
+        "Arguments": [
+          {
+            "Name": "@ItemNo",
+            "Type": "string",
+            "Format": "item-number",
+            "MinLength": 1,
+            "MaxLength": 50
+          },
+          {
+            "Name": "@TenantId",
+            "Type": "string",
+            "Format": "tenant-id",
+            "MinLength": 1,
+            "MaxLength": 80
+          }
+        ]
+      }
+    },
+    {
+      "CapabilityKey": "warehouse.receipts.recent",
+      "Domain": "warehouse",
+      "AdapterType": "sql",
+      "Operation": "execute_query",
+      "TargetSystemId": "sql",
+      "ExecutionMode": "readonly",
+      "RequiredRoles": [ "warehouse_read" ],
+      "IntegrationBinding": {
+        "storedProcedure": "dbo.ai_warehouse_receipts_recent"
+      }
+    },
+    {
+      "CapabilityKey": "warehouse.external-stock.lookup",
+      "Domain": "warehouse",
+      "AdapterType": "rest-json",
+      "Operation": "execute_http_json",
+      "TargetSystemId": "external-stock-api",
+      "ExecutionMode": "readonly",
+      "RequiredRoles": [ "warehouse_external_read" ],
+      "IntegrationBinding": {
+        "connectionName": "external-stock-api",
+        "endpoint": "/warehouse/external-stock",
+        "method": "GET"
+      },
+      "ArgumentContract": {
+        "RequiredArguments": [ "@ItemNo" ],
+        "AllowedArguments": [ "@ItemNo" ],
+        "AllowAdditionalArguments": false,
+        "Arguments": [
+          {
+            "Name": "@ItemNo",
+            "Type": "string",
+            "Format": "item-number",
+            "MinLength": 1,
+            "MaxLength": 50
+          }
+        ]
+      }
+    },
+    {
+      "CapabilityKey": "accounting.receivables.summary",
+      "Domain": "accounting",
+      "AdapterType": "sql",
+      "Operation": "execute_query",
+      "TargetSystemId": "sql",
+      "ExecutionMode": "readonly",
+      "RequiredRoles": [ "accounting_read" ],
+      "IntegrationBinding": {
+        "storedProcedure": "dbo.ai_accounting_receivables_summary"
+      }
+    },
+    {
+      "CapabilityKey": "accounting.payables.summary",
+      "Domain": "accounting",
+      "AdapterType": "sql",
+      "Operation": "execute_query",
+      "TargetSystemId": "sql",
+      "ExecutionMode": "readonly",
+      "RequiredRoles": [ "accounting_read" ],
+      "IntegrationBinding": {
+        "storedProcedure": "dbo.ai_accounting_payables_summary"
+      }
+    },
+    {
+      "CapabilityKey": "accounting.invoice.by-number",
+      "Domain": "accounting",
+      "AdapterType": "sql",
+      "Operation": "execute_query",
+      "TargetSystemId": "sql",
+      "ExecutionMode": "readonly",
+      "RequiredRoles": [ "accounting_read" ],
+      "IntegrationBinding": {
+        "storedProcedure": "dbo.ai_accounting_invoice_by_number"
+      },
+      "ArgumentContract": {
+        "RequiredArguments": [ "@InvoiceNumber" ],
+        "AllowedArguments": [ "@InvoiceNumber", "@TenantId" ],
+        "AllowAdditionalArguments": false,
+        "Arguments": [
+          {
+            "Name": "@InvoiceNumber",
+            "Type": "string",
+            "Format": "invoice-number",
+            "MinLength": 1,
+            "MaxLength": 50
+          },
+          {
+            "Name": "@TenantId",
+            "Type": "string",
+            "Format": "tenant-id",
+            "MinLength": 1,
+            "MaxLength": 80
+          }
+        ]
+      }
+    },
+    {
+      "CapabilityKey": "accounting.exchange-rate.lookup",
+      "Domain": "accounting",
+      "AdapterType": "rest-json",
+      "Operation": "execute_http_json",
+      "TargetSystemId": "fx-rate-api",
+      "ExecutionMode": "readonly",
+      "RequiredRoles": [ "accounting_external_read" ],
+      "IntegrationBinding": {
+        "connectionName": "fx-rate-api",
+        "endpoint": "/rates/latest",
+        "method": "GET"
+      },
+      "ArgumentContract": {
+        "RequiredArguments": [ "@CurrencyCode" ],
+        "AllowedArguments": [ "@CurrencyCode" ],
+        "AllowAdditionalArguments": false,
+        "Arguments": [
+          {
+            "Name": "@CurrencyCode",
+            "Type": "string",
+            "Format": "currency-code",
+            "Enum": [ "USD", "EUR", "VND", "THB" ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -27,6 +27,7 @@ using TILSOFTAI.Infrastructure.Audit;
 using TILSOFTAI.Infrastructure.Logging;
 using TILSOFTAI.Api.Filters;
 using TILSOFTAI.Infrastructure.Actions;
+using TILSOFTAI.Infrastructure.Catalog;
 using TILSOFTAI.Infrastructure.Caching;
 using TILSOFTAI.Infrastructure.ExecutionContext;
 using TILSOFTAI.Infrastructure.Errors;
@@ -54,6 +55,7 @@ using TILSOFTAI.Orchestration.Normalization;
 using TILSOFTAI.Orchestration.Policies;
 using TILSOFTAI.Orchestration.Prompting;
 using TILSOFTAI.Orchestration.Atomic;
+using TILSOFTAI.Orchestration.Capabilities;
 using TILSOFTAI.Orchestration.Planning;
 using TILSOFTAI.Orchestration.Sql;
 using TILSOFTAI.Orchestration.Tools;
@@ -119,7 +121,6 @@ public static class AddTilsoftAiExtensions
 
         // Register core telemetry services - always needed even if OTel SDK is not enabled
         services.AddSingleton<ITelemetryService, TelemetryService>();
-        services.AddSingleton<ChatPipelineInstrumentation>();
         services.AddSingleton<LlmInstrumentation>();
         services.AddSingleton<ToolExecutionInstrumentation>();
 
@@ -147,12 +148,17 @@ public static class AddTilsoftAiExtensions
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.JwksRequestTimeoutSeconds));
         });
         services.AddHttpClient<RestJsonToolAdapter>();
-        services.AddSingleton<IExternalConnectionCatalog, ConfigurationExternalConnectionCatalog>();
+        services.AddSingleton<IPlatformCatalogProvider, FilePlatformCatalogProvider>();
+        services.AddSingleton<ConfigurationExternalConnectionCatalog>();
+        services.AddSingleton<PlatformExternalConnectionCatalog>();
+        services.AddSingleton<IExternalConnectionCatalog, CompositeExternalConnectionCatalog>();
         services.AddSingleton<JwtSigningKeyProvider>();
         services.AddSingleton<IJwtSigningKeyProvider>(sp => sp.GetRequiredService<JwtSigningKeyProvider>());
         services.AddHostedService<JwtSigningKeyRefreshHostedService>();
 
         services.AddSupervisorRuntime();
+        services.AddSingleton<ICapabilitySource, ConfigurationCapabilitySource>();
+        services.AddSingleton<ICapabilitySource, PlatformCatalogCapabilitySource>();
         services.AddSingleton<IToolRegistry, ToolRegistry>();
         services.AddSingleton<INamedToolHandlerRegistry>(sp =>
         {
@@ -163,12 +169,6 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<ToolCatalogSyncService>();
         services.AddSingleton<IToolCatalogResolver>(sp => sp.GetRequiredService<ToolCatalogSyncService>());
         services.AddSingleton<IScopedToolCatalogResolver>(sp => sp.GetRequiredService<ToolCatalogSyncService>());
-#pragma warning disable CS0618 // Legacy ChatPipeline compatibility registration.
-        services.AddSingleton<Orchestration.Modules.IModuleScopeResolver, Orchestration.Modules.ModuleScopeResolver>();
-#pragma warning restore CS0618
-        services.AddSingleton<Orchestration.Policies.IRuntimePolicyProvider, Infrastructure.Policies.SqlRuntimePolicyProvider>();
-        services.AddSingleton<Orchestration.Policies.IReActFollowUpRuleProvider, Infrastructure.Policies.SqlReActFollowUpRuleProvider>();
-        services.AddSingleton<Orchestration.Policies.ReActFollowUpEvaluator>();
         services.AddSingleton<IJsonSchemaValidator, RealJsonSchemaValidator>();
         services.AddSingleton<ToolGovernance>();
         services.AddSingleton<ToolResultCompactor>();
@@ -532,6 +532,12 @@ public static class AddTilsoftAiExtensions
 
         services.AddOptions<ExternalConnectionCatalogOptions>()
             .Bind(configuration.GetSection(ConfigurationSectionNames.ExternalConnections))
+            .ValidateOnStart();
+
+        services.AddOptions<PlatformCatalogOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.PlatformCatalog))
+            .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.CatalogPath),
+                "PlatformCatalog:CatalogPath is required when PlatformCatalog:Enabled=true.")
             .ValidateOnStart();
         
         // Analytics options (PATCH 28)

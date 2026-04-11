@@ -4,7 +4,7 @@ using Xunit;
 namespace TILSOFTAI.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// PATCH 31.04: Env-guarded test attribute.
+/// Env-guarded external SQL validation attribute.
 /// Test runs when TEST_SQL_CONNECTION is set, skips gracefully otherwise.
 /// </summary>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
@@ -15,7 +15,7 @@ public sealed class SqlServerAvailableFactAttribute : FactAttribute
         var conn = Environment.GetEnvironmentVariable("TEST_SQL_CONNECTION");
         if (string.IsNullOrWhiteSpace(conn))
         {
-            Skip = "SQL Server not available. Set TEST_SQL_CONNECTION environment variable.";
+            Skip = "External SQL validation boundary not enabled. Set TEST_SQL_CONNECTION to run the deep integration suite.";
         }
     }
 }
@@ -31,7 +31,7 @@ public sealed class SqlServerAvailableTheoryAttribute : TheoryAttribute
         var conn = Environment.GetEnvironmentVariable("TEST_SQL_CONNECTION");
         if (string.IsNullOrWhiteSpace(conn))
         {
-            Skip = "SQL Server not available. Set TEST_SQL_CONNECTION environment variable.";
+            Skip = "External SQL validation boundary not enabled. Set TEST_SQL_CONNECTION to run the deep integration suite.";
         }
     }
 }
