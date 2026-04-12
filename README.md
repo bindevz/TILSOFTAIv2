@@ -1,8 +1,8 @@
 # TILSOFTAI V3
 
-TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 9 retires the legacy bridge/ChatPipeline runtime path, moves production metadata into a platform catalog, and hardens representative capability contracts with typed value validation.
+TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 10 adds governed platform catalog mutation, catalog source-of-truth visibility, integrity validation, and explicit module package classifications.
 
-## Current Runtime Shape (Sprint 9)
+## Current Runtime Shape (Sprint 10)
 
 ```text
 API / Hub / OpenAI surface
@@ -34,6 +34,13 @@ External connection catalog:
     -> PlatformExternalConnectionCatalog (primary)
     -> ConfigurationExternalConnectionCatalog (bootstrap fallback when enabled)
 
+Catalog control plane:
+  PlatformCatalogController
+    -> IPlatformCatalogControlPlane
+    -> IPlatformCatalogMutationStore
+    -> PlatformCatalogChangeRequest
+    -> PlatformCapabilityCatalog / PlatformExternalConnectionCatalog
+
 Write requests:
   -> IApprovalEngine (create -> approve -> execute lifecycle)
      -> IActionRequestStore
@@ -41,33 +48,33 @@ Write requests:
      -> SqlToolAdapter
 ```
 
-## Sprint 9 Changes
+## Sprint 10 Changes
 
-### Legacy runtime retirement
-- Deleted `LegacyChatPipelineBridge`.
-- Deleted `ChatPipeline`, `ChatRequest`, and `ChatResult`.
-- Explicit legacy fallback now returns `LEGACY_RUNTIME_RETIRED`.
-- Default runtime boot no longer registers module scope, ReAct follow-up policy, or legacy pipeline instrumentation services.
+### Governed platform catalog mutation
+- Added SQL-backed platform catalog change requests.
+- Added submit, approve, reject, and apply control-plane APIs.
+- Catalog mutation requires configured submit/approve roles and blocks self-approval by default.
+- Mutation emits governance audit, config-change audit, and catalog mutation metrics.
 
-### Durable platform catalog
-- Added `catalog/platform-catalog.json` as the platform-owned capability/connection record set.
-- Added `PlatformCatalogCapabilitySource` and `CompositeExternalConnectionCatalog`.
-- `appsettings.json` now points at the platform catalog and keeps bootstrap capability/connection sections empty.
-- Added SQL catalog DDL/procedures for the admin-managed persistence target.
+### Catalog source-of-truth visibility
+- `/health/ready` includes `platform-catalog`.
+- Startup reports `platform`, `mixed`, `bootstrap_only`, or `empty` source modes.
+- Bootstrap fallback is visible as a degraded readiness state.
 
-### Typed contract validation
-- `ArgumentContract` supports typed argument rules.
-- Representative capabilities validate string/integer/number/boolean type, enum values, formats, and length/range constraints before adapter execution.
-- Invalid typed values return `CAPABILITY_ARGUMENT_VALIDATION_FAILED`.
+### Catalog integrity and contracts
+- Platform catalog load and mutation validate duplicate keys, REST connection references, secret references, and required argument contracts.
+- Production catalog records include explicit argument contracts.
+- No-argument summary/list capabilities reject unexpected arguments.
 
-### Validation boundary cleanup
-- Deep analytics E2E is formally isolated as `Category=ExternalDeepWorkflow`, owned by Analytics, and gated by `TEST_SQL_CONNECTION`.
+### Module package classification
+- Remaining module packages are classified as packaging-only or diagnostic-only.
+- Module health reports classifications while staying outside ready checks.
 
 ## Remaining Transitional Components
 
 These components remain intentionally bounded:
 - Module loader infrastructure: legacy diagnostic only and no longer autoloaded by default.
-- Module packages: still present for tools/diagnostics, but default request routing is supervisor-native and capability-native.
+- Module packages: still present for packaging/diagnostics with explicit classifications, but default request routing is supervisor-native and capability-native.
 - `InMemoryCapabilityRegistry`: test fixture only.
 
 See `docs/compatibility_debt_report.md` and `docs/enterprise_readiness_gap_report.md` for removal conditions and blockers.
@@ -81,6 +88,7 @@ See `docs/compatibility_debt_report.md` and `docs/enterprise_readiness_gap_repor
 - `docs/runtime_readiness.md`
 - `docs/external_integration_governance.md`
 - `docs/platform_catalog_governance.md`
+- `docs/module_package_classification.md`
 - `docs/deep_analytics_validation_boundary.md`
 - `docs/cleanup_report.md`
 - `docs/WRITE_PATH_AUDIT.md`

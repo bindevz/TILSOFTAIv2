@@ -1,4 +1,4 @@
-# Operational Runtime Observability - Sprint 9
+# Operational Runtime Observability - Sprint 10
 
 Sprint 9 removes the legacy bridge/ChatPipeline execution path. Bridge metrics remain as historical instrumentation and to record explicit retired-legacy attempts, but there is no production bridge executor.
 
@@ -13,6 +13,8 @@ Sprint 9 removes the legacy bridge/ChatPipeline execution path. Bridge metrics r
 | `tilsoftai_runtime_capability_invocations_total` | Capability invocations by key and adapter. | `agent`, `capability`, `adapter`, `success` |
 | `tilsoftai_runtime_adapter_failures_total` | Adapter-level failures from native execution. | `agent`, `capability`, `adapter`, `error` |
 | `tilsoftai_runtime_execution_duration_seconds` | Runtime duration histogram for supervisor, native, bridge, and approval paths. | `path` plus path-specific labels |
+| `tilsoftai_platform_catalog_source_mode_total` | Startup catalog source-of-truth report. | `mode`, `platform_valid` |
+| `tilsoftai_platform_catalog_mutations_total` | Catalog control-plane submit/review/apply operations. | `operation`, `record_type`, `success` |
 
 ## How To Read The Signals
 
@@ -23,10 +25,16 @@ Sprint 9 removes the legacy bridge/ChatPipeline execution path. Bridge metrics r
 - `tilsoftai_runtime_capability_invocations_total` shows which domain capabilities are actually used.
 - `tilsoftai_runtime_approval_executions_total` confirms writes are still governed by `IApprovalEngine` and adapter-level guards.
 - Duration histograms split by `path` let operations compare native, approval, and supervisor latency. Bridge labels are historical/retired-path signals only.
+- `tilsoftai_platform_catalog_source_mode_total{mode="bootstrap_only"}` or `{mode="mixed"}` means bootstrap fallback is still active and should be reviewed.
+- `tilsoftai_platform_catalog_mutations_total{success="false"}` means a catalog governance, validation, or persistence operation failed.
 
 ## Structured Log Events
 
 Runtime instrumentation emits `RuntimeExecutionObserved` for supervisor, native, retired bridge, and approval paths. Adapter failures emit `RuntimeAdapterFailureObserved`.
+
+Catalog startup emits `PlatformCatalogSourceReport` with source mode, platform counts, bootstrap counts, and integrity status. When fallback is active it also emits `PlatformCatalogBootstrapFallbackActive`.
+
+Catalog mutation emits `PlatformCatalogMutationProposed` and governance/config-change audit events for submit, approve, reject, and apply operations.
 
 Look for these fields:
 - `Path`: `supervisor`, `native`, `bridge`, or `approval`
@@ -65,4 +73,4 @@ REST adapter failure codes:
 
 ## Readiness
 
-`/health/ready` includes `native-runtime`, not `modules`. The native check verifies supervisor runtime resolution, all loaded native capabilities, and registered adapters generically. Module health remains available as a legacy diagnostic check outside the ready tag. See `runtime_readiness.md`.
+`/health/ready` includes `platform-catalog` and `native-runtime`, not `modules`. The catalog check reports platform/bootstrap source mode and integrity. The native check verifies supervisor runtime resolution, all loaded native capabilities, and registered adapters generically. Module health remains available as a legacy diagnostic check outside the ready tag. See `runtime_readiness.md`.

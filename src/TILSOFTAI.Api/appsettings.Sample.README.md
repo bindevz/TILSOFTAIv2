@@ -108,3 +108,43 @@ External auth belongs in the connection catalog, not raw capability metadata:
 ```
 
 The REST adapter resolves secret references through `ISecretProvider` and rejects raw `authToken` or `apiKey` metadata.
+
+## Platform Catalog Control Plane
+
+Catalog writes are governed by submit/review/apply roles.
+
+```json
+{
+  "CatalogControlPlane": {
+    "SubmitRoles": [ "platform_catalog_admin" ],
+    "ApproveRoles": [ "platform_catalog_approver" ],
+    "AllowSelfApproval": false
+  }
+}
+```
+
+The control plane stores pending changes in SQL before applying them to `PlatformCapabilityCatalog` or `PlatformExternalConnectionCatalog`. Each change must include an owner, change note, record type, operation, and record payload. Capability records must include an `ArgumentContract`; REST records must reference a configured external connection and secret references instead of raw secret values.
+
+`/health/ready` includes `platform-catalog` and reports the active source mode:
+
+- `platform`: durable platform catalog records are active.
+- `mixed`: platform records and bootstrap fallback records both exist.
+- `bootstrap_only`: bootstrap fallback is serving records.
+- `empty`: no catalog records are available.
+
+## Module Package Classification
+
+Module packages are no longer default runtime owners. Keep their status explicit in configuration:
+
+```json
+{
+  "Modules": {
+    "EnableLegacyAutoload": false,
+    "Classifications": {
+      "TILSOFTAI.Modules.Platform": "packaging-only",
+      "TILSOFTAI.Modules.Model": "packaging-only",
+      "TILSOFTAI.Modules.Analytics": "diagnostic-only"
+    }
+  }
+}
+```

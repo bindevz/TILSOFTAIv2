@@ -1,6 +1,30 @@
-# Runtime Readiness - Sprint 9
+# Runtime Readiness - Sprint 10
 
 Readiness is split by runtime responsibility.
+
+## Platform Catalog Readiness
+
+`/health/ready` includes `platform-catalog`.
+
+The catalog check validates:
+
+- platform catalog file discovery,
+- catalog integrity status,
+- platform capability and external connection counts,
+- bootstrap capability and external connection counts,
+- whether bootstrap fallback is allowed,
+- active source mode.
+
+Source modes:
+
+| Mode | Health | Meaning |
+|------|--------|---------|
+| `platform` | Healthy | Durable platform catalog records are the active source of truth. |
+| `mixed` | Degraded | Platform records are active, but bootstrap fallback records are also present. |
+| `bootstrap_only` | Degraded | No platform records are available and bootstrap fallback is serving records. |
+| `empty` | Unhealthy | No platform or bootstrap records are available. |
+
+Catalog integrity failures are unhealthy and include validation error codes in health data.
 
 ## Native Runtime Readiness
 

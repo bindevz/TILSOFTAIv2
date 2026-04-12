@@ -1,0 +1,204 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 10.
+
+Baseline repository reality (after Sprint 9):
+- `LegacyChatPipelineBridge`, `ChatPipeline`, `ChatRequest`, and `ChatResult` were deleted.
+- Explicit legacy fallback now returns `LEGACY_RUNTIME_RETIRED`.
+- Production capability and external connection records now load from `catalog/platform-catalog.json`.
+- Source precedence now exists across:
+  - static fallback
+  - bootstrap configuration
+  - durable platform catalog
+- `PlatformCapabilityCatalog` / `PlatformExternalConnectionCatalog` SQL shapes exist as the admin-managed persistence target.
+- Representative capabilities now validate typed contract rules including type, format, enum, and length/range constraints.
+- Deep analytics E2E is explicitly isolated as `Category=ExternalDeepWorkflow`.
+- The platform is much closer to enterprise-grade.
+- However, the platform is still not fully enterprise-grade because:
+  - the catalog admin/write path is not complete,
+  - metadata mutation is not yet fully governed through approval/review flows,
+  - bootstrap configuration fallback still exists and needs stronger operational guardrails,
+  - typed contracts are representative rather than platform-wide,
+  - and module packages still remain as residual compatibility weight.
+
+Sprint 10 mission:
+Complete the platform control plane so the system is not only safe to run, but safe to change under enterprise operating conditions.
+
+Primary objective:
+1. Implement governed write paths for capability and external connection catalogs.
+2. Add approval/review and audit behavior for catalog mutation.
+3. Make bootstrap fallback visible, bounded, and operationally explicit.
+4. Expand typed contracts from representative to broader production coverage.
+5. Reduce or reclassify residual module package compatibility.
+6. Improve catalog observability and integrity validation.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the runtime orchestration owner.
+2. Platform catalog records are the intended production source-of-truth.
+3. Bootstrap configuration is fallback, not the primary control plane.
+4. Catalog mutation must be governed, auditable, and role-controlled.
+5. Adapters remain the execution boundary.
+6. ApprovalEngine remains the only write-governance owner for business writes, and catalog mutation must have equivalent governance discipline.
+7. Typed contract validation must become systemic, not selective.
+8. Module packages must continue moving out of the runtime identity.
+9. Observability must reflect source-of-truth state honestly.
+10. Enterprise-grade progress must now be measured by control-plane maturity, not runtime novelty.
+
+Primary Sprint 10 goals:
+
+A. Implement catalog write/control-plane paths
+- Add governed mutation flows for:
+  - capability records
+  - external connection records
+- Target the SQL-backed catalog shape introduced in Sprint 9.
+- Support create/update/disable/list behavior.
+- Keep secret values out of stored records; only secret references are allowed.
+- Add tests for mutation, persistence, and load behavior.
+
+B. Add governance/approval to catalog mutation
+- Catalog writes must not be direct ungoverned persistence calls.
+- Add approval/review or equivalent controlled mutation flow.
+- Capture change metadata such as:
+  - owner
+  - reviewer/approver
+  - version or change note
+  - timestamp
+- Enforce role/policy boundaries for catalog mutation.
+- Document governance rules clearly.
+
+C. Harden bootstrap fallback visibility
+- Emit explicit startup/reporting signals when the system is using:
+  - durable platform catalog
+  - bootstrap configuration fallback
+  - mixed-source mode
+- Add readiness/degraded-state semantics or equivalent operational signals where appropriate.
+- Prevent bootstrap fallback from silently becoming de facto production source-of-truth.
+
+D. Expand typed contracts across production capabilities
+- Extend typed contract coverage beyond representative samples.
+- Standardize contract structure and validation behavior across production capability records.
+- Ensure SQL and REST capabilities have appropriate contract semantics.
+- Keep all validation deterministic and operator-safe.
+- Validation must still happen before adapter execution.
+
+E. Reduce or reclassify module packages
+- Identify which remaining module packages are:
+  - still runtime-relevant
+  - packaging-only
+  - diagnostic-only
+- Migrate eligible metadata to platform catalog/tool records.
+- Reduce runtime ambiguity around module packages.
+- Document the end-state plan for what remains.
+
+F. Improve catalog observability and integrity validation
+- Add load-time validation for:
+  - duplicate keys
+  - malformed records
+  - unresolved external connections
+  - secret reference misuse
+  - invalid typed contracts
+- Add logs/metrics/reporting for source-of-truth usage and mutation events.
+
+Non-negotiable rules:
+1. Do not bypass governance for catalog mutation.
+2. Do not persist secret values in platform catalog records.
+3. Do not let bootstrap fallback silently behave as production source-of-truth.
+4. Do not expand contracts inconsistently across capabilities.
+5. Do not preserve module packages without classifying why they still exist.
+6. Do not weaken approval or write governance.
+7. Do not count docs-only work as control-plane completion.
+8. Prefer explicit platform ownership over helper sprawl.
+9. Keep runtime and control-plane boundaries clear.
+10. Keep remaining compatibility debt measurable.
+
+Explicitly in scope:
+- catalog write/control-plane implementation
+- approval/review and audit behavior for catalog mutation
+- startup/reporting/source-of-truth guardrails
+- systemic typed contract expansion
+- module package reduction/reclassification
+- catalog integrity validation and observability
+- docs/runbooks/debt updates
+
+Explicitly out of scope:
+- broad product features
+- planner runtime
+- graph orchestration
+- major UI work
+- broad workflow expansion
+- performance certification
+
+Recommended implementation order:
+1. Implement SQL-backed catalog mutation model.
+2. Add approval/review and audit/change-note behavior.
+3. Add startup/reporting/source-of-truth guardrails.
+4. Expand typed contracts across production catalog records.
+5. Reduce or classify module packages.
+6. Add catalog integrity validation and observability.
+7. Update docs, runbooks, and debt reports.
+8. Delete dead code.
+
+Required architectural outcomes:
+1. The platform can govern its own production catalog through controlled mutation flows.
+2. Metadata changes are auditable and role/policy controlled.
+3. Operators can clearly tell when the platform is in durable catalog mode vs bootstrap fallback mode.
+4. Typed contracts are broader and more systemic than in Sprint 9.
+5. Residual module package debt is smaller and more explicit.
+6. Catalog loading and mutation failures are operator-safe and observable.
+
+Definition of done:
+- Capability and external connection catalogs have governed write paths.
+- Catalog mutation includes role/policy checks and audit/change metadata.
+- Bootstrap fallback state is explicitly surfaced to operators.
+- Typed contract coverage is materially broader than Sprint 9.
+- Module packages are reduced or clearly classified with documented intent.
+- Catalog integrity validation is real and tested.
+- Docs reflect control-plane truth accurately.
+- The platform is cleaner and more governable after Sprint 10.
+
+Must-fail conditions:
+- platform catalog remains read-only in practice
+- metadata mutation lacks governance/audit control
+- bootstrap fallback can still silently act as production source-of-truth
+- typed contract expansion remains representative only
+- module packages remain unexplained runtime residue
+- Sprint 10 adds abstractions without materially improving control-plane completeness
+
+Preferred implementation style:
+- explicit ownership
+- governed mutation
+- auditability
+- source-of-truth clarity
+- platform-wide contract discipline
+- deletion over drift
+- operational honesty
+- no architecture theater
+
+Required deliverables:
+1. Catalog write/control-plane changes
+2. Catalog governance/approval changes
+3. Fallback visibility/source-of-truth changes
+4. Contract expansion changes
+5. Module package reduction/reclassification changes
+6. Catalog observability/integrity validation changes
+7. Documentation updates
+
+Required reporting after implementation:
+1. Summary of Sprint 10 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Catalog write/control-plane changes
+6. Catalog governance/approval changes
+7. Fallback visibility changes
+8. Contract expansion changes
+9. Module package reduction/reclassification changes
+10. Validation/test improvements
+11. Remaining compatibility components
+12. Remaining enterprise-grade blockers
+13. Recommended Sprint 11 priorities
+
+Final instruction:
+Sprint 10 is about control-plane completeness.
+Do not spend Sprint 10 adding runtime novelty.
+Spend it making production metadata governable, auditable, unambiguous in source-of-truth, and safer to evolve under enterprise operating conditions.

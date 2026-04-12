@@ -24,4 +24,5 @@ public static class ConfigurationSectionNames
     public const string Analytics = "Analytics"; // PATCH 28: Added
     public const string ExternalConnections = "ExternalConnections";
     public const string PlatformCatalog = "PlatformCatalog";
+    public const string CatalogControlPlane = "CatalogControlPlane";
 }

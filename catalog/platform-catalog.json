@@ -36,6 +36,12 @@
       "RequiredRoles": [ "warehouse_read" ],
       "IntegrationBinding": {
         "storedProcedure": "dbo.ai_warehouse_inventory_summary"
+      },
+      "ArgumentContract": {
+        "RequiredArguments": [],
+        "AllowedArguments": [],
+        "AllowAdditionalArguments": false,
+        "Arguments": []
       }
     },
     {
@@ -81,6 +87,12 @@
       "RequiredRoles": [ "warehouse_read" ],
       "IntegrationBinding": {
         "storedProcedure": "dbo.ai_warehouse_receipts_recent"
+      },
+      "ArgumentContract": {
+        "RequiredArguments": [],
+        "AllowedArguments": [],
+        "AllowAdditionalArguments": false,
+        "Arguments": []
       }
     },
     {
@@ -121,6 +133,12 @@
       "RequiredRoles": [ "accounting_read" ],
       "IntegrationBinding": {
         "storedProcedure": "dbo.ai_accounting_receivables_summary"
+      },
+      "ArgumentContract": {
+        "RequiredArguments": [],
+        "AllowedArguments": [],
+        "AllowAdditionalArguments": false,
+        "Arguments": []
       }
     },
     {
@@ -133,6 +151,12 @@
       "RequiredRoles": [ "accounting_read" ],
       "IntegrationBinding": {
         "storedProcedure": "dbo.ai_accounting_payables_summary"
+      },
+      "ArgumentContract": {
+        "RequiredArguments": [],
+        "AllowedArguments": [],
+        "AllowAdditionalArguments": false,
+        "Arguments": []
       }
     },
     {

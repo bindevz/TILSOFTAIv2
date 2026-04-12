@@ -74,7 +74,7 @@ public static class CapabilityArgumentValidator
                 });
             }
 
-            if (!contract.AllowAdditionalArguments && contract.AllowedArguments.Count > 0)
+            if (!contract.AllowAdditionalArguments)
             {
                 var allowed = contract.AllowedArguments
                     .Select(NormalizeName)

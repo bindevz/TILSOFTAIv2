@@ -149,6 +149,9 @@ public static class AddTilsoftAiExtensions
         });
         services.AddHttpClient<RestJsonToolAdapter>();
         services.AddSingleton<IPlatformCatalogProvider, FilePlatformCatalogProvider>();
+        services.AddSingleton<IPlatformCatalogMutationStore, SqlPlatformCatalogMutationStore>();
+        services.AddSingleton<IPlatformCatalogControlPlane, PlatformCatalogControlPlane>();
+        services.AddHostedService<PlatformCatalogStartupReporter>();
         services.AddSingleton<ConfigurationExternalConnectionCatalog>();
         services.AddSingleton<PlatformExternalConnectionCatalog>();
         services.AddSingleton<IExternalConnectionCatalog, CompositeExternalConnectionCatalog>();
@@ -305,6 +308,7 @@ public static class AddTilsoftAiExtensions
             .AddCheck<LlmHealthCheck>("llm", tags: new[] { "ready", "external" })
             .AddCheck<CircuitBreakerHealthCheck>("circuits", tags: new[] { "ready", "resilience" })
             .AddCheck<ToolCatalogHealthCheck>("toolcatalog", tags: new[] { "ready", "runtime" })
+            .AddCheck<PlatformCatalogHealthCheck>("platform-catalog", tags: new[] { "ready", "catalog" })
             .AddCheck<NativeRuntimeHealthCheck>("native-runtime", tags: new[] { "ready", "runtime", "native" })
             .AddCheck<ModuleHealthCheck>("modules", tags: new[] { "legacy", "diagnostic" });
         
@@ -538,6 +542,12 @@ public static class AddTilsoftAiExtensions
             .Bind(configuration.GetSection(ConfigurationSectionNames.PlatformCatalog))
             .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.CatalogPath),
                 "PlatformCatalog:CatalogPath is required when PlatformCatalog:Enabled=true.")
+            .ValidateOnStart();
+
+        services.AddOptions<CatalogControlPlaneOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.CatalogControlPlane))
+            .Validate(options => options.SubmitRoles.Length > 0, "CatalogControlPlane:SubmitRoles must have at least one role.")
+            .Validate(options => options.ApproveRoles.Length > 0, "CatalogControlPlane:ApproveRoles must have at least one role.")
             .ValidateOnStart();
         
         // Analytics options (PATCH 28)

@@ -33,7 +33,8 @@ public sealed class ModuleHealthCheck : IHealthCheck
         {
             ["legacy_autoload_enabled"] = _options.EnableLegacyAutoload,
             ["enabled_modules"] = enabledModules,
-            ["loaded_modules"] = loadedModules.Select(m => m.Name).ToArray()
+            ["loaded_modules"] = loadedModules.Select(m => m.Name).ToArray(),
+            ["module_classifications"] = _options.Classifications
         };
 
         if (!_options.EnableLegacyAutoload)

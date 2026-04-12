@@ -23,6 +23,7 @@ public static class WarehouseCapabilities
                 ["storedProcedure"] = "dbo.ai_warehouse_inventory_summary"
             },
             RequiredRoles = new[] { "warehouse_read" },
+            ArgumentContract = NoArgumentsContract(),
             ExecutionMode = "readonly"
         },
         new CapabilityDescriptor
@@ -76,6 +77,7 @@ public static class WarehouseCapabilities
                 ["storedProcedure"] = "dbo.ai_warehouse_receipts_recent"
             },
             RequiredRoles = new[] { "warehouse_read" },
+            ArgumentContract = NoArgumentsContract(),
             ExecutionMode = "readonly"
         },
         new CapabilityDescriptor
@@ -105,5 +107,12 @@ public static class WarehouseCapabilities
             },
             ExecutionMode = "readonly"
         }
+    };
+
+    private static CapabilityArgumentContract NoArgumentsContract() => new()
+    {
+        RequiredArguments = Array.Empty<string>(),
+        AllowedArguments = Array.Empty<string>(),
+        AllowAdditionalArguments = false
     };
 }

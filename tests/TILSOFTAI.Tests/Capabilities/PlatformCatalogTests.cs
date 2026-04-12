@@ -22,9 +22,27 @@ public sealed class PlatformCatalogTests
 
         var snapshot = provider.Load();
 
+        snapshot.IsValid.Should().BeTrue();
+        snapshot.CatalogFound.Should().BeTrue();
+        snapshot.CatalogPath.Should().Be(path);
+        snapshot.Version.Should().Be("test");
         snapshot.Capabilities.Should().ContainSingle(c => c.CapabilityKey == "warehouse.inventory.by-item");
         snapshot.ExternalConnections.Should().ContainKey("external-stock-api");
         snapshot.Capabilities.Single().ArgumentContract!.Arguments.Should().ContainSingle(rule => rule.Format == "item-number");
+    }
+
+    [Fact]
+    public void FilePlatformCatalogProvider_ShouldExposeIntegrityErrors_WhenCatalogContractIsMissing()
+    {
+        var path = CreateCatalogFileWithoutContract();
+        var provider = new FilePlatformCatalogProvider(
+            Options.Create(new PlatformCatalogOptions { CatalogPath = path }),
+            new Mock<ILogger<FilePlatformCatalogProvider>>().Object);
+
+        var snapshot = provider.Load();
+
+        snapshot.IsValid.Should().BeFalse();
+        snapshot.IntegrityErrors.Should().Contain("capability_contract_required:warehouse.inventory.summary");
     }
 
     [Fact]
@@ -120,6 +138,33 @@ public sealed class PlatformCatalogTests
                     "Format": "item-number"
                   }
                 ]
+              }
+            }
+          ]
+        }
+        """);
+        return path;
+    }
+
+    private static string CreateCatalogFileWithoutContract()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.platform-catalog.json");
+        File.WriteAllText(path, """
+        {
+          "Version": "test",
+          "ExternalConnections": {
+            "Connections": {}
+          },
+          "Capabilities": [
+            {
+              "CapabilityKey": "warehouse.inventory.summary",
+              "Domain": "warehouse",
+              "AdapterType": "sql",
+              "Operation": "execute_query",
+              "TargetSystemId": "sql",
+              "ExecutionMode": "readonly",
+              "IntegrationBinding": {
+                "storedProcedure": "dbo.ai_warehouse_inventory_summary"
               }
             }
           ]

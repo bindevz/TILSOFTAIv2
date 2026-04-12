@@ -47,5 +47,9 @@ namespace TILSOFTAI.Domain.Metrics
         public const string RuntimeCapabilityInvocationsTotal = "tilsoftai_runtime_capability_invocations_total";
         public const string RuntimeAdapterFailuresTotal = "tilsoftai_runtime_adapter_failures_total";
         public const string RuntimeExecutionDurationSeconds = "tilsoftai_runtime_execution_duration_seconds";
+
+        // Sprint 10: platform catalog control-plane observability
+        public const string PlatformCatalogSourceModeTotal = "tilsoftai_platform_catalog_source_mode_total";
+        public const string PlatformCatalogMutationTotal = "tilsoftai_platform_catalog_mutations_total";
     }
 }

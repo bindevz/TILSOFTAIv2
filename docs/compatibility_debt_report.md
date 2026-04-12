@@ -1,4 +1,4 @@
-# Compatibility Debt Report - Sprint 9
+# Compatibility Debt Report - Sprint 10
 
 This document tracks transitional components that still exist after Sprint 9, plus the components removed or reduced during the sprint.
 
@@ -20,6 +20,16 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | External connection catalog | Platform-owned | Durable platform connection records override bootstrap configuration. |
 | Capability contracts | Typed | Representative contracts now validate type, format, enum, and length/range rules. |
 | Deep analytics E2E | External boundary | Marked `Category=ExternalDeepWorkflow`, owned by Analytics, and gated by `TEST_SQL_CONNECTION`. |
+
+## Changed In Sprint 10
+
+| Component | Result | Notes |
+|-----------|--------|-------|
+| Platform catalog mutation | Governed control plane | Catalog changes are submitted, independently reviewed, and applied through SQL-backed change requests. |
+| Bootstrap fallback | Visible operational state | Startup logs, metrics, and `/health/ready` now report `platform`, `mixed`, `bootstrap_only`, or `empty`. |
+| Catalog integrity | Enforced on load and mutation | Duplicate keys, unresolved REST connections, raw secrets, and missing contracts are reported as validation errors. |
+| No-argument capabilities | Explicit contracts | Summary/list capabilities now reject unexpected arguments through no-argument contracts. |
+| Module packages | Classified | Remaining module packages are marked `packaging-only` or `diagnostic-only` in `Modules:Classifications`. |
 
 ## Removed In Sprint 7
 
@@ -62,11 +72,19 @@ This document tracks transitional components that still exist after Sprint 9, pl
 
 | Field | Value |
 |-------|-------|
-| Status | Legacy diagnostic only; autoload disabled by default |
+| Status | Legacy diagnostic only; autoload disabled by default; package classifications are reported in health data |
 | Location | `src/TILSOFTAI.Infrastructure/Modules/*`, `src/TILSOFTAI.Orchestration/Modules/*` |
 | Why it exists | Diagnostic module health and existing module packages still use module loading when legacy autoload is explicitly enabled. |
 | What depends on it | `ModuleHealthCheck`, `ModuleLoaderHostedService`, module packages |
 | Removal condition | Module packages are converted to platform catalog/tool records or explicitly retained as non-runtime packaging. |
+
+Current classifications:
+
+| Package | Classification |
+|---------|----------------|
+| `TILSOFTAI.Modules.Platform` | packaging-only |
+| `TILSOFTAI.Modules.Model` | packaging-only |
+| `TILSOFTAI.Modules.Analytics` | diagnostic-only |
 
 ### 2. Bootstrap Configuration Sources
 
@@ -87,6 +105,6 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Why it exists | Unit and integration tests use constructor-driven capability sets. Production uses `CompositeCapabilityRegistry`. |
 | Removal condition | None required; may become internal test support in a later cleanup. |
 
-## Sprint 9 Debt Priorities
+## Sprint 10 Debt Priorities
 
-Completed. See Sprint 10 priorities in the enterprise readiness report.
+Completed. Remaining priorities are continued production operation of the SQL catalog write path, reducing bootstrap fallback dependency, and deciding whether diagnostic module packages stay as explicit non-runtime artifacts.

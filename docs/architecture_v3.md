@@ -1,4 +1,4 @@
-# Architecture V3 - Sprint 9
+# Architecture V3 - Sprint 10
 
 ## Runtime Shape
 
@@ -20,6 +20,13 @@ Native capability path:
     -> CapabilityArgumentValidator.Validate(typed argument contract)
     -> IToolAdapterRegistry.Resolve(adapterType)
     -> IToolAdapter.ExecuteAsync(request)
+
+Catalog control plane:
+  PlatformCatalogController
+    -> IPlatformCatalogControlPlane
+    -> IPlatformCatalogMutationStore
+    -> PlatformCatalogChangeRequest
+    -> PlatformCapabilityCatalog / PlatformExternalConnectionCatalog
 
 Write path:
   IApprovalEngine
@@ -72,6 +79,17 @@ Write path:
 | Module-era registration | Module scope/ReAct legacy pipeline services are no longer registered by default. Module loader remains diagnostic and opt-in. |
 | Deep analytics | Deep SQL-backed analytics E2E is isolated as an external workflow boundary owned by Analytics. |
 
+## Sprint 10 Ownership Changes
+
+| Area | Sprint 10 state |
+|------|-----------------|
+| Catalog mutation | Platform catalog writes go through submit, independent review, and apply control-plane operations. |
+| Catalog integrity | Platform catalog startup validates duplicate keys, REST connection references, secret references, and required argument contracts. |
+| Catalog observability | Startup source mode and mutation operations emit metrics, health data, structured logs, and governance audit events. |
+| Bootstrap fallback | Readiness distinguishes `platform`, `mixed`, `bootstrap_only`, and `empty` catalog source modes. |
+| Module packages | Remaining module packages are classified as packaging-only or diagnostic-only in configuration and health output. |
+| Contract coverage | Production catalog records and static no-argument capabilities now declare explicit `ArgumentContract` records. |
+
 ## Capabilities
 
 | Key | Domain | Adapter | Binding |
@@ -119,4 +137,4 @@ Validation failure returns `CAPABILITY_ARGUMENT_VALIDATION_FAILED` before adapte
 
 ## Transition State
 
-The native path is supervisor-driven, policy-gated, contract-validated, and adapter-backed. The bridge and ChatPipeline are retired. Remaining compatibility debt is limited to opt-in module diagnostics, bootstrap catalog fallback, and incomplete admin-managed catalog mutation workflows.
+The native path is supervisor-driven, policy-gated, contract-validated, and adapter-backed. The bridge and ChatPipeline are retired. Remaining compatibility debt is limited to opt-in module diagnostics, bootstrap catalog fallback, and continued hardening of admin catalog operations.

@@ -53,7 +53,11 @@ public sealed class FilePlatformCatalogProvider : IPlatformCatalogProvider
                 _logger.LogWarning(
                     "PlatformCatalog | Catalog file not found | Path: {CatalogPath}",
                     path);
-                _snapshot = new PlatformCatalogSnapshot();
+                _snapshot = new PlatformCatalogSnapshot
+                {
+                    CatalogPath = path,
+                    CatalogFound = false
+                };
                 return _snapshot;
             }
 
@@ -70,18 +74,35 @@ public sealed class FilePlatformCatalogProvider : IPlatformCatalogProvider
                 }
             }
 
+            var capabilities = document.Capabilities ?? Array.Empty<CapabilityDescriptor>();
+            var integrity = CatalogIntegrityValidator.Validate(capabilities, connections);
+
             _snapshot = new PlatformCatalogSnapshot
             {
-                Capabilities = document.Capabilities ?? Array.Empty<CapabilityDescriptor>(),
-                ExternalConnections = connections
+                Capabilities = capabilities,
+                ExternalConnections = connections,
+                Version = document.Version ?? string.Empty,
+                CatalogPath = path,
+                CatalogFound = true,
+                IsValid = integrity.IsValid,
+                IntegrityErrors = integrity.Errors
             };
 
+            if (!integrity.IsValid)
+            {
+                _logger.LogError(
+                    "PlatformCatalog | Integrity validation failed | Path: {CatalogPath} | Errors: {Errors}",
+                    path,
+                    CatalogIntegrityValidator.SerializeErrors(integrity.Errors));
+            }
+
             _logger.LogInformation(
-                "PlatformCatalog | Loaded durable records | Path: {CatalogPath} | Capabilities: {CapabilityCount} | Connections: {ConnectionCount} | Version: {Version}",
+                "PlatformCatalog | Loaded durable records | Path: {CatalogPath} | Capabilities: {CapabilityCount} | Connections: {ConnectionCount} | Version: {Version} | Valid: {Valid}",
                 path,
                 _snapshot.Capabilities.Count,
                 _snapshot.ExternalConnections.Count,
-                document.Version ?? "unspecified");
+                document.Version ?? "unspecified",
+                integrity.IsValid);
 
             return _snapshot;
         }

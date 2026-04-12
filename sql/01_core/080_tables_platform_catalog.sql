@@ -42,3 +42,28 @@ BEGIN
     );
 END;
 GO
+
+IF OBJECT_ID('dbo.PlatformCatalogChangeRequest', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PlatformCatalogChangeRequest
+    (
+        ChangeId NVARCHAR(64) NOT NULL,
+        TenantId NVARCHAR(50) NOT NULL,
+        RecordType NVARCHAR(50) NOT NULL,
+        Operation NVARCHAR(50) NOT NULL,
+        RecordKey NVARCHAR(200) NOT NULL,
+        PayloadJson NVARCHAR(MAX) NOT NULL,
+        Status NVARCHAR(50) NOT NULL CONSTRAINT DF_PlatformCatalogChangeRequest_Status DEFAULT ('Pending'),
+        Owner NVARCHAR(200) NOT NULL,
+        ChangeNote NVARCHAR(1000) NOT NULL,
+        VersionTag NVARCHAR(100) NULL,
+        RequestedByUserId NVARCHAR(200) NOT NULL,
+        RequestedAtUtc DATETIME2(7) NOT NULL CONSTRAINT DF_PlatformCatalogChangeRequest_RequestedAtUtc DEFAULT (SYSUTCDATETIME()),
+        ReviewedByUserId NVARCHAR(200) NULL,
+        ReviewedAtUtc DATETIME2(7) NULL,
+        AppliedByUserId NVARCHAR(200) NULL,
+        AppliedAtUtc DATETIME2(7) NULL,
+        CONSTRAINT PK_PlatformCatalogChangeRequest PRIMARY KEY (TenantId, ChangeId)
+    );
+END;
+GO

@@ -54,6 +54,18 @@ public sealed class CapabilityArgumentValidatorTests
             .IsValid.Should().BeTrue();
     }
 
+    [Fact]
+    public void Validate_ShouldRejectUnexpectedArgumentsForNoArgumentContract()
+    {
+        var capability = WarehouseCapabilities.All.Single(c => c.CapabilityKey == "warehouse.inventory.summary");
+
+        var result = CapabilityArgumentValidator.Validate(capability, "{\"@ItemNo\":\"CHAIR-001\"}");
+
+        result.IsValid.Should().BeFalse();
+        DetailJson(result).Should().Contain("unexpected_arguments");
+        CapabilityArgumentValidator.Validate(capability, "{}").IsValid.Should().BeTrue();
+    }
+
     private static string DetailJson(CapabilityArgumentValidationResult result) =>
         JsonSerializer.Serialize(result.Detail);
 }

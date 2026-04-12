@@ -23,6 +23,7 @@ public static class AccountingCapabilities
                 ["storedProcedure"] = "dbo.ai_accounting_receivables_summary"
             },
             RequiredRoles = new[] { "accounting_read" },
+            ArgumentContract = NoArgumentsContract(),
             ExecutionMode = "readonly"
         },
         new CapabilityDescriptor
@@ -37,6 +38,7 @@ public static class AccountingCapabilities
                 ["storedProcedure"] = "dbo.ai_accounting_payables_summary"
             },
             RequiredRoles = new[] { "accounting_read" },
+            ArgumentContract = NoArgumentsContract(),
             ExecutionMode = "readonly"
         },
         new CapabilityDescriptor
@@ -104,5 +106,12 @@ public static class AccountingCapabilities
             },
             ExecutionMode = "readonly"
         }
+    };
+
+    private static CapabilityArgumentContract NoArgumentsContract() => new()
+    {
+        RequiredArguments = Array.Empty<string>(),
+        AllowedArguments = Array.Empty<string>(),
+        AllowAdditionalArguments = false
     };
 }
