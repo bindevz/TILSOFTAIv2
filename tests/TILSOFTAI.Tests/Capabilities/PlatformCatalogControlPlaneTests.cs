@@ -28,7 +28,41 @@ public sealed class PlatformCatalogControlPlaneTests
         change.Status.Should().Be(PlatformCatalogChangeStatus.Pending);
         change.Owner.Should().Be("platform");
         change.ChangeNote.Should().Be("test change");
+        change.ExpectedVersionTag.Should().BeEmpty();
+        change.PayloadHash.Should().NotBeNullOrWhiteSpace();
+        change.RiskLevel.Should().Be(CatalogChangeRiskLevels.Standard);
         store.Changes.Should().ContainKey(change.ChangeId);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_ShouldValidateWithoutCreatingChange()
+    {
+        var store = new InMemoryCatalogStore();
+        var controlPlane = CreateControlPlane(store);
+
+        var preview = await controlPlane.PreviewAsync(
+            CapabilityUpsert("warehouse.inventory.summary"),
+            Submitter(),
+            CancellationToken.None);
+
+        preview.IsValid.Should().BeTrue();
+        preview.RecordKey.Should().Be("warehouse.inventory.summary");
+        preview.PayloadHash.Should().NotBeNullOrWhiteSpace();
+        store.Changes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ProposeAsync_ShouldReturnExistingPendingChange_WhenDuplicatePayloadIsSubmitted()
+    {
+        var store = new InMemoryCatalogStore();
+        var controlPlane = CreateControlPlane(store);
+        var request = CapabilityUpsert("warehouse.inventory.summary").withIdempotency("same-request");
+
+        var first = await controlPlane.ProposeAsync(request, Submitter(), CancellationToken.None);
+        var second = await controlPlane.ProposeAsync(request, Submitter(), CancellationToken.None);
+
+        second.ChangeId.Should().Be(first.ChangeId);
+        store.Changes.Should().ContainSingle();
     }
 
     [Fact]
@@ -86,6 +120,90 @@ public sealed class PlatformCatalogControlPlaneTests
     }
 
     [Fact]
+    public async Task ApplyAsync_ShouldBeIdempotent_WhenChangeIsAlreadyApplied()
+    {
+        var store = new InMemoryCatalogStore();
+        var controlPlane = CreateControlPlane(store);
+        var change = await controlPlane.ProposeAsync(
+            CapabilityUpsert("warehouse.inventory.summary"),
+            Submitter(),
+            CancellationToken.None);
+
+        await controlPlane.ApproveAsync(change.ChangeId, Approver(), CancellationToken.None);
+        var first = await controlPlane.ApplyAsync(change.ChangeId, Approver(), CancellationToken.None);
+        var second = await controlPlane.ApplyAsync(change.ChangeId, Approver(), CancellationToken.None);
+
+        second.Status.Should().Be(PlatformCatalogChangeStatus.Applied);
+        second.ChangeId.Should().Be(first.ChangeId);
+    }
+
+    [Fact]
+    public async Task ProposeAsync_ShouldRejectVersionConflict()
+    {
+        var store = new InMemoryCatalogStore();
+        store.Capabilities["warehouse.inventory.summary"] = new CapabilityDescriptor
+        {
+            CapabilityKey = "warehouse.inventory.summary",
+            Domain = "warehouse",
+            AdapterType = "sql",
+            Operation = "execute_query",
+            TargetSystemId = "sql",
+            ArgumentContract = new CapabilityArgumentContract { AllowAdditionalArguments = false }
+        };
+        store.Versions["capability:warehouse.inventory.summary"] = "v2";
+        var controlPlane = CreateControlPlane(store);
+
+        var act = () => controlPlane.ProposeAsync(
+            CapabilityUpsert("warehouse.inventory.summary").withExpectedVersion("v1"),
+            Submitter(),
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*catalog_version_conflict*");
+    }
+
+    [Fact]
+    public async Task ApproveAsync_ShouldRequireHighRiskRole_ForExternalConnectionChange()
+    {
+        var store = new InMemoryCatalogStore();
+        var controlPlane = CreateControlPlane(store);
+        var change = await controlPlane.ProposeAsync(
+            ConnectionUpsert("external-stock-api"),
+            Submitter(),
+            CancellationToken.None);
+
+        var act = () => controlPlane.ApproveAsync(change.ChangeId, Approver(), CancellationToken.None);
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("*High-risk catalog changes require*");
+    }
+
+    [Fact]
+    public async Task ProposeAsync_ShouldRequireExpectedVersionForExistingProductionRecord()
+    {
+        var store = new InMemoryCatalogStore();
+        store.Capabilities["warehouse.inventory.summary"] = new CapabilityDescriptor
+        {
+            CapabilityKey = "warehouse.inventory.summary",
+            Domain = "warehouse",
+            AdapterType = "sql",
+            Operation = "execute_query",
+            TargetSystemId = "sql",
+            ArgumentContract = new CapabilityArgumentContract { AllowAdditionalArguments = false }
+        };
+        store.Versions["capability:warehouse.inventory.summary"] = "v2";
+        var controlPlane = CreateControlPlane(store, new CatalogControlPlaneOptions { EnvironmentName = "prod" });
+
+        var act = () => controlPlane.ProposeAsync(
+            CapabilityUpsert("warehouse.inventory.summary"),
+            Submitter(),
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*catalog_expected_version_required*");
+    }
+
+    [Fact]
     public async Task ProposeAsync_ShouldRejectRawSecretConnectionMetadata()
     {
         var controlPlane = CreateControlPlane(new InMemoryCatalogStore());
@@ -112,11 +230,13 @@ public sealed class PlatformCatalogControlPlaneTests
             .WithMessage("*connection_raw_secret_header*");
     }
 
-    private static PlatformCatalogControlPlane CreateControlPlane(InMemoryCatalogStore store) => new(
+    private static PlatformCatalogControlPlane CreateControlPlane(
+        InMemoryCatalogStore store,
+        CatalogControlPlaneOptions? options = null) => new(
         store,
         new CapturingAuditLogger(),
         new NoopMetricsService(),
-        Options.Create(new CatalogControlPlaneOptions()),
+        Options.Create(options ?? new CatalogControlPlaneOptions()),
         new Mock<ILogger<PlatformCatalogControlPlane>>().Object);
 
     private static CatalogMutationContext Submitter() => new()
@@ -161,11 +281,26 @@ public sealed class PlatformCatalogControlPlaneTests
         }
     };
 
+    private static CatalogMutationRequest ConnectionUpsert(string connectionName) => new()
+    {
+        RecordType = PlatformCatalogRecordTypes.ExternalConnection,
+        Operation = PlatformCatalogOperations.Upsert,
+        RecordKey = connectionName,
+        Owner = "platform",
+        ChangeNote = "test change",
+        VersionTag = "test-v1",
+        ExternalConnection = new ExternalConnectionOptions
+        {
+            BaseUrl = "https://stock.test"
+        }
+    };
+
     private sealed class InMemoryCatalogStore : IPlatformCatalogMutationStore
     {
         public Dictionary<string, CapabilityDescriptor> Capabilities { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, ExternalConnectionOptions> Connections { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, CatalogChangeRequestRecord> Changes { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> Versions { get; } = new(StringComparer.OrdinalIgnoreCase);
         public CatalogChangeRequestRecord? LastMutationChange { get; private set; }
 
         public Task<IReadOnlyList<CapabilityDescriptor>> ListCapabilitiesAsync(CancellationToken ct) =>
@@ -179,6 +314,42 @@ public sealed class PlatformCatalogControlPlaneTests
 
         public Task<CatalogChangeRequestRecord?> GetChangeAsync(string tenantId, string changeId, CancellationToken ct) =>
             Task.FromResult(Changes.TryGetValue(changeId, out var change) && change.TenantId == tenantId ? change : null);
+
+        public Task<CatalogRecordVersion> GetRecordVersionAsync(string recordType, string recordKey, CancellationToken ct)
+        {
+            var versionKey = $"{recordType}:{recordKey}";
+            var exists = string.Equals(recordType, PlatformCatalogRecordTypes.Capability, StringComparison.OrdinalIgnoreCase)
+                ? Capabilities.ContainsKey(recordKey)
+                : Connections.ContainsKey(recordKey);
+
+            return Task.FromResult(new CatalogRecordVersion
+            {
+                Exists = exists,
+                VersionTag = Versions.GetValueOrDefault(versionKey, string.Empty)
+            });
+        }
+
+        public Task<CatalogChangeRequestRecord?> FindDuplicatePendingChangeAsync(
+            string tenantId,
+            string recordType,
+            string operation,
+            string recordKey,
+            string payloadHash,
+            string idempotencyKey,
+            CancellationToken ct)
+        {
+            var duplicate = Changes.Values.FirstOrDefault(change =>
+                change.TenantId == tenantId
+                && change.Status == PlatformCatalogChangeStatus.Pending
+                && string.Equals(change.RecordType, recordType, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(change.Operation, operation, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(change.RecordKey, recordKey, StringComparison.OrdinalIgnoreCase)
+                && (string.Equals(change.PayloadHash, payloadHash, StringComparison.OrdinalIgnoreCase)
+                    || (!string.IsNullOrWhiteSpace(idempotencyKey)
+                        && string.Equals(change.IdempotencyKey, idempotencyKey, StringComparison.OrdinalIgnoreCase))));
+
+            return Task.FromResult(duplicate);
+        }
 
         public Task<CatalogChangeRequestRecord> CreateChangeAsync(CatalogChangeRequestRecord change, CancellationToken ct)
         {
@@ -217,6 +388,14 @@ public sealed class PlatformCatalogControlPlaneTests
                 Owner = existing.Owner,
                 ChangeNote = existing.ChangeNote,
                 VersionTag = existing.VersionTag,
+                ExpectedVersionTag = existing.ExpectedVersionTag,
+                IdempotencyKey = existing.IdempotencyKey,
+                RollbackOfChangeId = existing.RollbackOfChangeId,
+                PayloadHash = existing.PayloadHash,
+                RiskLevel = existing.RiskLevel,
+                EnvironmentName = existing.EnvironmentName,
+                BreakGlass = existing.BreakGlass,
+                BreakGlassJustification = existing.BreakGlassJustification,
                 RequestedByUserId = existing.RequestedByUserId,
                 RequestedAtUtc = existing.RequestedAtUtc,
                 ReviewedByUserId = existing.ReviewedByUserId,
@@ -232,6 +411,7 @@ public sealed class PlatformCatalogControlPlaneTests
         {
             LastMutationChange = change;
             Capabilities[capability.CapabilityKey] = capability;
+            Versions[$"capability:{capability.CapabilityKey}"] = change.VersionTag;
             return Task.CompletedTask;
         }
 
@@ -239,6 +419,7 @@ public sealed class PlatformCatalogControlPlaneTests
         {
             LastMutationChange = change;
             Capabilities.Remove(capabilityKey);
+            Versions.Remove($"capability:{capabilityKey}");
             return Task.CompletedTask;
         }
 
@@ -246,6 +427,7 @@ public sealed class PlatformCatalogControlPlaneTests
         {
             LastMutationChange = change;
             Connections[connectionName] = connection;
+            Versions[$"external_connection:{connectionName}"] = change.VersionTag;
             return Task.CompletedTask;
         }
 
@@ -253,6 +435,7 @@ public sealed class PlatformCatalogControlPlaneTests
         {
             LastMutationChange = change;
             Connections.Remove(connectionName);
+            Versions.Remove($"external_connection:{connectionName}");
             return Task.CompletedTask;
         }
     }
@@ -277,6 +460,47 @@ public sealed class PlatformCatalogControlPlaneTests
     }
 }
 
+file static class CatalogMutationRequestTestExtensions
+{
+    public static CatalogMutationRequest withExpectedVersion(
+        this CatalogMutationRequest existing,
+        string expectedVersionTag) => new()
+    {
+        RecordType = existing.RecordType,
+        Operation = existing.Operation,
+        RecordKey = existing.RecordKey,
+        Capability = existing.Capability,
+        ExternalConnection = existing.ExternalConnection,
+        Owner = existing.Owner,
+        ChangeNote = existing.ChangeNote,
+        VersionTag = existing.VersionTag,
+        ExpectedVersionTag = expectedVersionTag,
+        IdempotencyKey = existing.IdempotencyKey,
+        RollbackOfChangeId = existing.RollbackOfChangeId,
+        BreakGlass = existing.BreakGlass,
+        BreakGlassJustification = existing.BreakGlassJustification
+    };
+
+    public static CatalogMutationRequest withIdempotency(
+        this CatalogMutationRequest existing,
+        string idempotencyKey) => new()
+    {
+        RecordType = existing.RecordType,
+        Operation = existing.Operation,
+        RecordKey = existing.RecordKey,
+        Capability = existing.Capability,
+        ExternalConnection = existing.ExternalConnection,
+        Owner = existing.Owner,
+        ChangeNote = existing.ChangeNote,
+        VersionTag = existing.VersionTag,
+        ExpectedVersionTag = existing.ExpectedVersionTag,
+        IdempotencyKey = idempotencyKey,
+        RollbackOfChangeId = existing.RollbackOfChangeId,
+        BreakGlass = existing.BreakGlass,
+        BreakGlassJustification = existing.BreakGlassJustification
+    };
+}
+
 file static class CatalogChangeTestExtensions
 {
     public static CatalogChangeRequestRecord WithStatus(
@@ -294,6 +518,14 @@ file static class CatalogChangeTestExtensions
         Owner = existing.Owner,
         ChangeNote = existing.ChangeNote,
         VersionTag = existing.VersionTag,
+        ExpectedVersionTag = existing.ExpectedVersionTag,
+        IdempotencyKey = existing.IdempotencyKey,
+        RollbackOfChangeId = existing.RollbackOfChangeId,
+        PayloadHash = existing.PayloadHash,
+        RiskLevel = existing.RiskLevel,
+        EnvironmentName = existing.EnvironmentName,
+        BreakGlass = existing.BreakGlass,
+        BreakGlassJustification = existing.BreakGlassJustification,
         RequestedByUserId = existing.RequestedByUserId,
         RequestedAtUtc = existing.RequestedAtUtc,
         ReviewedByUserId = reviewerUserId,

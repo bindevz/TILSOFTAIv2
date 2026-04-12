@@ -1,4 +1,4 @@
-# Runtime Readiness - Sprint 10
+# Runtime Readiness - Sprint 11
 
 Readiness is split by runtime responsibility.
 
@@ -25,6 +25,8 @@ Source modes:
 | `empty` | Unhealthy | No platform or bootstrap records are available. |
 
 Catalog integrity failures are unhealthy and include validation error codes in health data.
+
+In production-like environments, `mixed` and `bootstrap_only` are unhealthy when strict posture is enabled. The default production configuration sets `AllowBootstrapConfigurationFallback=false` so durable catalog mode is the normal deployment expectation.
 
 ## Native Runtime Readiness
 

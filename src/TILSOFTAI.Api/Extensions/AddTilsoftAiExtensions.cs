@@ -548,6 +548,9 @@ public static class AddTilsoftAiExtensions
             .Bind(configuration.GetSection(ConfigurationSectionNames.CatalogControlPlane))
             .Validate(options => options.SubmitRoles.Length > 0, "CatalogControlPlane:SubmitRoles must have at least one role.")
             .Validate(options => options.ApproveRoles.Length > 0, "CatalogControlPlane:ApproveRoles must have at least one role.")
+            .Validate(options => options.ApplyRoles.Length > 0, "CatalogControlPlane:ApplyRoles must have at least one role.")
+            .Validate(options => options.HighRiskApproveRoles.Length > 0, "CatalogControlPlane:HighRiskApproveRoles must have at least one role.")
+            .Validate(options => options.MinBreakGlassJustificationLength >= 0, "CatalogControlPlane:MinBreakGlassJustificationLength must be >= 0.")
             .ValidateOnStart();
         
         // Analytics options (PATCH 28)

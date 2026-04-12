@@ -57,6 +57,14 @@ BEGIN
         Owner NVARCHAR(200) NOT NULL,
         ChangeNote NVARCHAR(1000) NOT NULL,
         VersionTag NVARCHAR(100) NULL,
+        ExpectedVersionTag NVARCHAR(100) NULL,
+        IdempotencyKey NVARCHAR(200) NULL,
+        RollbackOfChangeId NVARCHAR(64) NULL,
+        PayloadHash NVARCHAR(128) NOT NULL,
+        RiskLevel NVARCHAR(50) NOT NULL CONSTRAINT DF_PlatformCatalogChangeRequest_RiskLevel DEFAULT ('standard'),
+        EnvironmentName NVARCHAR(100) NOT NULL CONSTRAINT DF_PlatformCatalogChangeRequest_EnvironmentName DEFAULT ('development'),
+        BreakGlass BIT NOT NULL CONSTRAINT DF_PlatformCatalogChangeRequest_BreakGlass DEFAULT (0),
+        BreakGlassJustification NVARCHAR(1000) NULL,
         RequestedByUserId NVARCHAR(200) NOT NULL,
         RequestedAtUtc DATETIME2(7) NOT NULL CONSTRAINT DF_PlatformCatalogChangeRequest_RequestedAtUtc DEFAULT (SYSUTCDATETIME()),
         ReviewedByUserId NVARCHAR(200) NULL,
@@ -65,5 +73,49 @@ BEGIN
         AppliedAtUtc DATETIME2(7) NULL,
         CONSTRAINT PK_PlatformCatalogChangeRequest PRIMARY KEY (TenantId, ChangeId)
     );
+END;
+GO
+
+IF COL_LENGTH('dbo.PlatformCatalogChangeRequest', 'ExpectedVersionTag') IS NULL
+    ALTER TABLE dbo.PlatformCatalogChangeRequest ADD ExpectedVersionTag NVARCHAR(100) NULL;
+GO
+
+IF COL_LENGTH('dbo.PlatformCatalogChangeRequest', 'IdempotencyKey') IS NULL
+    ALTER TABLE dbo.PlatformCatalogChangeRequest ADD IdempotencyKey NVARCHAR(200) NULL;
+GO
+
+IF COL_LENGTH('dbo.PlatformCatalogChangeRequest', 'RollbackOfChangeId') IS NULL
+    ALTER TABLE dbo.PlatformCatalogChangeRequest ADD RollbackOfChangeId NVARCHAR(64) NULL;
+GO
+
+IF COL_LENGTH('dbo.PlatformCatalogChangeRequest', 'PayloadHash') IS NULL
+    ALTER TABLE dbo.PlatformCatalogChangeRequest ADD PayloadHash NVARCHAR(128) NOT NULL CONSTRAINT DF_PlatformCatalogChangeRequest_PayloadHash DEFAULT ('');
+GO
+
+IF COL_LENGTH('dbo.PlatformCatalogChangeRequest', 'RiskLevel') IS NULL
+    ALTER TABLE dbo.PlatformCatalogChangeRequest ADD RiskLevel NVARCHAR(50) NOT NULL CONSTRAINT DF_PlatformCatalogChangeRequest_RiskLevel DEFAULT ('standard');
+GO
+
+IF COL_LENGTH('dbo.PlatformCatalogChangeRequest', 'EnvironmentName') IS NULL
+    ALTER TABLE dbo.PlatformCatalogChangeRequest ADD EnvironmentName NVARCHAR(100) NOT NULL CONSTRAINT DF_PlatformCatalogChangeRequest_EnvironmentName DEFAULT ('development');
+GO
+
+IF COL_LENGTH('dbo.PlatformCatalogChangeRequest', 'BreakGlass') IS NULL
+    ALTER TABLE dbo.PlatformCatalogChangeRequest ADD BreakGlass BIT NOT NULL CONSTRAINT DF_PlatformCatalogChangeRequest_BreakGlass DEFAULT (0);
+GO
+
+IF COL_LENGTH('dbo.PlatformCatalogChangeRequest', 'BreakGlassJustification') IS NULL
+    ALTER TABLE dbo.PlatformCatalogChangeRequest ADD BreakGlassJustification NVARCHAR(1000) NULL;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IX_PlatformCatalogChangeRequest_PendingDuplicate'
+      AND object_id = OBJECT_ID('dbo.PlatformCatalogChangeRequest')
+)
+BEGIN
+    CREATE INDEX IX_PlatformCatalogChangeRequest_PendingDuplicate
+        ON dbo.PlatformCatalogChangeRequest (TenantId, Status, RecordType, Operation, RecordKey, PayloadHash, IdempotencyKey);
 END;
 GO

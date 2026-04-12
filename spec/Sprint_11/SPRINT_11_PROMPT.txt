@@ -1,0 +1,222 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 11.
+
+Baseline repository reality (after Sprint 10):
+- Sprint 9 already retired `LegacyChatPipelineBridge`, `ChatPipeline`, `ChatRequest`, and `ChatResult`.
+- Production capability and external connection records now load from `catalog/platform-catalog.json`.
+- Source precedence exists across:
+  - static fallback
+  - bootstrap configuration
+  - durable platform catalog
+- Sprint 10 added a governed platform catalog control plane:
+  - `PlatformCatalogController`
+  - `IPlatformCatalogControlPlane`
+  - `IPlatformCatalogMutationStore`
+  - SQL-backed `PlatformCatalogChangeRequest`
+  - submit / approve / reject / apply control-plane APIs
+- Catalog mutation now requires configured submit and approve roles.
+- Self-approval is blocked by default.
+- Catalog mutation emits governance audit, config-change audit, and catalog mutation metrics.
+- `/health/ready` now includes `platform-catalog`.
+- Startup and readiness report source modes:
+  - `platform`
+  - `mixed`
+  - `bootstrap_only`
+  - `empty`
+- Bootstrap fallback is visible and degraded rather than silent.
+- Catalog integrity validation now checks duplicate keys, unresolved REST connections, secret misuse, missing contracts, and malformed contract rules.
+- Production catalog records now declare explicit argument contracts, including no-argument contracts for summary/list capabilities.
+- Remaining module packages are explicitly classified as `packaging-only` or `diagnostic-only`.
+
+The platform is now much closer to enterprise-grade than it was in Sprint 9.
+However, it is still not fully enterprise-grade because:
+- the control plane now exists, but it still needs production hardening and real operational proof,
+- bootstrap fallback still exists and can still appear as `mixed` or `bootstrap_only`,
+- change-safety semantics are still not strong enough for enterprise mutation workflows,
+- contract baseline exists but richer schema discipline is still uneven,
+- and module packages still exist as bounded but unresolved residue.
+
+Sprint 11 mission:
+Convert the control plane from “implemented” to “production-hardened, safe under mutation, and operationally trusted”.
+
+Primary objective:
+1. Productionize the SQL catalog control plane.
+2. Add stronger mutation safety semantics.
+3. Reduce bootstrap fallback dependency further.
+4. Harden approval policy by environment and risk.
+5. Improve contract/schema lifecycle maturity.
+6. Decide the durable end-state for remaining module packages.
+7. Add operational evidence, runbooks, and failure drills.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the runtime orchestration owner.
+2. Platform catalog records remain the intended production source-of-truth.
+3. Bootstrap configuration is still fallback, not the production control plane.
+4. Catalog mutation must remain governed, auditable, and role-controlled.
+5. Approval discipline must not weaken.
+6. Mutation safety must now improve beyond approval alone.
+7. Operational credibility matters as much as code structure in Sprint 11.
+8. Future capability growth must remain contract-disciplined.
+9. Module packages must not regain runtime ownership.
+10. Enterprise-grade progress in Sprint 11 is measured by production trust under change.
+
+Primary Sprint 11 goals:
+
+A. Productionize the catalog control plane
+- Run the control plane against a real SQL catalog persistence path.
+- Add migration and operator runbooks.
+- Add documented failure drills for:
+  - submit failures
+  - approval failures
+  - apply failures
+  - SQL outage or partial failure
+- Ensure the operational story is supportable, not just implemented.
+
+B. Add mutation safety semantics
+- Add optimistic concurrency or equivalent version-checking for catalog changes.
+- Add idempotent apply behavior.
+- Prevent duplicate or replayed mutation hazards where appropriate.
+- Add preview / dry-run or equivalent safety validation for risky catalog mutations.
+- Add rollback / revert or compensating-change guidance and implementation where appropriate.
+- Handle partial-failure and retry paths intentionally.
+
+C. Reduce bootstrap fallback dependency
+- Treat `mixed` and `bootstrap_only` as stronger operational warnings.
+- Continue moving records out of bootstrap configuration and into the platform catalog.
+- Consider stricter environment posture where bootstrap fallback is disabled in production-like environments.
+- Strengthen deployment and runbook guidance around source-of-truth mode.
+
+D. Harden governance policy
+- Support environment-specific approval policy.
+- Support stricter approval semantics for higher-risk mutation categories if appropriate.
+- Preserve two-person control discipline.
+- Keep break-glass behavior explicit, rare, and auditable if it is needed.
+- Make submit / approve / apply policy clearer to operators.
+
+E. Improve contract and schema maturity
+- Keep explicit contracts mandatory.
+- Add richer typed constraints where current contracts are only minimal baselines.
+- Define contract versioning direction.
+- Evaluate JSON Schema interoperability or a compatible schema lifecycle path.
+- Keep validation deterministic and operator-friendly.
+
+F. Resolve remaining module package end-state
+- Remove more module package residue where appropriate.
+- Or formally retain it as non-runtime packaging/diagnostic residue with explicit ownership and documented boundaries.
+- Ensure no new production work flows back into module loader identity.
+
+G. Expand operational evidence
+- Add integration tests around control-plane APIs and real SQL mutation workflows.
+- Add failure-path and authorization-path coverage.
+- Add source-mode health verification.
+- Improve audit and observability verification.
+
+Non-negotiable rules:
+1. Do not weaken submit / approve / reject / apply governance.
+2. Do not reintroduce silent fallback behavior.
+3. Do not store secret values in platform catalog records.
+4. Do not add convenience writes that bypass auditability.
+5. Do not claim production readiness without operational proof.
+6. Do not add new capabilities without contract discipline.
+7. Do not let module packages regain runtime identity.
+8. Do not count documentation-only work as operational hardening.
+9. Prefer safety, replay resistance, and recovery clarity over thin abstractions.
+10. Keep remaining compatibility debt measurable and explicit.
+
+Explicitly in scope:
+- production hardening of the catalog control plane
+- mutation safety semantics
+- concurrency / versioning / idempotency / rollback discipline
+- environment-specific governance policy
+- bootstrap fallback reduction
+- richer contract/schema lifecycle work
+- module residue end-state work
+- runbooks, drills, and operational verification
+
+Explicitly out of scope:
+- broad new product features
+- planner runtime
+- graph orchestration
+- major UI work
+- broad workflow expansion
+- performance certification as the primary sprint theme
+
+Recommended implementation order:
+1. Harden mutation semantics and safety controls.
+2. Add environment-specific governance policy.
+3. Add production runbooks and failure drills.
+4. Reduce bootstrap fallback dependency.
+5. Improve contract/schema lifecycle maturity.
+6. Decide the durable module residue end-state.
+7. Add operational verification and test coverage.
+8. Delete dead code revealed by the hardening work.
+
+Required architectural outcomes:
+1. The catalog control plane is operationally credible, not just implemented.
+2. Mutation lifecycle is safer under retries, races, and operator mistakes.
+3. Operators can run, recover, and troubleshoot catalog change workflows in real environments.
+4. Bootstrap fallback becomes less central and more exceptional.
+5. Governance policy becomes production-grade.
+6. Contract/schema maturity becomes more future-proof.
+7. Module package residue becomes more durable and explicit in its end-state.
+
+Definition of done:
+- The SQL-backed control plane is exercised through realistic operational workflows.
+- Mutation semantics include stronger safety than approval alone.
+- Failure and recovery handling are documented and verified.
+- Governance policy is environment-aware and auditable.
+- Bootstrap fallback dependency is reduced further.
+- Contract/schema maturity improves beyond baseline presence.
+- Remaining module residue has a clearer durable disposition.
+- The platform is more trustworthy under change after Sprint 11 than after Sprint 10.
+
+Must-fail conditions:
+- control-plane usage remains theoretical rather than operationally exercised
+- mutation still lacks concurrency/version safety
+- bootstrap fallback remains normalizable in production deployments
+- approval policy remains too generic for real production use
+- module residue remains in indefinite limbo
+- Sprint 11 drifts into feature work without materially improving operational trust
+
+Preferred implementation style:
+- explicit ownership
+- safe mutation lifecycle
+- operational honesty
+- replay resistance
+- rollback awareness
+- environment-aware governance
+- schema discipline
+- deletion over drift
+- no architecture theater
+
+Required deliverables:
+1. Control-plane production hardening changes
+2. Change safety / concurrency / idempotency / rollback changes
+3. Governance policy hardening changes
+4. Bootstrap fallback reduction changes
+5. Contract/schema maturity changes
+6. Module residue end-state changes
+7. Runbooks, drills, and operational verification updates
+
+Required reporting after implementation:
+1. Summary of Sprint 11 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Control-plane production hardening changes
+6. Change safety / concurrency / rollback changes
+7. Governance policy hardening changes
+8. Fallback reduction changes
+9. Contract/schema maturity changes
+10. Module residue decision changes
+11. Validation/test/runbook improvements
+12. Remaining enterprise-grade blockers
+13. Recommended Sprint 12 priorities
+
+Final instruction:
+Sprint 11 is about production trust under change.
+Do not spend Sprint 11 adding runtime novelty.
+Do not turn Sprint 11 into a feature sprint.
+
+Spend it making catalog mutation safer, governance stricter, fallback rarer, recovery clearer, and the platform more credible to real operators.

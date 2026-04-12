@@ -1,6 +1,6 @@
-# Enterprise Readiness Gap Report - Sprint 10
+# Enterprise Readiness Gap Report - Sprint 11
 
-Sprint 10 adds the governed catalog control plane, source-of-truth visibility, catalog integrity validation, and explicit module package classifications. The platform is closer to enterprise-grade operational control; remaining gaps are now around production hardening and reducing fallback dependency.
+Sprint 11 hardens the governed catalog control plane for production operation. Mutation is now safer under retries and races, production-like governance is stricter, fallback posture is less permissive, and module residue has a durable non-runtime end-state.
 
 ## Completed Through Sprint 7
 
@@ -34,16 +34,26 @@ Sprint 10 adds the governed catalog control plane, source-of-truth visibility, c
 - Startup emits catalog source mode metrics/logs; mutation emits catalog mutation metrics and governance/config-change audit events.
 - Remaining module packages are classified as packaging-only or diagnostic-only.
 - Production catalog records include explicit argument contracts, including no-argument contracts for summary/list capabilities.
+- Catalog preview validates mutation payloads before submit.
+- Existing-record mutation can require `ExpectedVersionTag` in production-like environments.
+- Duplicate pending changes are detected by payload hash and idempotency key.
+- Apply replay for already applied changes is idempotent.
+- High-risk changes require senior approval.
+- Production-like environments can require independent apply after approval.
+- Bootstrap fallback is disabled by default in production config and strict source modes are unhealthy.
+- Rollback is represented through governed compensating changes with `RollbackOfChangeId`.
+- Contract metadata now includes `ContractVersion`, `SchemaDialect`, and `SchemaRef`.
+- Module packages are formally retained only as non-runtime packaging or diagnostic artifacts.
 
 ## Remaining Enterprise Blockers
 
 | Blocker | Why it matters | Recommended next action |
 |---------|----------------|-------------------------|
-| Catalog admin write path needs production exercising | SQL-backed submit/review/apply exists, but production operators still need migration/runbook adoption and failure drills. | Run the control plane against a real catalog database, document operational runbooks, and add environment-specific approval policies. |
-| Bootstrap configuration still exists | Bootstrap fallback remains useful operationally but must not become the production catalog owner again. | Treat `mixed` and `bootstrap_only` readiness as deployment warnings and continue moving records to the platform catalog. |
-| Module packages still exist | Module loading is no longer central, but module packages and diagnostic loading remain. | Keep classifications explicit, then convert remaining diagnostic metadata into platform catalog/tool records where useful. |
+| Catalog admin write path needs live certification | SQL-backed submit/review/apply is hardened, but real production operator drills still need evidence from deployed environments. | Run the runbook and failure drills against staging/prod-like SQL with signed-off evidence. |
+| Bootstrap fallback still exists as an emergency mechanism | Production config is stricter, but fallback code remains available for lower environments and emergencies. | Keep production fallback disabled by default and alert on any fallback source mode. |
+| Module packages still physically exist | Their end-state is non-runtime, but physical removal is optional future cleanup. | Remove packages only when packaging/diagnostic ownership no longer needs them. |
 | SQL remains dominant | Most production capabilities are still SQL-backed even with two governed REST paths. | Continue adding governed non-SQL capabilities where production workflows require them. |
-| Contract richness is uneven | Every production capability now has a contract, but summary/list capabilities only need no-argument contracts and future capabilities may need richer typed rules. | Continue adding typed constraints as new catalog records are introduced and consider JSON Schema interop. |
+| Contract richness still depends on capability shape | Schema lifecycle exists, but future records must keep using it consistently. | Enforce preview and contract review in catalog operations and evaluate JSON Schema artifacts when schemas become shared. |
 
 ## Verification Notes
 

@@ -30,10 +30,13 @@ public sealed class PlatformCatalogHealthCheck : IHealthCheck
         var bootstrapCapabilities = _configuration.GetSection("Capabilities").GetChildren().Count();
         var bootstrapConnections = _configuration.GetSection("ExternalConnections:Connections").GetChildren().Count();
         var mode = DetermineMode(snapshot, bootstrapCapabilities, bootstrapConnections);
+        var productionLike = IsProductionLike();
 
         var data = new Dictionary<string, object>
         {
             ["source_mode"] = mode,
+            ["environment"] = EffectiveEnvironmentName(),
+            ["production_like"] = productionLike,
             ["catalog_found"] = snapshot.CatalogFound,
             ["catalog_valid"] = snapshot.IsValid,
             ["catalog_path"] = snapshot.CatalogPath,
@@ -54,6 +57,13 @@ public sealed class PlatformCatalogHealthCheck : IHealthCheck
 
         if (mode == "bootstrap_only")
         {
+            if (productionLike && _options.TreatBootstrapOnlyAsUnhealthyInProductionLike)
+            {
+                return Task.FromResult(HealthCheckResult.Unhealthy(
+                    "Production-like environment is running only on bootstrap catalog fallback.",
+                    data: data));
+            }
+
             return Task.FromResult(HealthCheckResult.Degraded(
                 "Platform catalog is unavailable; runtime is using bootstrap fallback records.",
                 data: data));
@@ -61,6 +71,13 @@ public sealed class PlatformCatalogHealthCheck : IHealthCheck
 
         if (mode == "mixed")
         {
+            if (productionLike && _options.TreatMixedAsUnhealthyInProductionLike)
+            {
+                return Task.FromResult(HealthCheckResult.Unhealthy(
+                    "Production-like environment has mixed platform and bootstrap catalog sources.",
+                    data: data));
+            }
+
             return Task.FromResult(HealthCheckResult.Degraded(
                 "Platform catalog is active with bootstrap fallback records also present.",
                 data: data));
@@ -97,4 +114,11 @@ public sealed class PlatformCatalogHealthCheck : IHealthCheck
             ? "mixed"
             : "platform";
     }
+
+    private bool IsProductionLike() =>
+        _options.ProductionLikeEnvironments.Any(environment =>
+            string.Equals(environment, EffectiveEnvironmentName(), StringComparison.OrdinalIgnoreCase));
+
+    private string EffectiveEnvironmentName() =>
+        string.IsNullOrWhiteSpace(_options.EnvironmentName) ? "development" : _options.EnvironmentName.Trim();
 }

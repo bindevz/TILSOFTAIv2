@@ -154,6 +154,17 @@ public static class CatalogIntegrityValidator
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(contract.ContractVersion))
+        {
+            errors.Add($"capability_contract_version_required:{capability.CapabilityKey}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(contract.SchemaRef)
+            && string.IsNullOrWhiteSpace(contract.SchemaDialect))
+        {
+            errors.Add($"capability_contract_schema_dialect_required:{capability.CapabilityKey}");
+        }
+
         var known = new HashSet<string>(
             contract.RequiredArguments.Concat(contract.AllowedArguments).Select(NormalizeName),
             StringComparer.OrdinalIgnoreCase);

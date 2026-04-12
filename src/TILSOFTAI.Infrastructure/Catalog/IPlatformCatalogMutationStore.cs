@@ -9,6 +9,15 @@ public interface IPlatformCatalogMutationStore
     Task<IReadOnlyList<KeyValuePair<string, ExternalConnectionOptions>>> ListExternalConnectionsAsync(CancellationToken ct);
     Task<IReadOnlyList<CatalogChangeRequestRecord>> ListChangesAsync(string tenantId, CancellationToken ct);
     Task<CatalogChangeRequestRecord?> GetChangeAsync(string tenantId, string changeId, CancellationToken ct);
+    Task<CatalogRecordVersion> GetRecordVersionAsync(string recordType, string recordKey, CancellationToken ct);
+    Task<CatalogChangeRequestRecord?> FindDuplicatePendingChangeAsync(
+        string tenantId,
+        string recordType,
+        string operation,
+        string recordKey,
+        string payloadHash,
+        string idempotencyKey,
+        CancellationToken ct);
     Task<CatalogChangeRequestRecord> CreateChangeAsync(CatalogChangeRequestRecord change, CancellationToken ct);
     Task<CatalogChangeRequestRecord> ApproveChangeAsync(string tenantId, string changeId, string reviewerUserId, CancellationToken ct);
     Task<CatalogChangeRequestRecord> RejectChangeAsync(string tenantId, string changeId, string reviewerUserId, CancellationToken ct);

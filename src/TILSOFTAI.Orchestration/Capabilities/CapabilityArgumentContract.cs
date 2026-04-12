@@ -2,6 +2,9 @@ namespace TILSOFTAI.Orchestration.Capabilities;
 
 public sealed class CapabilityArgumentContract
 {
+    public string ContractVersion { get; init; } = "1";
+    public string SchemaDialect { get; init; } = string.Empty;
+    public string SchemaRef { get; init; } = string.Empty;
     public IReadOnlyList<string> RequiredArguments { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> AllowedArguments { get; init; } = Array.Empty<string>();
     public bool AllowAdditionalArguments { get; init; } = true;

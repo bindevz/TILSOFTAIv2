@@ -37,7 +37,11 @@ Production capability and external connection records are loaded from the platfo
   "PlatformCatalog": {
     "Enabled": true,
     "CatalogPath": "catalog/platform-catalog.json",
-    "AllowBootstrapConfigurationFallback": true
+    "AllowBootstrapConfigurationFallback": false,
+    "EnvironmentName": "prod",
+    "ProductionLikeEnvironments": [ "prod", "production", "staging" ],
+    "TreatMixedAsUnhealthyInProductionLike": true,
+    "TreatBootstrapOnlyAsUnhealthyInProductionLike": true
   },
   "Capabilities": [],
   "ExternalConnections": {
@@ -116,14 +120,35 @@ Catalog writes are governed by submit/review/apply roles.
 ```json
 {
   "CatalogControlPlane": {
+    "EnvironmentName": "prod",
     "SubmitRoles": [ "platform_catalog_admin" ],
     "ApproveRoles": [ "platform_catalog_approver" ],
-    "AllowSelfApproval": false
+    "ApplyRoles": [ "platform_catalog_operator" ],
+    "HighRiskApproveRoles": [ "platform_catalog_senior_approver" ],
+    "BreakGlassRoles": [ "platform_catalog_break_glass" ],
+    "ProductionLikeEnvironments": [ "prod", "production", "staging" ],
+    "AllowSelfApproval": false,
+    "RequireExpectedVersionForExistingRecordsInProductionLike": true,
+    "RequireIndependentApplyInProductionLike": true,
+    "AllowBreakGlass": false,
+    "MinBreakGlassJustificationLength": 20
   }
 }
 ```
 
 The control plane stores pending changes in SQL before applying them to `PlatformCapabilityCatalog` or `PlatformExternalConnectionCatalog`. Each change must include an owner, change note, record type, operation, and record payload. Capability records must include an `ArgumentContract`; REST records must reference a configured external connection and secret references instead of raw secret values.
+
+For existing records in production-like environments, mutation requests must include `ExpectedVersionTag`. Use `POST /api/platform-catalog/changes/preview` before submit to verify the expected version, payload hash, risk level, and duplicate pending-change status.
+
+Optional safety fields:
+
+```json
+{
+  "ExpectedVersionTag": "catalog-v12",
+  "IdempotencyKey": "change-ticket-12345",
+  "RollbackOfChangeId": "previous-change-id-when-this-is-a-compensating-change"
+}
+```
 
 `/health/ready` includes `platform-catalog` and reports the active source mode:
 

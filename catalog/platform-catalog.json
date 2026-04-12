@@ -38,6 +38,7 @@
         "storedProcedure": "dbo.ai_warehouse_inventory_summary"
       },
       "ArgumentContract": {
+        "ContractVersion": "1",
         "RequiredArguments": [],
         "AllowedArguments": [],
         "AllowAdditionalArguments": false,
@@ -56,6 +57,7 @@
         "storedProcedure": "dbo.ai_warehouse_inventory_by_item"
       },
       "ArgumentContract": {
+        "ContractVersion": "1",
         "RequiredArguments": [ "@ItemNo" ],
         "AllowedArguments": [ "@ItemNo", "@TenantId" ],
         "AllowAdditionalArguments": false,
@@ -89,6 +91,7 @@
         "storedProcedure": "dbo.ai_warehouse_receipts_recent"
       },
       "ArgumentContract": {
+        "ContractVersion": "1",
         "RequiredArguments": [],
         "AllowedArguments": [],
         "AllowAdditionalArguments": false,
@@ -109,6 +112,7 @@
         "method": "GET"
       },
       "ArgumentContract": {
+        "ContractVersion": "1",
         "RequiredArguments": [ "@ItemNo" ],
         "AllowedArguments": [ "@ItemNo" ],
         "AllowAdditionalArguments": false,
@@ -135,6 +139,7 @@
         "storedProcedure": "dbo.ai_accounting_receivables_summary"
       },
       "ArgumentContract": {
+        "ContractVersion": "1",
         "RequiredArguments": [],
         "AllowedArguments": [],
         "AllowAdditionalArguments": false,
@@ -153,6 +158,7 @@
         "storedProcedure": "dbo.ai_accounting_payables_summary"
       },
       "ArgumentContract": {
+        "ContractVersion": "1",
         "RequiredArguments": [],
         "AllowedArguments": [],
         "AllowAdditionalArguments": false,
@@ -171,6 +177,7 @@
         "storedProcedure": "dbo.ai_accounting_invoice_by_number"
       },
       "ArgumentContract": {
+        "ContractVersion": "1",
         "RequiredArguments": [ "@InvoiceNumber" ],
         "AllowedArguments": [ "@InvoiceNumber", "@TenantId" ],
         "AllowAdditionalArguments": false,
@@ -206,6 +213,7 @@
         "method": "GET"
       },
       "ArgumentContract": {
+        "ContractVersion": "1",
         "RequiredArguments": [ "@CurrencyCode" ],
         "AllowedArguments": [ "@CurrencyCode" ],
         "AllowAdditionalArguments": false,

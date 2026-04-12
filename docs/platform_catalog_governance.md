@@ -1,4 +1,4 @@
-# Platform Catalog Governance - Sprint 10
+# Platform Catalog Governance - Sprint 11
 
 Production capability and external connection records are now platform catalog records.
 
@@ -28,6 +28,7 @@ Control-plane endpoints:
 - `GET /api/platform-catalog/capabilities`
 - `GET /api/platform-catalog/external-connections`
 - `GET /api/platform-catalog/changes`
+- `POST /api/platform-catalog/changes/preview`
 - `POST /api/platform-catalog/changes`
 - `POST /api/platform-catalog/changes/{changeId}/approve`
 - `POST /api/platform-catalog/changes/{changeId}/reject`
@@ -38,9 +39,17 @@ Configuration:
 ```json
 {
   "CatalogControlPlane": {
+    "EnvironmentName": "prod",
     "SubmitRoles": [ "platform_catalog_admin" ],
     "ApproveRoles": [ "platform_catalog_approver" ],
-    "AllowSelfApproval": false
+    "ApplyRoles": [ "platform_catalog_operator" ],
+    "HighRiskApproveRoles": [ "platform_catalog_senior_approver" ],
+    "BreakGlassRoles": [ "platform_catalog_break_glass" ],
+    "ProductionLikeEnvironments": [ "prod", "production", "staging" ],
+    "AllowSelfApproval": false,
+    "RequireExpectedVersionForExistingRecordsInProductionLike": true,
+    "RequireIndependentApplyInProductionLike": true,
+    "AllowBreakGlass": false
   }
 }
 ```
@@ -51,11 +60,29 @@ Platform catalog changes must include:
 - submitter/reviewer role validation,
 - secret references instead of secret values,
 - typed argument contract review,
-- version/change note.
+- version/change note,
+- expected version for existing records in production-like environments,
+- idempotency key for replay-safe submit,
+- rollback reference when a change compensates for a previous applied change.
 
 The control plane creates pending change requests first. A separate approver must approve the request before it can be applied when self-approval is disabled.
 
-Every submit, approve, reject, and apply operation emits governance/config-change audit events and increments `tilsoftai_platform_catalog_mutations_total`.
+High-risk changes include disables and external connection mutations. They require senior approval unless explicit break-glass is enabled and audited.
+
+Every preview, submit, duplicate-submit replay, approve, reject, apply, and apply replay operation emits governance/config-change audit events or mutation metrics and increments `tilsoftai_platform_catalog_mutations_total`.
+
+## Change Safety
+
+Sprint 11 adds:
+
+- optimistic concurrency through `ExpectedVersionTag`,
+- duplicate pending-change detection through payload hash and `IdempotencyKey`,
+- dry-run preview through `POST /api/platform-catalog/changes/preview`,
+- idempotent apply replay for already applied changes,
+- production-like independent apply policy,
+- rollback-by-compensating-change metadata through `RollbackOfChangeId`.
+
+Operators should preview every production change before submit and include a ticket-derived idempotency key.
 
 ## Durable SQL Shape
 
@@ -76,6 +103,8 @@ Sprint 10 SQL catalog shape includes durable records, change requests, list proc
 - `dbo.app_platform_capabilitycatalog_disable`
 - `dbo.app_platform_externalconnectioncatalog_upsert`
 - `dbo.app_platform_externalconnectioncatalog_disable`
+- `dbo.app_platform_catalogrecord_version`
+- `dbo.app_platform_catalogchange_find_duplicate`
 
 The file catalog at `catalog/platform-catalog.json` remains the bootstrapped durable platform record set for local/runtime startup. SQL is the admin-managed mutation target for catalog operations.
 

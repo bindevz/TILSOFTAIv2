@@ -52,6 +52,15 @@ public sealed class PlatformCatalogController : ControllerBase
         return AcceptedAtAction(nameof(ListChanges), new { id = record.ChangeId }, record);
     }
 
+    [HttpPost("changes/preview")]
+    public async Task<ActionResult<CatalogMutationPreviewResult>> Preview(
+        [FromBody] CatalogMutationApiRequest request,
+        CancellationToken ct)
+    {
+        var result = await _controlPlane.PreviewAsync(request.ToMutationRequest(), ToCatalogContext(), ct);
+        return Ok(result);
+    }
+
     [HttpPost("changes/{changeId}/approve")]
     public async Task<ActionResult<CatalogChangeRequestRecord>> Approve(string changeId, CancellationToken ct)
     {

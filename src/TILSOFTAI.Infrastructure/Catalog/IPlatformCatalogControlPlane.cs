@@ -8,6 +8,7 @@ public interface IPlatformCatalogControlPlane
     Task<IReadOnlyList<CapabilityDescriptor>> ListCapabilitiesAsync(CatalogMutationContext context, CancellationToken ct);
     Task<IReadOnlyList<KeyValuePair<string, ExternalConnectionOptions>>> ListExternalConnectionsAsync(CatalogMutationContext context, CancellationToken ct);
     Task<IReadOnlyList<CatalogChangeRequestRecord>> ListChangesAsync(CatalogMutationContext context, CancellationToken ct);
+    Task<CatalogMutationPreviewResult> PreviewAsync(CatalogMutationRequest request, CatalogMutationContext context, CancellationToken ct);
     Task<CatalogChangeRequestRecord> ProposeAsync(CatalogMutationRequest request, CatalogMutationContext context, CancellationToken ct);
     Task<CatalogChangeRequestRecord> ApproveAsync(string changeId, CatalogMutationContext context, CancellationToken ct);
     Task<CatalogChangeRequestRecord> RejectAsync(string changeId, CatalogMutationContext context, CancellationToken ct);

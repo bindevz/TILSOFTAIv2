@@ -1,4 +1,4 @@
-# Architecture V3 - Sprint 10
+# Architecture V3 - Sprint 11
 
 ## Runtime Shape
 
@@ -90,6 +90,17 @@ Write path:
 | Module packages | Remaining module packages are classified as packaging-only or diagnostic-only in configuration and health output. |
 | Contract coverage | Production catalog records and static no-argument capabilities now declare explicit `ArgumentContract` records. |
 
+## Sprint 11 Ownership Changes
+
+| Area | Sprint 11 state |
+|------|-----------------|
+| Mutation safety | Catalog changes support preview, expected-version concurrency checks, idempotency keys, duplicate pending-change detection, and idempotent apply replay. |
+| Production governance | Production-like environments can require expected versions, independent apply, senior approval for high-risk changes, and strict fallback posture. |
+| Recovery | Rollback is represented as a governed compensating change with `RollbackOfChangeId`, not as an unaudited metadata rewind. |
+| Source of truth | Production config disables bootstrap fallback by default and marks mixed/bootstrap-only source modes unhealthy. |
+| Contract lifecycle | `ArgumentContract` has `ContractVersion`, optional `SchemaDialect`, and optional `SchemaRef` for future JSON Schema interop. |
+| Module packages | Module packages are formally retained only as packaging or diagnostic artifacts, not runtime ownership. |
+
 ## Capabilities
 
 | Key | Domain | Adapter | Binding |
@@ -128,6 +139,8 @@ Policy denial happens before adapter resolution and is returned as `CAPABILITY_A
 
 Capabilities may specify `ArgumentContract`:
 
+- `ContractVersion`: lifecycle version for the contract shape.
+- `SchemaDialect` and `SchemaRef`: optional schema interop metadata.
 - `RequiredArguments`: all must be present.
 - `AllowedArguments`: permitted argument names when additional arguments are disabled.
 - `AllowAdditionalArguments`: when false, unknown arguments fail validation.

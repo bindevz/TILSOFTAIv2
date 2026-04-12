@@ -1,6 +1,8 @@
-# Module Package Classification - Sprint 10
+# Module Package Classification - Sprint 11
 
 Runtime routing is supervisor-native and capability-native. Remaining module packages are not production routing owners by default.
+
+Sprint 11 decision: module packages are formally retained as non-runtime packaging or diagnostic artifacts only. They are not a future production capability ownership path.
 
 ## Classifications
 
@@ -16,3 +18,4 @@ Runtime routing is supervisor-native and capability-native. Remaining module pac
 - `ModuleHealthCheck` is diagnostic and reports the classification map.
 - New production runtime capability records should be added to the platform catalog instead of module package loaders.
 - Existing module package metadata should either move into catalog/tool records or stay explicitly classified as non-runtime packaging.
+- Any new production work that depends on module loader identity is rejected as compatibility drift.

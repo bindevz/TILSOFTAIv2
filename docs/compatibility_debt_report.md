@@ -1,4 +1,4 @@
-# Compatibility Debt Report - Sprint 10
+# Compatibility Debt Report - Sprint 11
 
 This document tracks transitional components that still exist after Sprint 9, plus the components removed or reduced during the sprint.
 
@@ -30,6 +30,16 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Catalog integrity | Enforced on load and mutation | Duplicate keys, unresolved REST connections, raw secrets, and missing contracts are reported as validation errors. |
 | No-argument capabilities | Explicit contracts | Summary/list capabilities now reject unexpected arguments through no-argument contracts. |
 | Module packages | Classified | Remaining module packages are marked `packaging-only` or `diagnostic-only` in `Modules:Classifications`. |
+
+## Changed In Sprint 11
+
+| Component | Result | Notes |
+|-----------|--------|-------|
+| Catalog mutation safety | Hardened | Expected-version checks, duplicate pending-change detection, preview, idempotent apply, and rollback reference metadata were added. |
+| Production fallback | Stricter | Production config disables bootstrap fallback and marks mixed/bootstrap-only source modes unhealthy. |
+| Approval policy | Environment/risk aware | Apply roles, high-risk approver roles, break-glass roles, and production-like independent apply are configured separately. |
+| Contract lifecycle | Versioned baseline | `ArgumentContract` includes `ContractVersion`, `SchemaDialect`, and `SchemaRef` for future schema governance. |
+| Module package end-state | Decided | Module packages are retained only as non-runtime packaging or diagnostic artifacts. |
 
 ## Removed In Sprint 7
 
@@ -72,11 +82,11 @@ This document tracks transitional components that still exist after Sprint 9, pl
 
 | Field | Value |
 |-------|-------|
-| Status | Legacy diagnostic only; autoload disabled by default; package classifications are reported in health data |
+| Status | Permanently non-runtime packaging/diagnostic residue; autoload disabled by default; package classifications are reported in health data |
 | Location | `src/TILSOFTAI.Infrastructure/Modules/*`, `src/TILSOFTAI.Orchestration/Modules/*` |
 | Why it exists | Diagnostic module health and existing module packages still use module loading when legacy autoload is explicitly enabled. |
 | What depends on it | `ModuleHealthCheck`, `ModuleLoaderHostedService`, module packages |
-| Removal condition | Module packages are converted to platform catalog/tool records or explicitly retained as non-runtime packaging. |
+| Removal condition | Optional future cleanup only; production capability ownership must remain in platform catalog/tool records. |
 
 Current classifications:
 
@@ -105,6 +115,6 @@ Current classifications:
 | Why it exists | Unit and integration tests use constructor-driven capability sets. Production uses `CompositeCapabilityRegistry`. |
 | Removal condition | None required; may become internal test support in a later cleanup. |
 
-## Sprint 10 Debt Priorities
+## Sprint 11 Debt Priorities
 
-Completed. Remaining priorities are continued production operation of the SQL catalog write path, reducing bootstrap fallback dependency, and deciding whether diagnostic module packages stay as explicit non-runtime artifacts.
+Completed. Remaining priorities are live production exercising of SQL catalog workflows, operator training, and any future removal of non-runtime packages when packaging/diagnostic ownership no longer needs them.

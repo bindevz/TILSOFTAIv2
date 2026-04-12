@@ -46,6 +46,20 @@ public sealed class PlatformCatalogTests
     }
 
     [Fact]
+    public void FilePlatformCatalogProvider_ShouldRequireSchemaDialect_WhenSchemaRefIsConfigured()
+    {
+        var path = CreateCatalogFileWithSchemaRefOnly();
+        var provider = new FilePlatformCatalogProvider(
+            Options.Create(new PlatformCatalogOptions { CatalogPath = path }),
+            new Mock<ILogger<FilePlatformCatalogProvider>>().Object);
+
+        var snapshot = provider.Load();
+
+        snapshot.IsValid.Should().BeFalse();
+        snapshot.IntegrityErrors.Should().Contain("capability_contract_schema_dialect_required:warehouse.inventory.summary");
+    }
+
+    [Fact]
     public void CompositeCapabilityRegistry_ShouldLetPlatformCatalogOverrideBootstrapConfiguration()
     {
         var staticCapability = new CapabilityDescriptor
@@ -165,6 +179,41 @@ public sealed class PlatformCatalogTests
               "ExecutionMode": "readonly",
               "IntegrationBinding": {
                 "storedProcedure": "dbo.ai_warehouse_inventory_summary"
+              }
+            }
+          ]
+        }
+        """);
+        return path;
+    }
+
+    private static string CreateCatalogFileWithSchemaRefOnly()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.platform-catalog.json");
+        File.WriteAllText(path, """
+        {
+          "Version": "test",
+          "ExternalConnections": {
+            "Connections": {}
+          },
+          "Capabilities": [
+            {
+              "CapabilityKey": "warehouse.inventory.summary",
+              "Domain": "warehouse",
+              "AdapterType": "sql",
+              "Operation": "execute_query",
+              "TargetSystemId": "sql",
+              "ExecutionMode": "readonly",
+              "IntegrationBinding": {
+                "storedProcedure": "dbo.ai_warehouse_inventory_summary"
+              },
+              "ArgumentContract": {
+                "ContractVersion": "1",
+                "SchemaRef": "catalog-schema://warehouse.inventory.summary/1",
+                "RequiredArguments": [],
+                "AllowedArguments": [],
+                "AllowAdditionalArguments": false,
+                "Arguments": []
               }
             }
           ]

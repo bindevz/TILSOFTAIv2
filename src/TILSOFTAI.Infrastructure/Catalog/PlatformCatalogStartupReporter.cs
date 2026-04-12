@@ -35,16 +35,21 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
         var bootstrapCapabilities = _configuration.GetSection("Capabilities").GetChildren().Count();
         var bootstrapConnections = _configuration.GetSection("ExternalConnections:Connections").GetChildren().Count();
         var mode = DetermineMode(snapshot, bootstrapCapabilities, bootstrapConnections);
+        var productionLike = IsProductionLike();
 
         _metrics.IncrementCounter(MetricNames.PlatformCatalogSourceModeTotal, new Dictionary<string, string>
         {
             ["mode"] = mode,
+            ["environment"] = EffectiveEnvironmentName(),
+            ["production_like"] = productionLike ? "true" : "false",
             ["platform_valid"] = snapshot.IsValid ? "true" : "false"
         });
 
         _logger.LogInformation(
-            "PlatformCatalogSourceReport | Mode: {Mode} | CatalogFound: {CatalogFound} | CatalogValid: {CatalogValid} | PlatformCapabilities: {PlatformCapabilities} | PlatformConnections: {PlatformConnections} | BootstrapCapabilities: {BootstrapCapabilities} | BootstrapConnections: {BootstrapConnections} | BootstrapFallbackAllowed: {BootstrapFallbackAllowed}",
+            "PlatformCatalogSourceReport | Mode: {Mode} | Environment: {Environment} | ProductionLike: {ProductionLike} | CatalogFound: {CatalogFound} | CatalogValid: {CatalogValid} | PlatformCapabilities: {PlatformCapabilities} | PlatformConnections: {PlatformConnections} | BootstrapCapabilities: {BootstrapCapabilities} | BootstrapConnections: {BootstrapConnections} | BootstrapFallbackAllowed: {BootstrapFallbackAllowed}",
             mode,
+            EffectiveEnvironmentName(),
+            productionLike,
             snapshot.CatalogFound,
             snapshot.IsValid,
             snapshot.Capabilities.Count,
@@ -55,9 +60,19 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
 
         if (mode is "bootstrap_only" or "mixed")
         {
-            _logger.LogWarning(
-                "PlatformCatalogBootstrapFallbackActive | Mode: {Mode} | Bootstrap configuration is active and must not be treated as durable production source-of-truth.",
-                mode);
+            if (productionLike)
+            {
+                _logger.LogError(
+                    "PlatformCatalogBootstrapFallbackProductionRisk | Mode: {Mode} | Environment: {Environment} | Bootstrap catalog fallback is not acceptable as normal production source-of-truth.",
+                    mode,
+                    EffectiveEnvironmentName());
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "PlatformCatalogBootstrapFallbackActive | Mode: {Mode} | Bootstrap configuration is active and must not be treated as durable production source-of-truth.",
+                    mode);
+            }
         }
 
         return Task.CompletedTask;
@@ -84,4 +99,11 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
             ? "mixed"
             : "platform";
     }
+
+    private bool IsProductionLike() =>
+        _options.ProductionLikeEnvironments.Any(environment =>
+            string.Equals(environment, EffectiveEnvironmentName(), StringComparison.OrdinalIgnoreCase));
+
+    private string EffectiveEnvironmentName() =>
+        string.IsNullOrWhiteSpace(_options.EnvironmentName) ? "development" : _options.EnvironmentName.Trim();
 }

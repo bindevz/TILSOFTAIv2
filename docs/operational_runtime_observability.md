@@ -1,4 +1,4 @@
-# Operational Runtime Observability - Sprint 10
+# Operational Runtime Observability - Sprint 11
 
 Sprint 9 removes the legacy bridge/ChatPipeline execution path. Bridge metrics remain as historical instrumentation and to record explicit retired-legacy attempts, but there is no production bridge executor.
 
@@ -13,8 +13,8 @@ Sprint 9 removes the legacy bridge/ChatPipeline execution path. Bridge metrics r
 | `tilsoftai_runtime_capability_invocations_total` | Capability invocations by key and adapter. | `agent`, `capability`, `adapter`, `success` |
 | `tilsoftai_runtime_adapter_failures_total` | Adapter-level failures from native execution. | `agent`, `capability`, `adapter`, `error` |
 | `tilsoftai_runtime_execution_duration_seconds` | Runtime duration histogram for supervisor, native, bridge, and approval paths. | `path` plus path-specific labels |
-| `tilsoftai_platform_catalog_source_mode_total` | Startup catalog source-of-truth report. | `mode`, `platform_valid` |
-| `tilsoftai_platform_catalog_mutations_total` | Catalog control-plane submit/review/apply operations. | `operation`, `record_type`, `success` |
+| `tilsoftai_platform_catalog_source_mode_total` | Startup catalog source-of-truth report. | `mode`, `environment`, `production_like`, `platform_valid` |
+| `tilsoftai_platform_catalog_mutations_total` | Catalog control-plane preview/submit/review/apply operations. | `operation`, `record_type`, `risk_level`, `environment`, `success` |
 
 ## How To Read The Signals
 
@@ -32,9 +32,9 @@ Sprint 9 removes the legacy bridge/ChatPipeline execution path. Bridge metrics r
 
 Runtime instrumentation emits `RuntimeExecutionObserved` for supervisor, native, retired bridge, and approval paths. Adapter failures emit `RuntimeAdapterFailureObserved`.
 
-Catalog startup emits `PlatformCatalogSourceReport` with source mode, platform counts, bootstrap counts, and integrity status. When fallback is active it also emits `PlatformCatalogBootstrapFallbackActive`.
+Catalog startup emits `PlatformCatalogSourceReport` with source mode, environment, production-like status, platform counts, bootstrap counts, and integrity status. When fallback is active outside production it emits `PlatformCatalogBootstrapFallbackActive`; in production-like environments it emits `PlatformCatalogBootstrapFallbackProductionRisk`.
 
-Catalog mutation emits `PlatformCatalogMutationProposed` and governance/config-change audit events for submit, approve, reject, and apply operations.
+Catalog mutation emits `PlatformCatalogMutationProposed` and governance/config-change audit events for submit, duplicate-submit replay, approve, reject, apply, and apply replay operations.
 
 Look for these fields:
 - `Path`: `supervisor`, `native`, `bridge`, or `approval`

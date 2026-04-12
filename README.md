@@ -1,8 +1,8 @@
 # TILSOFTAI V3
 
-TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 10 adds governed platform catalog mutation, catalog source-of-truth visibility, integrity validation, and explicit module package classifications.
+TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 11 hardens the governed platform catalog control plane with preview, version safety, idempotent replay behavior, production-like approval policy, stricter fallback posture, and contract schema lifecycle metadata.
 
-## Current Runtime Shape (Sprint 10)
+## Current Runtime Shape (Sprint 11)
 
 ```text
 API / Hub / OpenAI surface
@@ -37,6 +37,8 @@ External connection catalog:
 Catalog control plane:
   PlatformCatalogController
     -> IPlatformCatalogControlPlane
+    -> preview / submit / approve / reject / apply
+    -> expected version + idempotency + risk policy
     -> IPlatformCatalogMutationStore
     -> PlatformCatalogChangeRequest
     -> PlatformCapabilityCatalog / PlatformExternalConnectionCatalog
@@ -48,27 +50,27 @@ Write requests:
      -> SqlToolAdapter
 ```
 
-## Sprint 10 Changes
+## Sprint 11 Changes
 
-### Governed platform catalog mutation
-- Added SQL-backed platform catalog change requests.
-- Added submit, approve, reject, and apply control-plane APIs.
-- Catalog mutation requires configured submit/approve roles and blocks self-approval by default.
-- Mutation emits governance audit, config-change audit, and catalog mutation metrics.
+### Production-hard catalog mutation
+- Added dry-run preview for mutation validation.
+- Added expected-version checks for existing-record changes.
+- Added duplicate pending-change detection through payload hash and idempotency key.
+- Added idempotent apply replay for already applied changes.
+- Added rollback metadata through `RollbackOfChangeId` for compensating changes.
 
-### Catalog source-of-truth visibility
-- `/health/ready` includes `platform-catalog`.
-- Startup reports `platform`, `mixed`, `bootstrap_only`, or `empty` source modes.
-- Bootstrap fallback is visible as a degraded readiness state.
+### Policy-grade governance
+- Split submit, approve, apply, high-risk approval, and break-glass roles.
+- Production-like environments require expected versions and can require independent apply.
+- Disables and external connection changes are high-risk.
 
-### Catalog integrity and contracts
-- Platform catalog load and mutation validate duplicate keys, REST connection references, secret references, and required argument contracts.
-- Production catalog records include explicit argument contracts.
-- No-argument summary/list capabilities reject unexpected arguments.
+### Source-of-truth tightening
+- Production config disables bootstrap fallback by default.
+- `mixed` and `bootstrap_only` source modes are unhealthy in production-like environments when strict posture is enabled.
 
-### Module package classification
-- Remaining module packages are classified as packaging-only or diagnostic-only.
-- Module health reports classifications while staying outside ready checks.
+### Contract and module end-state
+- `ArgumentContract` includes `ContractVersion`, `SchemaDialect`, and `SchemaRef`.
+- Module packages are formally retained only as non-runtime packaging or diagnostic artifacts.
 
 ## Remaining Transitional Components
 
@@ -88,6 +90,9 @@ See `docs/compatibility_debt_report.md` and `docs/enterprise_readiness_gap_repor
 - `docs/runtime_readiness.md`
 - `docs/external_integration_governance.md`
 - `docs/platform_catalog_governance.md`
+- `docs/catalog_control_plane_runbook.md`
+- `docs/catalog_failure_drills.md`
+- `docs/catalog_contract_schema_lifecycle.md`
 - `docs/module_package_classification.md`
 - `docs/deep_analytics_validation_boundary.md`
 - `docs/cleanup_report.md`

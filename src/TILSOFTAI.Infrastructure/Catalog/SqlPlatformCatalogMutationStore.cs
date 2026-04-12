@@ -80,6 +80,44 @@ public sealed class SqlPlatformCatalogMutationStore : IPlatformCatalogMutationSt
         return await reader.ReadAsync(ct) ? ReadChange(reader) : null;
     }
 
+    public async Task<CatalogRecordVersion> GetRecordVersionAsync(string recordType, string recordKey, CancellationToken ct)
+    {
+        await using var connection = await OpenAsync(ct);
+        await using var command = CreateCommand(connection, "dbo.app_platform_catalogrecord_version");
+        command.Parameters.Add(new SqlParameter("@RecordType", SqlDbType.NVarChar, 50) { Value = recordType });
+        command.Parameters.Add(new SqlParameter("@RecordKey", SqlDbType.NVarChar, 200) { Value = recordKey });
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        return await reader.ReadAsync(ct)
+            ? new CatalogRecordVersion
+            {
+                Exists = Convert.ToBoolean(reader["RecordExists"]),
+                VersionTag = reader["VersionTag"] as string ?? string.Empty
+            }
+            : new CatalogRecordVersion();
+    }
+
+    public async Task<CatalogChangeRequestRecord?> FindDuplicatePendingChangeAsync(
+        string tenantId,
+        string recordType,
+        string operation,
+        string recordKey,
+        string payloadHash,
+        string idempotencyKey,
+        CancellationToken ct)
+    {
+        await using var connection = await OpenAsync(ct);
+        await using var command = CreateCommand(connection, "dbo.app_platform_catalogchange_find_duplicate");
+        command.Parameters.Add(new SqlParameter("@TenantId", SqlDbType.NVarChar, 50) { Value = tenantId });
+        command.Parameters.Add(new SqlParameter("@RecordType", SqlDbType.NVarChar, 50) { Value = recordType });
+        command.Parameters.Add(new SqlParameter("@Operation", SqlDbType.NVarChar, 50) { Value = operation });
+        command.Parameters.Add(new SqlParameter("@RecordKey", SqlDbType.NVarChar, 200) { Value = recordKey });
+        command.Parameters.Add(new SqlParameter("@PayloadHash", SqlDbType.NVarChar, 128) { Value = payloadHash });
+        command.Parameters.Add(new SqlParameter("@IdempotencyKey", SqlDbType.NVarChar, 200) { Value = DbNullable(idempotencyKey) });
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? ReadChange(reader) : null;
+    }
+
     public async Task<CatalogChangeRequestRecord> CreateChangeAsync(CatalogChangeRequestRecord change, CancellationToken ct)
     {
         await using var connection = await OpenAsync(ct);
@@ -125,7 +163,7 @@ public sealed class SqlPlatformCatalogMutationStore : IPlatformCatalogMutationSt
         command.Parameters.Add(new SqlParameter("@IntegrationBindingJson", SqlDbType.NVarChar, -1) { Value = JsonSerializer.Serialize(capability.IntegrationBinding, JsonOptions) });
         command.Parameters.Add(new SqlParameter("@ArgumentContractJson", SqlDbType.NVarChar, -1) { Value = JsonSerializer.Serialize(capability.ArgumentContract, JsonOptions) });
         AddMutationMetadata(command, change);
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteMutationAsync(command, "Capability upsert failed due to a catalog version conflict.", ct);
     }
 
     public async Task DisableCapabilityAsync(string capabilityKey, CatalogChangeRequestRecord change, CancellationToken ct)
@@ -134,7 +172,7 @@ public sealed class SqlPlatformCatalogMutationStore : IPlatformCatalogMutationSt
         await using var command = CreateCommand(connection, "dbo.app_platform_capabilitycatalog_disable");
         command.Parameters.Add(new SqlParameter("@CapabilityKey", SqlDbType.NVarChar, 200) { Value = capabilityKey });
         AddMutationMetadata(command, change);
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteMutationAsync(command, "Capability disable failed due to a catalog version conflict.", ct);
     }
 
     public async Task UpsertExternalConnectionAsync(string connectionName, ExternalConnectionOptions connection, CatalogChangeRequestRecord change, CancellationToken ct)
@@ -153,7 +191,7 @@ public sealed class SqlPlatformCatalogMutationStore : IPlatformCatalogMutationSt
         command.Parameters.Add(new SqlParameter("@HeadersJson", SqlDbType.NVarChar, -1) { Value = JsonSerializer.Serialize(connection.Headers, JsonOptions) });
         command.Parameters.Add(new SqlParameter("@HeaderSecretsJson", SqlDbType.NVarChar, -1) { Value = JsonSerializer.Serialize(connection.HeaderSecrets, JsonOptions) });
         AddMutationMetadata(command, change);
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteMutationAsync(command, "External connection upsert failed due to a catalog version conflict.", ct);
     }
 
     public async Task DisableExternalConnectionAsync(string connectionName, CatalogChangeRequestRecord change, CancellationToken ct)
@@ -162,7 +200,7 @@ public sealed class SqlPlatformCatalogMutationStore : IPlatformCatalogMutationSt
         await using var command = CreateCommand(connection, "dbo.app_platform_externalconnectioncatalog_disable");
         command.Parameters.Add(new SqlParameter("@ConnectionName", SqlDbType.NVarChar, 200) { Value = connectionName });
         AddMutationMetadata(command, change);
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteMutationAsync(command, "External connection disable failed due to a catalog version conflict.", ct);
     }
 
     private async Task<CatalogChangeRequestRecord> ReviewAsync(
@@ -207,13 +245,31 @@ public sealed class SqlPlatformCatalogMutationStore : IPlatformCatalogMutationSt
         command.Parameters.Add(new SqlParameter("@Owner", SqlDbType.NVarChar, 200) { Value = change.Owner });
         command.Parameters.Add(new SqlParameter("@ChangeNote", SqlDbType.NVarChar, 1000) { Value = change.ChangeNote });
         command.Parameters.Add(new SqlParameter("@VersionTag", SqlDbType.NVarChar, 100) { Value = DbNullable(change.VersionTag) });
+        command.Parameters.Add(new SqlParameter("@ExpectedVersionTag", SqlDbType.NVarChar, 100) { Value = DbNullable(change.ExpectedVersionTag) });
+        command.Parameters.Add(new SqlParameter("@IdempotencyKey", SqlDbType.NVarChar, 200) { Value = DbNullable(change.IdempotencyKey) });
+        command.Parameters.Add(new SqlParameter("@RollbackOfChangeId", SqlDbType.NVarChar, 64) { Value = DbNullable(change.RollbackOfChangeId) });
+        command.Parameters.Add(new SqlParameter("@PayloadHash", SqlDbType.NVarChar, 128) { Value = change.PayloadHash });
+        command.Parameters.Add(new SqlParameter("@RiskLevel", SqlDbType.NVarChar, 50) { Value = change.RiskLevel });
+        command.Parameters.Add(new SqlParameter("@EnvironmentName", SqlDbType.NVarChar, 100) { Value = change.EnvironmentName });
+        command.Parameters.Add(new SqlParameter("@BreakGlass", SqlDbType.Bit) { Value = change.BreakGlass });
+        command.Parameters.Add(new SqlParameter("@BreakGlassJustification", SqlDbType.NVarChar, 1000) { Value = DbNullable(change.BreakGlassJustification) });
         command.Parameters.Add(new SqlParameter("@RequestedByUserId", SqlDbType.NVarChar, 200) { Value = change.RequestedByUserId });
     }
 
     private static void AddMutationMetadata(SqlCommand command, CatalogChangeRequestRecord change)
     {
         command.Parameters.Add(new SqlParameter("@VersionTag", SqlDbType.NVarChar, 100) { Value = DbNullable(change.VersionTag) });
+        command.Parameters.Add(new SqlParameter("@ExpectedVersionTag", SqlDbType.NVarChar, 100) { Value = DbNullable(change.ExpectedVersionTag) });
         command.Parameters.Add(new SqlParameter("@UpdatedBy", SqlDbType.NVarChar, 200) { Value = change.AppliedByUserId ?? change.ReviewedByUserId ?? change.RequestedByUserId });
+    }
+
+    private static async Task ExecuteMutationAsync(SqlCommand command, string conflictMessage, CancellationToken ct)
+    {
+        var affected = await command.ExecuteNonQueryAsync(ct);
+        if (affected == 0)
+        {
+            throw new InvalidOperationException(conflictMessage);
+        }
     }
 
     private static CapabilityDescriptor ReadCapability(SqlDataReader reader) => new()
@@ -256,6 +312,14 @@ public sealed class SqlPlatformCatalogMutationStore : IPlatformCatalogMutationSt
         Owner = reader["Owner"] as string ?? string.Empty,
         ChangeNote = reader["ChangeNote"] as string ?? string.Empty,
         VersionTag = reader["VersionTag"] as string ?? string.Empty,
+        ExpectedVersionTag = reader["ExpectedVersionTag"] as string ?? string.Empty,
+        IdempotencyKey = reader["IdempotencyKey"] as string ?? string.Empty,
+        RollbackOfChangeId = reader["RollbackOfChangeId"] as string ?? string.Empty,
+        PayloadHash = reader["PayloadHash"] as string ?? string.Empty,
+        RiskLevel = reader["RiskLevel"] as string ?? CatalogChangeRiskLevels.Standard,
+        EnvironmentName = reader["EnvironmentName"] as string ?? string.Empty,
+        BreakGlass = reader["BreakGlass"] != DBNull.Value && Convert.ToBoolean(reader["BreakGlass"]),
+        BreakGlassJustification = reader["BreakGlassJustification"] as string ?? string.Empty,
         RequestedByUserId = reader["RequestedByUserId"] as string ?? string.Empty,
         RequestedAtUtc = reader["RequestedAtUtc"] != DBNull.Value ? (DateTime)reader["RequestedAtUtc"] : DateTime.MinValue,
         ReviewedByUserId = reader["ReviewedByUserId"] as string,
