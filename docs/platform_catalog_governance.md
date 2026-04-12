@@ -1,4 +1,4 @@
-# Platform Catalog Governance - Sprint 11
+# Platform Catalog Governance - Sprint 12
 
 Production capability and external connection records are now platform catalog records.
 
@@ -21,7 +21,7 @@ External connection records resolve in this order:
 
 ## Governed Change Control
 
-Sprint 10 adds the platform catalog control plane for admin-managed mutation.
+The platform catalog control plane owns admin-managed mutation and Sprint 12 adds promotion evaluation before production-like rollout.
 
 Control-plane endpoints:
 
@@ -33,6 +33,10 @@ Control-plane endpoints:
 - `POST /api/platform-catalog/changes/{changeId}/approve`
 - `POST /api/platform-catalog/changes/{changeId}/reject`
 - `POST /api/platform-catalog/changes/{changeId}/apply`
+- `POST /api/platform-catalog/promotion-gate/evaluate`
+- `GET /api/platform-catalog/slo-definitions`
+- `GET /api/platform-catalog/certification-evidence`
+- `POST /api/platform-catalog/certification-evidence`
 
 Configuration:
 
@@ -73,7 +77,7 @@ Every preview, submit, duplicate-submit replay, approve, reject, apply, and appl
 
 ## Change Safety
 
-Sprint 11 adds:
+The governed path includes:
 
 - optimistic concurrency through `ExpectedVersionTag`,
 - duplicate pending-change detection through payload hash and `IdempotencyKey`,
@@ -81,8 +85,25 @@ Sprint 11 adds:
 - idempotent apply replay for already applied changes,
 - production-like independent apply policy,
 - rollback-by-compensating-change metadata through `RollbackOfChangeId`.
+- promotion gate checks for source mode, preview validity, expected-version coverage, approved-change status, and certification evidence.
 
-Operators should preview every production change before submit and include a ticket-derived idempotency key.
+Operators should preview every production change before submit, include a ticket-derived idempotency key, and run the promotion gate before production-like submit/apply decisions.
+
+## Certification Evidence
+
+Sprint 12 adds durable certification evidence for staging and production-like catalog operations. Accepted evidence can satisfy promotion gate requirements only when it is recorded for the target environment.
+
+Required evidence kinds are configured in `CatalogCertification:RequiredEvidenceKinds`. The default package requires:
+
+- `runbook_execution`,
+- `preview_failure_drill`,
+- `version_conflict_drill`,
+- `duplicate_submit_drill`,
+- `sql_apply_outage_drill`,
+- `fallback_risk_drill`,
+- `operator_signoff`.
+
+Synthetic unit tests do not count as live certification evidence.
 
 ## Durable SQL Shape
 
@@ -105,6 +126,9 @@ Sprint 10 SQL catalog shape includes durable records, change requests, list proc
 - `dbo.app_platform_externalconnectioncatalog_disable`
 - `dbo.app_platform_catalogrecord_version`
 - `dbo.app_platform_catalogchange_find_duplicate`
+- `dbo.PlatformCatalogCertificationEvidence`
+- `dbo.app_platform_catalogcertification_list`
+- `dbo.app_platform_catalogcertification_create`
 
 The file catalog at `catalog/platform-catalog.json` remains the bootstrapped durable platform record set for local/runtime startup. SQL is the admin-managed mutation target for catalog operations.
 

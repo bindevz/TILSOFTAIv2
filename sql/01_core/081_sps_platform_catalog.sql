@@ -436,3 +436,79 @@ BEGIN
      WHERE ConnectionName = @ConnectionName;
 END;
 GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_catalogcertification_list
+    @EnvironmentName NVARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        EvidenceId,
+        EnvironmentName,
+        EvidenceKind,
+        Status,
+        Summary,
+        EvidenceUri,
+        RelatedChangeId,
+        RelatedIncidentId,
+        OperatorUserId,
+        ApprovedByUserId,
+        CorrelationId,
+        CapturedAtUtc
+    FROM dbo.PlatformCatalogCertificationEvidence
+    WHERE EnvironmentName = @EnvironmentName
+    ORDER BY CapturedAtUtc DESC;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_catalogcertification_create
+    @EvidenceId NVARCHAR(64),
+    @EnvironmentName NVARCHAR(100),
+    @EvidenceKind NVARCHAR(100),
+    @Status NVARCHAR(50),
+    @Summary NVARCHAR(1000),
+    @EvidenceUri NVARCHAR(1000) = NULL,
+    @RelatedChangeId NVARCHAR(64) = NULL,
+    @RelatedIncidentId NVARCHAR(100) = NULL,
+    @OperatorUserId NVARCHAR(200),
+    @ApprovedByUserId NVARCHAR(200) = NULL,
+    @CorrelationId NVARCHAR(100) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO dbo.PlatformCatalogCertificationEvidence
+    (
+        EvidenceId,
+        EnvironmentName,
+        EvidenceKind,
+        Status,
+        Summary,
+        EvidenceUri,
+        RelatedChangeId,
+        RelatedIncidentId,
+        OperatorUserId,
+        ApprovedByUserId,
+        CorrelationId
+    )
+    VALUES
+    (
+        @EvidenceId,
+        LTRIM(RTRIM(@EnvironmentName)),
+        LTRIM(RTRIM(@EvidenceKind)),
+        LOWER(LTRIM(RTRIM(@Status))),
+        LTRIM(RTRIM(@Summary)),
+        NULLIF(LTRIM(RTRIM(@EvidenceUri)), ''),
+        NULLIF(LTRIM(RTRIM(@RelatedChangeId)), ''),
+        NULLIF(LTRIM(RTRIM(@RelatedIncidentId)), ''),
+        LTRIM(RTRIM(@OperatorUserId)),
+        NULLIF(LTRIM(RTRIM(@ApprovedByUserId)), ''),
+        NULLIF(LTRIM(RTRIM(@CorrelationId)), '')
+    );
+
+    SELECT *
+    FROM dbo.PlatformCatalogCertificationEvidence
+    WHERE EvidenceId = @EvidenceId;
+END;
+GO

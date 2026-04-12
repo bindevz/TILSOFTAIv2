@@ -1,0 +1,224 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 12.
+
+Baseline repository reality (after Sprint 11):
+- Sprint 9 already retired `LegacyChatPipelineBridge`, `ChatPipeline`, `ChatRequest`, and `ChatResult`.
+- Production capability and external connection records load from `catalog/platform-catalog.json`.
+- The platform catalog control plane now supports:
+  - preview
+  - submit
+  - approve
+  - reject
+  - apply
+- Catalog mutation safety now includes:
+  - `ExpectedVersionTag`
+  - `IdempotencyKey`
+  - duplicate pending-change detection
+  - idempotent apply replay
+  - `RollbackOfChangeId`
+- Governance is now environment-aware and risk-aware:
+  - submit roles
+  - approve roles
+  - apply roles
+  - high-risk approve roles
+  - break-glass roles
+  - production-like environment policy
+- Production configuration disables bootstrap fallback by default.
+- `mixed` and `bootstrap_only` are unhealthy in strict production-like posture.
+- Runbooks and failure drills now exist for the catalog control plane.
+- `ArgumentContract` now includes lifecycle metadata:
+  - `ContractVersion`
+  - `SchemaDialect`
+  - `SchemaRef`
+- Module packages are formally retained only as non-runtime packaging or diagnostic artifacts.
+
+The platform is now very close to enterprise-grade.
+However, it is still not fully enterprise-grade because:
+- the control plane is production-safe by code and documentation, but not yet fully live-certified through operational evidence,
+- deployment and promotion gates are not yet the dominant protection layer,
+- control-plane SLOs, alerts, and escalation paths are not yet the center of operational maturity,
+- contract lifecycle governance exists but still needs stronger release enforcement,
+- and emergency fallback / break-glass paths still need tighter containment and organizational friction.
+
+Sprint 12 mission:
+Turn the platform from “production-safe by design” into “enterprise-grade by demonstrated operation”.
+
+Primary objective:
+1. Run live certification of the control plane in staging / prod-like environments.
+2. Add deployment and promotion gates that block unsafe catalog states and unsafe catalog changes.
+3. Define and instrument control-plane SLOs, alerts, and escalation paths.
+4. Improve audit and evidence ergonomics for high-risk changes and rollback chains.
+5. Enforce contract governance as a release discipline.
+6. Tighten fallback and break-glass containment.
+7. Produce signed-off operational evidence.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the runtime orchestration owner.
+2. Platform catalog records remain the intended production source-of-truth.
+3. Bootstrap configuration remains fallback only, not the normal control plane.
+4. The governed mutation lifecycle must not weaken.
+5. Operational evidence is now the main enterprise-grade differentiator.
+6. Promotion gates must become first-class safety controls.
+7. Observability must support operator action, not just data exhaust.
+8. Contract lifecycle must be part of change governance, not optional metadata.
+9. Break-glass and fallback must remain rare, explicit, and reviewable.
+10. Sprint 12 success is measured by production trust and certification evidence, not runtime novelty.
+
+Primary Sprint 12 goals:
+
+A. Live-certify the control plane
+- Execute the catalog runbook in staging / prod-like environments.
+- Execute failure drills for:
+  - preview failure
+  - version conflict
+  - duplicate submit
+  - SQL unavailable during apply
+  - fallback risk in production-like posture
+- Capture operator evidence and sign-off.
+- Make certification artifacts inspectable.
+
+B. Harden deployment and promotion gates
+- Block promotion when source mode is unsafe.
+- Block promotion when preview fails.
+- Block promotion when contract validation fails.
+- Block production apply when approvals, expected versions, or policy requirements are missing.
+- Make the release path self-defending.
+
+C. Add control-plane SLOs, SLIs, alerts, and escalation
+- Define preview / submit / approve / apply / rollback service levels.
+- Alert on:
+  - production fallback source modes
+  - repeated version conflicts
+  - repeated duplicate submits
+  - apply failures
+  - rollback surges
+- Define escalation ownership and runbooks.
+
+D. Improve audit and evidence ergonomics
+- Link change tickets, change ids, correlation ids, and rollback chains more clearly.
+- Make high-risk change history easier to inspect.
+- Improve incident and post-incident reviewability.
+
+E. Enforce contract governance as release policy
+- Require preview for all production-bound catalog changes.
+- Require contract version hygiene.
+- Define breaking and non-breaking contract handling.
+- Add governance around schema artifacts when `SchemaRef` is used.
+- Preserve deterministic operator-readable validation behavior.
+
+F. Tighten emergency path containment
+- Define who may authorize fallback re-enable in emergencies.
+- Define who may invoke break-glass and how it is audited.
+- Require after-action review for any emergency path use.
+- Ensure emergency paths cannot quietly become normal paths.
+
+G. Continue enterprise proof, not feature expansion
+- Only add new runtime surface area if it directly improves certification, governance, or operational proof.
+- Do not turn Sprint 12 into a feature sprint.
+
+Non-negotiable rules:
+1. Do not weaken preview / submit / approve / apply / rollback discipline.
+2. Do not reintroduce silent fallback behavior.
+3. Do not bypass release gates for convenience.
+4. Do not claim enterprise readiness without executed evidence.
+5. Do not add observability without explicit operator action paths.
+6. Do not let contract lifecycle remain optional in production release flows.
+7. Do not normalize break-glass or fallback usage.
+8. Do not store secret values in catalog metadata.
+9. Prefer evidence-backed policy enforcement over tribal process.
+10. Keep remaining compatibility and operational debt measurable.
+
+Explicitly in scope:
+- live certification in staging / prod-like environments
+- deployment and promotion gate hardening
+- SLO / SLI / alert / escalation design for the control plane
+- audit and evidence ergonomics
+- contract governance as release policy
+- fallback and break-glass containment
+- acceptance and sign-off evidence
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- broad workflow expansion
+- platform-marketplace style adapter growth
+
+Recommended implementation order:
+1. Execute live runbook and failure drills.
+2. Build and enforce release gates.
+3. Define SLOs, alerts, and escalation paths.
+4. Improve audit and evidence ergonomics.
+5. Enforce contract governance in promotion workflow.
+6. Tighten fallback and break-glass containment.
+7. Remove only low-risk non-runtime residue if certification work is already complete.
+
+Required architectural outcomes:
+1. The platform has live certification evidence in production-like environments.
+2. Unsafe catalog states and unsafe changes are blocked before promotion.
+3. Control-plane behavior is observable with actionable SLOs and alerts.
+4. High-risk changes and rollbacks are easy to reconstruct.
+5. Contract lifecycle is part of release governance.
+6. Emergency paths remain possible but organizationally expensive and fully auditable.
+7. The remaining gap to “fully enterprise-grade” is no longer architecture quality but only incremental operating refinements and scope choices.
+
+Definition of done:
+- Live runbook execution and failure drills are completed with evidence.
+- Release gates block unsafe source-mode and unsafe mutation conditions.
+- Control-plane SLOs, alerts, and escalation paths are documented and implemented.
+- Audit and rollback evidence are easier to inspect.
+- Contract governance is enforced in the release path.
+- Break-glass and fallback are tightly contained and after-action ready.
+- The platform is demonstrably more trustworthy in operation after Sprint 12 than after Sprint 11.
+
+Must-fail conditions:
+- no real staging / prod-like certification evidence exists
+- unsafe catalog posture can still pass through promotion
+- alerts exist without clear action paths
+- contract lifecycle is still structurally present but operationally optional
+- break-glass or fallback are still too easy to invoke
+- Sprint 12 drifts into feature work without materially improving operational proof
+
+Preferred implementation style:
+- explicit ownership
+- release safety
+- evidence-backed certification
+- actionable observability
+- operator-focused ergonomics
+- strict governance
+- contract discipline
+- deletion over drift
+- no architecture theater
+
+Required deliverables:
+1. Live certification and failure-drill evidence changes
+2. Release gate hardening changes
+3. SLO / alert / escalation changes
+4. Audit and evidence improvements
+5. Contract governance enforcement changes
+6. Fallback / break-glass containment changes
+7. Validation / test / runbook updates
+
+Required reporting after implementation:
+1. Summary of Sprint 12 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Live certification and failure-drill evidence changes
+6. Release gate hardening changes
+7. SLO / alert / escalation changes
+8. Audit and evidence improvements
+9. Contract governance enforcement changes
+10. Fallback / break-glass containment changes
+11. Validation / test / runbook improvements
+12. Remaining enterprise-grade blockers
+13. Recommended Sprint 13 priorities
+
+Final instruction:
+Sprint 12 is about live certification, promotion safety, and operational proof.
+Do not spend Sprint 12 adding runtime novelty.
+Do not turn Sprint 12 into a feature sprint.
+
+Spend it making the platform provably safe to deploy, provably safe to promote, and provably observable and recoverable under production-like conditions.

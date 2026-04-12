@@ -1,4 +1,4 @@
-# Compatibility Debt Report - Sprint 11
+# Compatibility Debt Report - Sprint 12
 
 This document tracks transitional components that still exist after Sprint 9, plus the components removed or reduced during the sprint.
 
@@ -40,6 +40,15 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Approval policy | Environment/risk aware | Apply roles, high-risk approver roles, break-glass roles, and production-like independent apply are configured separately. |
 | Contract lifecycle | Versioned baseline | `ArgumentContract` includes `ContractVersion`, `SchemaDialect`, and `SchemaRef` for future schema governance. |
 | Module package end-state | Decided | Module packages are retained only as non-runtime packaging or diagnostic artifacts. |
+
+## Changed In Sprint 12
+
+| Component | Result | Notes |
+|-----------|--------|-------|
+| Catalog promotion | Gate-enforced | Production-like catalog rollout now evaluates source mode, preview validity, expected version, approved-change state, break-glass posture, and certification evidence. |
+| Certification evidence | Durable | Evidence capture/listing is SQL-backed through `PlatformCatalogCertificationEvidence`. |
+| Release observability | Extended | Promotion gate and certification evidence counters were added alongside SLO/alert/escalation definitions. |
+| Emergency fallback | More contained | Mixed/bootstrap-only source modes and break-glass changes are blocked by release gates for production-like promotion. |
 
 ## Removed In Sprint 7
 
@@ -115,6 +124,6 @@ Current classifications:
 | Why it exists | Unit and integration tests use constructor-driven capability sets. Production uses `CompositeCapabilityRegistry`. |
 | Removal condition | None required; may become internal test support in a later cleanup. |
 
-## Sprint 11 Debt Priorities
+## Sprint 12 Debt Priorities
 
-Completed. Remaining priorities are live production exercising of SQL catalog workflows, operator training, and any future removal of non-runtime packages when packaging/diagnostic ownership no longer needs them.
+Completed in code. Remaining priorities are live staging/prod-like certification evidence, evidence artifact verification, operator training, and any future removal of non-runtime packages when packaging/diagnostic ownership no longer needs them.

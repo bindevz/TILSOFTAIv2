@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using TILSOFTAI.Api.Contracts.Catalog;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Domain.Metrics;
 using TILSOFTAI.Infrastructure.Catalog;
 using TILSOFTAI.Orchestration.Capabilities;
 
@@ -12,14 +14,26 @@ namespace TILSOFTAI.Api.Controllers;
 public sealed class PlatformCatalogController : ControllerBase
 {
     private readonly IPlatformCatalogControlPlane _controlPlane;
+    private readonly IPlatformCatalogPromotionGate _promotionGate;
+    private readonly IPlatformCatalogCertificationStore _certificationStore;
     private readonly IExecutionContextAccessor _contextAccessor;
+    private readonly CatalogControlPlaneOptions _options;
+    private readonly IMetricsService _metrics;
 
     public PlatformCatalogController(
         IPlatformCatalogControlPlane controlPlane,
-        IExecutionContextAccessor contextAccessor)
+        IPlatformCatalogPromotionGate promotionGate,
+        IPlatformCatalogCertificationStore certificationStore,
+        IExecutionContextAccessor contextAccessor,
+        IOptions<CatalogControlPlaneOptions> options,
+        IMetricsService metrics)
     {
         _controlPlane = controlPlane ?? throw new ArgumentNullException(nameof(controlPlane));
+        _promotionGate = promotionGate ?? throw new ArgumentNullException(nameof(promotionGate));
+        _certificationStore = certificationStore ?? throw new ArgumentNullException(nameof(certificationStore));
         _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(contextAccessor));
+        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
     }
 
     [HttpGet("capabilities")]
@@ -61,6 +75,87 @@ public sealed class PlatformCatalogController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("promotion-gate/evaluate")]
+    public async Task<ActionResult<CatalogPromotionGateResult>> EvaluatePromotionGate(
+        [FromBody] CatalogPromotionGateApiRequest? request,
+        CancellationToken ct)
+    {
+        if (request is null)
+        {
+            return BadRequest("promotion gate request is required.");
+        }
+
+        var context = ToCatalogContext();
+        RequireAnyCatalogRole(context);
+        var result = await _promotionGate.EvaluateAsync(request.ToGateRequest(), context, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("slo-definitions")]
+    public ActionResult<IReadOnlyList<CatalogControlPlaneSloDefinition>> GetSloDefinitions()
+    {
+        return Ok(_promotionGate.GetSloDefinitions());
+    }
+
+    [HttpGet("certification-evidence")]
+    public async Task<ActionResult<IReadOnlyList<CatalogCertificationEvidenceRecord>>> ListCertificationEvidence(
+        [FromQuery] string environmentName,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(environmentName))
+        {
+            return BadRequest("environmentName is required.");
+        }
+
+        RequireAnyCatalogRole(ToCatalogContext());
+        var records = await _certificationStore.ListEvidenceAsync(environmentName.Trim(), ct);
+        return Ok(records);
+    }
+
+    [HttpPost("certification-evidence")]
+    public async Task<ActionResult<CatalogCertificationEvidenceRecord>> CreateCertificationEvidence(
+        [FromBody] CatalogCertificationEvidenceApiRequest? request,
+        CancellationToken ct)
+    {
+        if (request is null)
+        {
+            return BadRequest("certification evidence request is required.");
+        }
+
+        var validationError = ValidateCertificationEvidenceRequest(request);
+        if (validationError is not null)
+        {
+            return validationError;
+        }
+
+        var context = ToCatalogContext();
+        RequireAnyCatalogRole(context);
+        var record = new CatalogCertificationEvidenceRecord
+        {
+            EvidenceId = Guid.NewGuid().ToString("N"),
+            EnvironmentName = request.EnvironmentName.Trim(),
+            EvidenceKind = request.EvidenceKind.Trim(),
+            Status = request.Status.Trim().ToLowerInvariant(),
+            Summary = request.Summary.Trim(),
+            EvidenceUri = request.EvidenceUri?.Trim() ?? string.Empty,
+            RelatedChangeId = request.RelatedChangeId?.Trim() ?? string.Empty,
+            RelatedIncidentId = request.RelatedIncidentId?.Trim() ?? string.Empty,
+            OperatorUserId = context.UserId,
+            ApprovedByUserId = request.ApprovedByUserId?.Trim() ?? string.Empty,
+            CorrelationId = context.CorrelationId,
+            CapturedAtUtc = DateTime.UtcNow
+        };
+
+        var created = await _certificationStore.CreateEvidenceAsync(record, ct);
+        _metrics.IncrementCounter(MetricNames.PlatformCatalogCertificationEvidenceTotal, new Dictionary<string, string>
+        {
+            ["environment"] = created.EnvironmentName,
+            ["evidence_kind"] = created.EvidenceKind,
+            ["status"] = created.Status
+        });
+        return CreatedAtAction(nameof(ListCertificationEvidence), new { environmentName = created.EnvironmentName }, created);
+    }
+
     [HttpPost("changes/{changeId}/approve")]
     public async Task<ActionResult<CatalogChangeRequestRecord>> Approve(string changeId, CancellationToken ct)
     {
@@ -93,4 +188,62 @@ public sealed class PlatformCatalogController : ControllerBase
             CorrelationId = context.CorrelationId
         };
     }
+
+    private void RequireAnyCatalogRole(CatalogMutationContext context)
+    {
+        var allowedRoles = _options.SubmitRoles
+            .Concat(_options.ApproveRoles)
+            .Concat(_options.ApplyRoles)
+            .Concat(_options.HighRiskApproveRoles)
+            .Concat(_options.BreakGlassRoles)
+            .ToArray();
+
+        if (allowedRoles.Length == 0
+            || allowedRoles.Any(role => context.Roles.Contains(role, StringComparer.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        throw new UnauthorizedAccessException("User does not have a catalog control-plane role.");
+    }
+
+    private ActionResult? ValidateCertificationEvidenceRequest(CatalogCertificationEvidenceApiRequest? request)
+    {
+        if (request is null)
+        {
+            return BadRequest("certification evidence request is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.EnvironmentName))
+        {
+            return BadRequest("environmentName is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.EvidenceKind))
+        {
+            return BadRequest("evidenceKind is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Status))
+        {
+            return BadRequest("status is required.");
+        }
+
+        if (!IsKnownEvidenceStatus(request.Status))
+        {
+            return BadRequest("status must be accepted, pending, or rejected.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Summary))
+        {
+            return BadRequest("summary is required.");
+        }
+
+        return null;
+    }
+
+    private static bool IsKnownEvidenceStatus(string status) =>
+        string.Equals(status, CatalogCertificationEvidenceStatus.Accepted, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, CatalogCertificationEvidenceStatus.Pending, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, CatalogCertificationEvidenceStatus.Rejected, StringComparison.OrdinalIgnoreCase);
 }

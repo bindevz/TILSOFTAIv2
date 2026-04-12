@@ -1,6 +1,6 @@
-# Enterprise Readiness Gap Report - Sprint 11
+# Enterprise Readiness Gap Report - Sprint 12
 
-Sprint 11 hardens the governed catalog control plane for production operation. Mutation is now safer under retries and races, production-like governance is stricter, fallback posture is less permissive, and module residue has a durable non-runtime end-state.
+Sprint 12 turns the governed catalog control plane into a certifiable production path. Promotion gates now block unsafe source modes, invalid previews, missing expected-version coverage, unsafe break-glass posture, and missing accepted evidence. The code can record and enforce certification readiness, but real staging/prod-like execution evidence is still required before claiming live certification.
 
 ## Completed Through Sprint 7
 
@@ -44,20 +44,25 @@ Sprint 11 hardens the governed catalog control plane for production operation. M
 - Rollback is represented through governed compensating changes with `RollbackOfChangeId`.
 - Contract metadata now includes `ContractVersion`, `SchemaDialect`, and `SchemaRef`.
 - Module packages are formally retained only as non-runtime packaging or diagnostic artifacts.
+- Catalog promotion gates evaluate source mode, preview validity, approved-change state, expected-version policy, break-glass containment, and certification evidence.
+- Certification evidence has durable SQL storage and API capture/list endpoints.
+- Catalog control-plane SLO and alert/escalation definitions are exposed through API and documentation.
+- Release, live certification, fallback, and emergency-path runbooks now describe promotion-gate and evidence requirements.
 
 ## Remaining Enterprise Blockers
 
 | Blocker | Why it matters | Recommended next action |
 |---------|----------------|-------------------------|
-| Catalog admin write path needs live certification | SQL-backed submit/review/apply is hardened, but real production operator drills still need evidence from deployed environments. | Run the runbook and failure drills against staging/prod-like SQL with signed-off evidence. |
+| Catalog admin write path needs live certification | The platform now stores and enforces evidence, but the local implementation run did not execute real staging/prod-like drills. | Run the runbook and failure drills against staging/prod-like SQL with signed-off accepted evidence. |
 | Bootstrap fallback still exists as an emergency mechanism | Production config is stricter, but fallback code remains available for lower environments and emergencies. | Keep production fallback disabled by default and alert on any fallback source mode. |
 | Module packages still physically exist | Their end-state is non-runtime, but physical removal is optional future cleanup. | Remove packages only when packaging/diagnostic ownership no longer needs them. |
 | SQL remains dominant | Most production capabilities are still SQL-backed even with two governed REST paths. | Continue adding governed non-SQL capabilities where production workflows require them. |
 | Contract richness still depends on capability shape | Schema lifecycle exists, but future records must keep using it consistently. | Enforce preview and contract review in catalog operations and evaluate JSON Schema artifacts when schemas become shared. |
+| Evidence acceptance still depends on operator discipline | The API records status and approver ids, but does not independently verify external evidence URLs. | Add evidence URI verification, artifact retention checks, or signed evidence bundles when compliance requires it. |
 
 ## Verification Notes
 
-Sprint 9 green baseline:
+Sprint 12 local verification should include:
 - `dotnet build src/TILSOFTAI.Api/TILSOFTAI.Api.csproj -nologo --no-restore /nr:false /p:UseSharedCompilation=false -m:1`
 - `dotnet test tests/TILSOFTAI.Tests/TILSOFTAI.Tests.csproj -nologo --no-restore /nr:false /p:UseSharedCompilation=false -m:1 -v:minimal`
 - `dotnet test tests/TILSOFTAI.IntegrationTests/TILSOFTAI.IntegrationTests.csproj -nologo --no-restore /nr:false /p:UseSharedCompilation=false -m:1 -v:minimal`

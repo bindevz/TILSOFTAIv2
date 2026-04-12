@@ -136,6 +136,47 @@ Catalog writes are governed by submit/review/apply roles.
 }
 ```
 
+## Catalog Certification And Promotion Gates
+
+Production-like promotion requires accepted certification evidence before catalog changes can pass the promotion gate.
+
+```json
+{
+  "CatalogCertification": {
+    "EnvironmentName": "prod",
+    "ProductionLikeEnvironments": [ "prod", "production", "staging" ],
+    "RequireCertificationEvidenceForProductionLikePromotion": true,
+    "RequiredEvidenceKinds": [
+      "runbook_execution",
+      "preview_failure_drill",
+      "version_conflict_drill",
+      "duplicate_submit_drill",
+      "sql_apply_outage_drill",
+      "fallback_risk_drill",
+      "operator_signoff"
+    ],
+    "PreviewSuccessSloPercent": 99,
+    "SubmitSuccessSloPercent": 99,
+    "ApproveSuccessSloPercent": 99,
+    "ApplySuccessSloPercent": 99,
+    "RollbackReadyMinutes": 30,
+    "VersionConflictAlertThresholdPerHour": 3,
+    "DuplicateSubmitAlertThresholdPerHour": 5,
+    "ApplyFailureAlertThresholdPerHour": 1,
+    "RollbackSurgeAlertThresholdPerHour": 2
+  }
+}
+```
+
+Promotion gate endpoints:
+
+- `POST /api/platform-catalog/promotion-gate/evaluate`
+- `GET /api/platform-catalog/slo-definitions`
+- `GET /api/platform-catalog/certification-evidence?environmentName=prod`
+- `POST /api/platform-catalog/certification-evidence`
+
+The gate blocks unsafe source modes, failed previews, missing expected versions, unapproved changes, break-glass changes that lack after-action evidence, and missing certification evidence.
+
 The control plane stores pending changes in SQL before applying them to `PlatformCapabilityCatalog` or `PlatformExternalConnectionCatalog`. Each change must include an owner, change note, record type, operation, and record payload. Capability records must include an `ArgumentContract`; REST records must reference a configured external connection and secret references instead of raw secret values.
 
 For existing records in production-like environments, mutation requests must include `ExpectedVersionTag`. Use `POST /api/platform-catalog/changes/preview` before submit to verify the expected version, payload hash, risk level, and duplicate pending-change status.

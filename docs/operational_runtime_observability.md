@@ -1,4 +1,4 @@
-# Operational Runtime Observability - Sprint 11
+# Operational Runtime Observability - Sprint 12
 
 Sprint 9 removes the legacy bridge/ChatPipeline execution path. Bridge metrics remain as historical instrumentation and to record explicit retired-legacy attempts, but there is no production bridge executor.
 
@@ -15,6 +15,8 @@ Sprint 9 removes the legacy bridge/ChatPipeline execution path. Bridge metrics r
 | `tilsoftai_runtime_execution_duration_seconds` | Runtime duration histogram for supervisor, native, bridge, and approval paths. | `path` plus path-specific labels |
 | `tilsoftai_platform_catalog_source_mode_total` | Startup catalog source-of-truth report. | `mode`, `environment`, `production_like`, `platform_valid` |
 | `tilsoftai_platform_catalog_mutations_total` | Catalog control-plane preview/submit/review/apply operations. | `operation`, `record_type`, `risk_level`, `environment`, `success` |
+| `tilsoftai_platform_catalog_promotion_gate_total` | Promotion gate evaluations for catalog rollout. | `environment`, `source_mode`, `production_like`, `allowed` |
+| `tilsoftai_platform_catalog_certification_evidence_total` | Certification evidence records captured through the API. | `environment`, `evidence_kind`, `status` |
 
 ## How To Read The Signals
 
@@ -27,6 +29,8 @@ Sprint 9 removes the legacy bridge/ChatPipeline execution path. Bridge metrics r
 - Duration histograms split by `path` let operations compare native, approval, and supervisor latency. Bridge labels are historical/retired-path signals only.
 - `tilsoftai_platform_catalog_source_mode_total{mode="bootstrap_only"}` or `{mode="mixed"}` means bootstrap fallback is still active and should be reviewed.
 - `tilsoftai_platform_catalog_mutations_total{success="false"}` means a catalog governance, validation, or persistence operation failed.
+- `tilsoftai_platform_catalog_promotion_gate_total{allowed="false"}` should be investigated before any production-like submit/apply action proceeds.
+- `tilsoftai_platform_catalog_certification_evidence_total{status="accepted"}` counts accepted evidence submissions, but operators must still inspect the linked evidence URI before sign-off.
 
 ## Structured Log Events
 
@@ -35,6 +39,8 @@ Runtime instrumentation emits `RuntimeExecutionObserved` for supervisor, native,
 Catalog startup emits `PlatformCatalogSourceReport` with source mode, environment, production-like status, platform counts, bootstrap counts, and integrity status. When fallback is active outside production it emits `PlatformCatalogBootstrapFallbackActive`; in production-like environments it emits `PlatformCatalogBootstrapFallbackProductionRisk`.
 
 Catalog mutation emits `PlatformCatalogMutationProposed` and governance/config-change audit events for submit, duplicate-submit replay, approve, reject, apply, and apply replay operations.
+
+Promotion gate results are deterministic API responses with `blockers`, `warnings`, `evidenceMissing`, source mode, environment, and production-like posture. Certification evidence capture stores operator, approver, correlation id, related change/incident ids, evidence kind, status, and evidence URI.
 
 Look for these fields:
 - `Path`: `supervisor`, `native`, `bridge`, or `approval`
@@ -70,6 +76,8 @@ REST adapter failure codes:
 2. If native failure counts rise for one capability, inspect adapter failures for the same `capability` and `adapter` labels.
 3. If approval execution failures rise, inspect write-action catalog, role validation, and `IWriteActionGuard` rejection logs.
 4. If `LEGACY_RUNTIME_RETIRED` appears, map the request class to a native capability or a supported supervisor-native general workflow.
+5. If a promotion gate blocks release, inspect the blocker code first, then check source mode, preview errors, expected version, approved-change state, and accepted evidence for the target environment.
+6. If certification evidence counts rise unexpectedly, verify the submitter role and linked evidence URI before treating the package as accepted.
 
 ## Readiness
 

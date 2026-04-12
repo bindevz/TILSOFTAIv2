@@ -151,6 +151,8 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<IPlatformCatalogProvider, FilePlatformCatalogProvider>();
         services.AddSingleton<IPlatformCatalogMutationStore, SqlPlatformCatalogMutationStore>();
         services.AddSingleton<IPlatformCatalogControlPlane, PlatformCatalogControlPlane>();
+        services.AddSingleton<IPlatformCatalogCertificationStore, SqlPlatformCatalogCertificationStore>();
+        services.AddSingleton<IPlatformCatalogPromotionGate, PlatformCatalogPromotionGate>();
         services.AddHostedService<PlatformCatalogStartupReporter>();
         services.AddSingleton<ConfigurationExternalConnectionCatalog>();
         services.AddSingleton<PlatformExternalConnectionCatalog>();
@@ -551,6 +553,15 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.ApplyRoles.Length > 0, "CatalogControlPlane:ApplyRoles must have at least one role.")
             .Validate(options => options.HighRiskApproveRoles.Length > 0, "CatalogControlPlane:HighRiskApproveRoles must have at least one role.")
             .Validate(options => options.MinBreakGlassJustificationLength >= 0, "CatalogControlPlane:MinBreakGlassJustificationLength must be >= 0.")
+            .ValidateOnStart();
+
+        services.AddOptions<CatalogCertificationOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.CatalogCertification))
+            .Validate(options => options.RequiredEvidenceKinds.Length > 0, "CatalogCertification:RequiredEvidenceKinds must have at least one evidence kind.")
+            .Validate(options => options.PreviewSuccessSloPercent is >= 0 and <= 100, "CatalogCertification:PreviewSuccessSloPercent must be between 0 and 100.")
+            .Validate(options => options.SubmitSuccessSloPercent is >= 0 and <= 100, "CatalogCertification:SubmitSuccessSloPercent must be between 0 and 100.")
+            .Validate(options => options.ApproveSuccessSloPercent is >= 0 and <= 100, "CatalogCertification:ApproveSuccessSloPercent must be between 0 and 100.")
+            .Validate(options => options.ApplySuccessSloPercent is >= 0 and <= 100, "CatalogCertification:ApplySuccessSloPercent must be between 0 and 100.")
             .ValidateOnStart();
         
         // Analytics options (PATCH 28)

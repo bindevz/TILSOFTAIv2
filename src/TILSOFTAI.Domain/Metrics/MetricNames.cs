@@ -51,5 +51,7 @@ namespace TILSOFTAI.Domain.Metrics
         // Sprint 10: platform catalog control-plane observability
         public const string PlatformCatalogSourceModeTotal = "tilsoftai_platform_catalog_source_mode_total";
         public const string PlatformCatalogMutationTotal = "tilsoftai_platform_catalog_mutations_total";
+        public const string PlatformCatalogPromotionGateTotal = "tilsoftai_platform_catalog_promotion_gate_total";
+        public const string PlatformCatalogCertificationEvidenceTotal = "tilsoftai_platform_catalog_certification_evidence_total";
     }
 }

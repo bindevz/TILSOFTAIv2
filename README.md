@@ -1,8 +1,8 @@
 # TILSOFTAI V3
 
-TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 11 hardens the governed platform catalog control plane with preview, version safety, idempotent replay behavior, production-like approval policy, stricter fallback posture, and contract schema lifecycle metadata.
+TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 12 adds promotion gates, certification evidence capture, control-plane SLO definitions, and emergency-path containment around the governed platform catalog.
 
-## Current Runtime Shape (Sprint 11)
+## Current Runtime Shape (Sprint 12)
 
 ```text
 API / Hub / OpenAI surface
@@ -39,6 +39,8 @@ Catalog control plane:
     -> IPlatformCatalogControlPlane
     -> preview / submit / approve / reject / apply
     -> expected version + idempotency + risk policy
+    -> IPlatformCatalogPromotionGate
+    -> IPlatformCatalogCertificationStore
     -> IPlatformCatalogMutationStore
     -> PlatformCatalogChangeRequest
     -> PlatformCapabilityCatalog / PlatformExternalConnectionCatalog
@@ -50,27 +52,24 @@ Write requests:
      -> SqlToolAdapter
 ```
 
-## Sprint 11 Changes
+## Sprint 12 Changes
 
-### Production-hard catalog mutation
-- Added dry-run preview for mutation validation.
-- Added expected-version checks for existing-record changes.
-- Added duplicate pending-change detection through payload hash and idempotency key.
-- Added idempotent apply replay for already applied changes.
-- Added rollback metadata through `RollbackOfChangeId` for compensating changes.
+### Promotion gates and evidence
+- Added promotion gate evaluation for source mode, preview validity, approved-change safety, expected-version policy, and certification evidence.
+- Added certification evidence capture for runbook execution, failure drills, and operator sign-off.
+- Added SQL storage for certification evidence.
 
-### Policy-grade governance
-- Split submit, approve, apply, high-risk approval, and break-glass roles.
-- Production-like environments require expected versions and can require independent apply.
-- Disables and external connection changes are high-risk.
+### SLOs and alerts
+- Added control-plane SLO definitions for preview, submit, approve, apply, and rollback readiness.
+- Added promotion gate and certification evidence metrics.
 
-### Source-of-truth tightening
-- Production config disables bootstrap fallback by default.
-- `mixed` and `bootstrap_only` source modes are unhealthy in production-like environments when strict posture is enabled.
+### Emergency containment
+- Documented fallback re-enable and break-glass authorization policy.
+- Promotion gates block unsafe fallback posture and break-glass changes without after-action evidence.
 
-### Contract and module end-state
-- `ArgumentContract` includes `ContractVersion`, `SchemaDialect`, and `SchemaRef`.
-- Module packages are formally retained only as non-runtime packaging or diagnostic artifacts.
+### Release discipline
+- Catalog release gate docs define CI/CD blockers and deterministic operator-readable blocker codes.
+- Live certification docs define accepted evidence kinds without fabricating environment execution.
 
 ## Remaining Transitional Components
 
@@ -93,6 +92,10 @@ See `docs/compatibility_debt_report.md` and `docs/enterprise_readiness_gap_repor
 - `docs/catalog_control_plane_runbook.md`
 - `docs/catalog_failure_drills.md`
 - `docs/catalog_contract_schema_lifecycle.md`
+- `docs/catalog_live_certification_evidence.md`
+- `docs/catalog_release_gates.md`
+- `docs/catalog_control_plane_slos_alerts.md`
+- `docs/catalog_emergency_path_policy.md`
 - `docs/module_package_classification.md`
 - `docs/deep_analytics_validation_boundary.md`
 - `docs/cleanup_report.md`

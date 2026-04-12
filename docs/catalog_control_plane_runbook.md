@@ -1,4 +1,4 @@
-# Catalog Control Plane Runbook - Sprint 11
+# Catalog Control Plane Runbook - Sprint 12
 
 The catalog control plane is the production path for changing capability and external connection metadata.
 
@@ -24,15 +24,23 @@ Production-like environments require two-person review and independent apply by 
    - expected `riskLevel`,
    - correct `currentVersionTag`,
    - no `duplicatePendingChangeId`.
-4. Submit `POST /api/platform-catalog/changes` with:
+4. Run `POST /api/platform-catalog/promotion-gate/evaluate` with the preview payload and target `environmentName`.
+5. Confirm the gate returns:
+   - `isAllowed=true`,
+   - production-like source mode is `platform`,
+   - no `blockers`,
+   - no missing required evidence when `includeCertificationEvidence=true`.
+6. Submit `POST /api/platform-catalog/changes` with:
    - `Owner`,
    - `ChangeNote`,
    - `VersionTag`,
    - `ExpectedVersionTag` for existing records,
    - `IdempotencyKey` from the change ticket.
-5. Approver reviews and calls `POST /api/platform-catalog/changes/{changeId}/approve`.
-6. Operator applies with `POST /api/platform-catalog/changes/{changeId}/apply`.
-7. Verify `/health/ready` remains `platform` mode and the changed record resolves as expected.
+7. Approver reviews and calls `POST /api/platform-catalog/changes/{changeId}/approve`.
+8. Run `POST /api/platform-catalog/promotion-gate/evaluate` again with `changeId`.
+9. Operator applies with `POST /api/platform-catalog/changes/{changeId}/apply`.
+10. Verify `/health/ready` remains `platform` mode and the changed record resolves as expected.
+11. Record certification evidence with `POST /api/platform-catalog/certification-evidence` when the runbook or drill was actually executed in the target environment.
 
 ## High-Risk Changes
 
@@ -43,6 +51,8 @@ High-risk changes include:
 - break-glass changes.
 
 High-risk changes require `platform_catalog_senior_approver` unless break-glass is explicitly enabled and audited.
+
+Break-glass changes remain blocked by the promotion gate until after-action evidence is recorded and reviewed. Use the emergency path only for an incident, not for normal release timing.
 
 ## Retry Rules
 
@@ -59,5 +69,7 @@ Rollbacks are compensating catalog changes, not hidden rewrites.
 3. Set `RollbackOfChangeId` to the original change id.
 4. Include the current `ExpectedVersionTag`.
 5. Use the normal preview, submit, approve, and apply lifecycle.
+6. Run the promotion gate before applying the compensating change.
+7. Record rollback evidence and the original `RollbackOfChangeId`.
 
 This preserves auditability and avoids unreviewed metadata rewinds.

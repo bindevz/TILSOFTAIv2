@@ -1,4 +1,4 @@
-# Catalog Contract Schema Lifecycle - Sprint 11
+# Catalog Contract Schema Lifecycle - Sprint 12
 
 Capability argument contracts are mandatory production metadata.
 
@@ -28,6 +28,7 @@ The current runtime enforces deterministic first-party typed rules. JSON Schema 
 - `SchemaRef` points to a governed schema artifact.
 - Runtime validation must continue to return deterministic operator-readable error codes.
 - Schema artifacts must not contain secrets.
+- Promotion gates must continue to evaluate previews before a schema-bearing catalog record moves into production-like rollout.
 
 ## Minimum Production Contract Standard
 
@@ -36,3 +37,4 @@ The current runtime enforces deterministic first-party typed rules. JSON Schema 
 - Enumerated values need explicit `Enum` lists.
 - Numeric values need `Min` and/or `Max` when business bounds exist.
 - Newly added catalog records must pass preview before submit.
+- Production-like contract changes must pass promotion gate evaluation and retain accepted certification evidence for the target environment.

@@ -119,3 +119,56 @@ BEGIN
         ON dbo.PlatformCatalogChangeRequest (TenantId, Status, RecordType, Operation, RecordKey, PayloadHash, IdempotencyKey);
 END;
 GO
+
+IF OBJECT_ID('dbo.PlatformCatalogCertificationEvidence', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PlatformCatalogCertificationEvidence
+    (
+        EvidenceId NVARCHAR(64) NOT NULL CONSTRAINT PK_PlatformCatalogCertificationEvidence PRIMARY KEY,
+        EnvironmentName NVARCHAR(100) NOT NULL,
+        EvidenceKind NVARCHAR(100) NOT NULL,
+        Status NVARCHAR(50) NOT NULL,
+        Summary NVARCHAR(1000) NOT NULL,
+        EvidenceUri NVARCHAR(1000) NULL,
+        RelatedChangeId NVARCHAR(64) NULL,
+        RelatedIncidentId NVARCHAR(100) NULL,
+        OperatorUserId NVARCHAR(200) NOT NULL,
+        ApprovedByUserId NVARCHAR(200) NULL,
+        CorrelationId NVARCHAR(100) NULL,
+        CapturedAtUtc DATETIME2(7) NOT NULL CONSTRAINT DF_PlatformCatalogCertificationEvidence_CapturedAtUtc DEFAULT (SYSUTCDATETIME())
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IX_PlatformCatalogCertificationEvidence_EnvironmentKindStatus'
+      AND object_id = OBJECT_ID('dbo.PlatformCatalogCertificationEvidence')
+)
+BEGIN
+    CREATE INDEX IX_PlatformCatalogCertificationEvidence_EnvironmentKindStatus
+        ON dbo.PlatformCatalogCertificationEvidence (EnvironmentName, EvidenceKind, Status, CapturedAtUtc DESC);
+END;
+GO
+
+IF OBJECT_ID('dbo.CK_PlatformCatalogCertificationEvidence_Status', 'C') IS NULL
+BEGIN
+    ALTER TABLE dbo.PlatformCatalogCertificationEvidence
+        ADD CONSTRAINT CK_PlatformCatalogCertificationEvidence_Status
+            CHECK (Status IN ('accepted', 'pending', 'rejected'));
+END;
+GO
+
+IF OBJECT_ID('dbo.CK_PlatformCatalogCertificationEvidence_NotEmpty', 'C') IS NULL
+BEGIN
+    ALTER TABLE dbo.PlatformCatalogCertificationEvidence
+        ADD CONSTRAINT CK_PlatformCatalogCertificationEvidence_NotEmpty
+            CHECK (
+                LEN(LTRIM(RTRIM(EnvironmentName))) > 0
+                AND LEN(LTRIM(RTRIM(EvidenceKind))) > 0
+                AND LEN(LTRIM(RTRIM(Summary))) > 0
+                AND LEN(LTRIM(RTRIM(OperatorUserId))) > 0
+            );
+END;
+GO

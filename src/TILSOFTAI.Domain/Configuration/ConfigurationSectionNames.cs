@@ -25,4 +25,5 @@ public static class ConfigurationSectionNames
     public const string ExternalConnections = "ExternalConnections";
     public const string PlatformCatalog = "PlatformCatalog";
     public const string CatalogControlPlane = "CatalogControlPlane";
+    public const string CatalogCertification = "CatalogCertification";
 }

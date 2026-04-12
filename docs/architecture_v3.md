@@ -1,4 +1,4 @@
-# Architecture V3 - Sprint 11
+# Architecture V3 - Sprint 12
 
 ## Runtime Shape
 
@@ -24,6 +24,8 @@ Native capability path:
 Catalog control plane:
   PlatformCatalogController
     -> IPlatformCatalogControlPlane
+    -> IPlatformCatalogPromotionGate
+    -> IPlatformCatalogCertificationStore
     -> IPlatformCatalogMutationStore
     -> PlatformCatalogChangeRequest
     -> PlatformCapabilityCatalog / PlatformExternalConnectionCatalog
@@ -101,6 +103,16 @@ Write path:
 | Contract lifecycle | `ArgumentContract` has `ContractVersion`, optional `SchemaDialect`, and optional `SchemaRef` for future JSON Schema interop. |
 | Module packages | Module packages are formally retained only as packaging or diagnostic artifacts, not runtime ownership. |
 
+## Sprint 12 Ownership Changes
+
+| Area | Sprint 12 state |
+|------|-----------------|
+| Promotion control | `IPlatformCatalogPromotionGate` evaluates source mode, preview validity, approved-change state, expected-version coverage, break-glass containment, and certification evidence. |
+| Certification evidence | `IPlatformCatalogCertificationStore` persists staging/prod-like evidence records with operator, approver, correlation, related change, related incident, evidence URI, kind, and status. |
+| Release SLOs | Catalog control-plane SLO and escalation definitions are exposed through `GET /api/platform-catalog/slo-definitions`. |
+| Emergency path | Production fallback and break-glass are blocked by gate policy until real evidence and after-action review exist. |
+| Live certification | The code now stores and enforces evidence readiness; actual live drill execution remains an operational prerequisite before production promotion. |
+
 ## Capabilities
 
 | Key | Domain | Adapter | Binding |
@@ -124,6 +136,10 @@ Runtime instrumentation emits:
 - `tilsoftai_runtime_capability_invocations_total`
 - `tilsoftai_runtime_adapter_failures_total`
 - `tilsoftai_runtime_execution_duration_seconds`
+- `tilsoftai_platform_catalog_source_mode_total`
+- `tilsoftai_platform_catalog_mutations_total`
+- `tilsoftai_platform_catalog_promotion_gate_total`
+- `tilsoftai_platform_catalog_certification_evidence_total`
 
 See `operational_runtime_observability.md` for interpretation guidance.
 
