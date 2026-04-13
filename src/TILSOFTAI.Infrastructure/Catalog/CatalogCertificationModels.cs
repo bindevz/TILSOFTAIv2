@@ -148,6 +148,9 @@ public sealed record CatalogSignerTrustStoreRecoveryResult
     public string Operation { get; init; } = string.Empty;
     public string SourcePath { get; init; } = string.Empty;
     public string BackupPath { get; init; } = string.Empty;
+    public string BackupBackendName { get; init; } = string.Empty;
+    public string BackupBackendClass { get; init; } = string.Empty;
+    public string CustodyBoundary { get; init; } = string.Empty;
     public string TrustStoreHash { get; init; } = string.Empty;
     public string ExpectedTrustStoreHash { get; init; } = string.Empty;
     public string TrustStoreVersion { get; init; } = string.Empty;

@@ -14,11 +14,20 @@ public sealed class FileSystemPlatformCatalogSignerTrustStore : IPlatformCatalog
     };
 
     private readonly CatalogCertificationOptions _options;
+    private readonly IPlatformCatalogTrustStoreRecoveryStorage _recoveryStorage;
     private readonly object _gate = new();
 
     public FileSystemPlatformCatalogSignerTrustStore(IOptions<CatalogCertificationOptions> options)
+        : this(options, new FileSystemPlatformCatalogTrustStoreRecoveryStorage(options))
+    {
+    }
+
+    public FileSystemPlatformCatalogSignerTrustStore(
+        IOptions<CatalogCertificationOptions> options,
+        IPlatformCatalogTrustStoreRecoveryStorage recoveryStorage)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _recoveryStorage = recoveryStorage ?? throw new ArgumentNullException(nameof(recoveryStorage));
     }
 
     public IReadOnlyList<CatalogTrustedSignerRecord> ListSigners()
@@ -228,16 +237,9 @@ public sealed class FileSystemPlatformCatalogSignerTrustStore : IPlatformCatalog
         {
             var envelope = Load();
             var source = StorePath();
-            var backup = BackupPath();
             var content = Serialize(envelope);
-            var directory = Path.GetDirectoryName(backup);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            File.WriteAllText(backup, content);
-            return RecoveryResult("backup", source, backup, envelope, Hash(content), string.Empty, Array.Empty<string>());
+            var stored = _recoveryStorage.Write(content);
+            return RecoveryResult("backup", source, stored, envelope, Hash(content), string.Empty, Array.Empty<string>());
         }
     }
 
@@ -246,13 +248,13 @@ public sealed class FileSystemPlatformCatalogSignerTrustStore : IPlatformCatalog
         lock (_gate)
         {
             var source = StorePath();
-            var backup = BackupPath();
-            if (!File.Exists(backup))
+            var stored = _recoveryStorage.Read();
+            if (!stored.Found)
             {
-                return RecoveryResult("verify_backup", source, backup, new CatalogSignerTrustStoreEnvelope(), string.Empty, expectedTrustStoreHash, new[] { "trust_store_backup_not_found" });
+                return RecoveryResult("verify_backup", source, stored, new CatalogSignerTrustStoreEnvelope(), string.Empty, expectedTrustStoreHash, new[] { "trust_store_backup_not_found" });
             }
 
-            var content = File.ReadAllText(backup);
+            var content = stored.Content;
             var envelope = Deserialize(content);
             var hash = Hash(content);
             var errors = new List<string>();
@@ -262,7 +264,7 @@ public sealed class FileSystemPlatformCatalogSignerTrustStore : IPlatformCatalog
                 errors.Add("trust_store_backup_hash_mismatch");
             }
 
-            return RecoveryResult("verify_backup", source, backup, envelope, hash, expectedTrustStoreHash, errors);
+            return RecoveryResult("verify_backup", source, stored, envelope, hash, expectedTrustStoreHash, errors);
         }
     }
 
@@ -277,16 +279,16 @@ public sealed class FileSystemPlatformCatalogSignerTrustStore : IPlatformCatalog
             }
 
             var source = StorePath();
-            var backup = BackupPath();
             var directory = Path.GetDirectoryName(source);
             if (!string.IsNullOrWhiteSpace(directory))
             {
                 Directory.CreateDirectory(directory);
             }
 
-            File.Copy(backup, source, overwrite: true);
+            var stored = _recoveryStorage.Read();
+            File.WriteAllText(source, stored.Content);
             var content = File.ReadAllText(source);
-            return RecoveryResult("restore_backup", source, backup, Deserialize(content), Hash(content), expectedTrustStoreHash, Array.Empty<string>());
+            return RecoveryResult("restore_backup", source, stored, Deserialize(content), Hash(content), expectedTrustStoreHash, Array.Empty<string>());
         }
     }
 
@@ -445,8 +447,6 @@ public sealed class FileSystemPlatformCatalogSignerTrustStore : IPlatformCatalog
 
     private string StorePath() => Path.GetFullPath(_options.SignerTrustStorePath);
 
-    private string BackupPath() => Path.GetFullPath(_options.SignerTrustStoreBackupPath);
-
     private static CatalogSignerTrustStoreEnvelope Deserialize(string json) =>
         JsonSerializer.Deserialize<CatalogSignerTrustStoreEnvelope>(json, JsonOptions)
         ?? new CatalogSignerTrustStoreEnvelope();
@@ -457,7 +457,7 @@ public sealed class FileSystemPlatformCatalogSignerTrustStore : IPlatformCatalog
     private static CatalogSignerTrustStoreRecoveryResult RecoveryResult(
         string operation,
         string source,
-        string backup,
+        CatalogTrustStoreRecoveryStorageReadResult backup,
         CatalogSignerTrustStoreEnvelope envelope,
         string hash,
         string expectedHash,
@@ -466,7 +466,35 @@ public sealed class FileSystemPlatformCatalogSignerTrustStore : IPlatformCatalog
             IsVerified = errors.Count == 0,
             Operation = operation,
             SourcePath = source,
-            BackupPath = backup,
+            BackupPath = backup.BackupPath,
+            BackupBackendName = backup.BackupBackendName,
+            BackupBackendClass = backup.BackupBackendClass,
+            CustodyBoundary = backup.CustodyBoundary,
+            TrustStoreHash = hash,
+            ExpectedTrustStoreHash = expectedHash,
+            TrustStoreVersion = envelope.TrustStoreVersion,
+            SignerCount = envelope.Signers.Count,
+            ChangeCount = envelope.Changes.Count,
+            VerifiedAtUtc = DateTime.UtcNow,
+            Errors = errors
+        };
+
+    private static CatalogSignerTrustStoreRecoveryResult RecoveryResult(
+        string operation,
+        string source,
+        CatalogTrustStoreRecoveryStorageWriteResult backup,
+        CatalogSignerTrustStoreEnvelope envelope,
+        string hash,
+        string expectedHash,
+        IReadOnlyList<string> errors) => new()
+        {
+            IsVerified = errors.Count == 0,
+            Operation = operation,
+            SourcePath = source,
+            BackupPath = backup.BackupPath,
+            BackupBackendName = backup.BackupBackendName,
+            BackupBackendClass = backup.BackupBackendClass,
+            CustodyBoundary = backup.CustodyBoundary,
             TrustStoreHash = hash,
             ExpectedTrustStoreHash = expectedHash,
             TrustStoreVersion = envelope.TrustStoreVersion,

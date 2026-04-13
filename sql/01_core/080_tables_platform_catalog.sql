@@ -120,11 +120,32 @@ BEGIN
 END;
 GO
 
-IF OBJECT_ID('dbo.CK_PlatformCatalogPromotionManifest_Status', 'C') IS NULL
+IF OBJECT_ID('dbo.PlatformCatalogDossierArchive', 'U') IS NULL
 BEGIN
-    ALTER TABLE dbo.PlatformCatalogPromotionManifest
-        ADD CONSTRAINT CK_PlatformCatalogPromotionManifest_Status
-            CHECK (Status IN ('issued'));
+    CREATE TABLE dbo.PlatformCatalogDossierArchive
+    (
+        ManifestId NVARCHAR(64) NOT NULL CONSTRAINT PK_PlatformCatalogDossierArchive PRIMARY KEY,
+        ArchiveJson NVARCHAR(MAX) NOT NULL,
+        ArchiveHash NVARCHAR(128) NOT NULL,
+        BackendClass NVARCHAR(80) NOT NULL,
+        RetentionPosture NVARCHAR(80) NOT NULL,
+        ImmutabilityEnforced BIT NOT NULL,
+        CreatedAtUtc DATETIME2(7) NOT NULL CONSTRAINT DF_PlatformCatalogDossierArchive_CreatedAtUtc DEFAULT (SYSUTCDATETIME())
+    );
+END;
+GO
+
+IF OBJECT_ID('dbo.PlatformCatalogSignerTrustBackup', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PlatformCatalogSignerTrustBackup
+    (
+        BackupId NVARCHAR(64) NOT NULL CONSTRAINT PK_PlatformCatalogSignerTrustBackup PRIMARY KEY,
+        BackupJson NVARCHAR(MAX) NOT NULL,
+        BackupHash NVARCHAR(128) NOT NULL,
+        BackupBackendClass NVARCHAR(80) NOT NULL,
+        CustodyBoundary NVARCHAR(80) NOT NULL,
+        UpdatedAtUtc DATETIME2(7) NOT NULL CONSTRAINT DF_PlatformCatalogSignerTrustBackup_UpdatedAtUtc DEFAULT (SYSUTCDATETIME())
+    );
 END;
 GO
 
@@ -281,6 +302,14 @@ BEGIN
         CreatedAtUtc DATETIME2(7) NOT NULL CONSTRAINT DF_PlatformCatalogPromotionManifest_CreatedAtUtc DEFAULT (SYSUTCDATETIME()),
         IssuedAtUtc DATETIME2(7) NOT NULL CONSTRAINT DF_PlatformCatalogPromotionManifest_IssuedAtUtc DEFAULT (SYSUTCDATETIME())
     );
+END;
+GO
+
+IF OBJECT_ID('dbo.CK_PlatformCatalogPromotionManifest_Status', 'C') IS NULL
+BEGIN
+    ALTER TABLE dbo.PlatformCatalogPromotionManifest
+        ADD CONSTRAINT CK_PlatformCatalogPromotionManifest_Status
+            CHECK (Status IN ('issued'));
 END;
 GO
 

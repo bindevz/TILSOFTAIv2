@@ -14,6 +14,9 @@ public sealed partial class FileSystemPlatformCatalogArchiveStorage : IPlatformC
     }
 
     public string BackendName => "filesystem";
+    public string BackendClass => "local_filesystem";
+    public string RetentionPosture => "metadata_only";
+    public bool ImmutabilityEnforced => false;
 
     public async Task<CatalogArchiveStorageWriteResult> WriteAsync(
         string manifestId,
@@ -27,6 +30,9 @@ public sealed partial class FileSystemPlatformCatalogArchiveStorage : IPlatformC
         return new CatalogArchiveStorageWriteResult
         {
             BackendName = BackendName,
+            BackendClass = BackendClass,
+            RetentionPosture = RetentionPosture,
+            ImmutabilityEnforced = ImmutabilityEnforced,
             ArchivePath = path,
             StorageUri = StorageUri(manifestId),
             RecoveryState = "primary_written"
@@ -45,6 +51,9 @@ public sealed partial class FileSystemPlatformCatalogArchiveStorage : IPlatformC
             {
                 Found = false,
                 BackendName = BackendName,
+                BackendClass = BackendClass,
+                RetentionPosture = RetentionPosture,
+                ImmutabilityEnforced = ImmutabilityEnforced,
                 ArchivePath = path,
                 StorageUri = StorageUri(manifestId),
                 RecoveryState = "primary_missing"
@@ -55,6 +64,9 @@ public sealed partial class FileSystemPlatformCatalogArchiveStorage : IPlatformC
         {
             Found = true,
             BackendName = BackendName,
+            BackendClass = BackendClass,
+            RetentionPosture = RetentionPosture,
+            ImmutabilityEnforced = ImmutabilityEnforced,
             ArchivePath = path,
             StorageUri = StorageUri(manifestId),
             RecoveryState = "primary_read",

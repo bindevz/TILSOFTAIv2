@@ -1,8 +1,9 @@
-# Catalog Signed Evidence and Archives - Sprint 17
+# Catalog Signed Evidence and Archives - Sprint 18
 
 Sprint 15 promotes catalog release proof from provider-verified artifacts to signed evidence bundles and tamper-evident dossier archives.
 Sprint 16 operationalizes signer lifecycle and archive replay verification.
 Sprint 17 adds trust-store backup/restore verification and mirrored archive survivability.
+Sprint 18 adds managed durable archive and trust-store recovery backends, backend-class policy enforcement, and explicit retention posture metadata.
 
 ## Signed Evidence
 
@@ -56,12 +57,20 @@ Production policy should keep `RequireIndependentSignerTrustApproval=true`, whic
 
 ## Trust-Store Recovery
 
-`SignerTrustStorePath` remains the active governed trust store. `SignerTrustStoreBackupPath` is the recovery copy used by backup, verify, and restore endpoints.
+`SignerTrustStorePath` remains the active governed trust store. Recovery storage is selected by `SignerTrustStoreBackupBackend`.
+
+Supported recovery backends:
+
+- `filesystem`: writes to `SignerTrustStoreBackupPath`, backend class `local_filesystem`, custody boundary `same_host_family`.
+- `managed_sql`: writes to `dbo.PlatformCatalogSignerTrustBackup`, backend class `managed_durable`, custody boundary `database_managed`.
 
 Recovery results include:
 
 - source path,
 - backup path,
+- backup backend name,
+- backup backend class,
+- custody boundary,
 - trust-store hash,
 - expected hash,
 - trust-store version,
@@ -70,6 +79,8 @@ Recovery results include:
 - deterministic errors.
 
 Use the hash returned by backup as the expected hash when verifying or restoring. A mismatch returns `trust_store_backup_hash_mismatch`.
+
+Production-like defaults require `MinimumTrustStoreDurabilityClassForProductionLike=managed_durable`.
 
 ## Policy Provenance
 
@@ -92,13 +103,17 @@ Use:
 
 `GET /api/platform-catalog/promotion-manifests/{manifestId}/dossier/archive/verify`
 
-The archive service writes a JSON package under `CatalogCertification:DossierArchiveRootPath`. The archive record contains:
+The archive service writes through the selected `DossierArchiveBackend`. The archive record contains:
 
 - manifest id,
 - dossier hash,
 - archive hash,
 - archive path,
-- archive backend and storage URI,
+- archive backend,
+- backend durability class,
+- retention posture,
+- backend immutability flag,
+- storage URI,
 - recovery state,
 - policy version,
 - retention deadline,
@@ -109,9 +124,35 @@ The archive hash seals the manifest hash, dossier hash, policy version, signer m
 
 When `EnableDossierArchiveMirror=true`, archives are written to both `DossierArchiveRootPath` and `DossierArchiveMirrorRootPath`. Replay verification reads the primary archive first and falls back to the mirror with `RecoveryState=recovered_from_mirror`.
 
+When `DossierArchiveBackend=managed_sql`, archives are stored in `dbo.PlatformCatalogDossierArchive`. A second write for the same manifest is accepted only when the stored archive hash matches, which gives the backend an explicit immutability check.
+
+Backend classes:
+
+- `local_filesystem`
+- `mirrored_filesystem`
+- `managed_durable`
+
+Retention postures:
+
+- `metadata_only`
+- `retention_tracked`
+
 ## Production Completion
 
-When `RequireArchivedDossierForProductionLikeCompletion=true`, production-like rollout completion blocks with `dossier_archive_required` until a dossier archive exists.
+When `RequireArchivedDossierForProductionLikeCompletion=true`, production-like rollout completion blocks until the archive exists, replay-verifies, and satisfies configured backend policy.
+
+Possible blockers:
+
+- `dossier_archive_required`
+- `dossier_archive_verification_failed:{error}`
+- `dossier_archive_policy_failure:archive_durability_class_insufficient:{actual}:{required}`
+- `dossier_archive_policy_failure:archive_retention_posture_insufficient:{actual}:{required}`
+
+Recommended production-like defaults:
+
+- `DossierArchiveBackend=managed_sql`
+- `MinimumArchiveDurabilityClassForProductionLike=managed_durable`
+- `RequiredArchiveRetentionPostureForProductionLike=retention_tracked`
 
 ## Operator Flow
 
@@ -120,7 +161,9 @@ When `RequireArchivedDossierForProductionLikeCompletion=true`, production-like r
 3. Issue the promotion manifest with trusted evidence ids.
 4. Archive the dossier.
 5. Verify the archived dossier package.
-6. Backup the signer trust store after signer lifecycle changes.
-7. Record rollout completion with completion evidence.
+6. Confirm archive backend class, retention posture, immutability flag, storage URI, and recovery state.
+7. Backup the signer trust store after signer lifecycle changes.
+8. Verify trust-store backup against the expected hash and confirm backend class plus custody boundary.
+9. Record rollout completion with completion evidence.
 
 Emergency paths do not bypass this proof chain. They must archive the review package before completion is accepted.

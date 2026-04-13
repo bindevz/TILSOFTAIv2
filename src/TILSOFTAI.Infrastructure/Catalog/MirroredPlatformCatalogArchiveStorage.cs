@@ -16,6 +16,9 @@ public sealed partial class MirroredPlatformCatalogArchiveStorage : IPlatformCat
     }
 
     public string BackendName => _options.EnableDossierArchiveMirror ? "filesystem+mirror" : "filesystem";
+    public string BackendClass => _options.EnableDossierArchiveMirror ? "mirrored_filesystem" : _primary.BackendClass;
+    public string RetentionPosture => "metadata_only";
+    public bool ImmutabilityEnforced => false;
 
     public async Task<CatalogArchiveStorageWriteResult> WriteAsync(
         string manifestId,
@@ -25,7 +28,7 @@ public sealed partial class MirroredPlatformCatalogArchiveStorage : IPlatformCat
         var primary = await _primary.WriteAsync(manifestId, content, ct);
         if (!_options.EnableDossierArchiveMirror)
         {
-            return primary with { BackendName = BackendName, RecoveryState = "primary_written" };
+            return primary with { BackendName = BackendName, BackendClass = BackendClass, RetentionPosture = RetentionPosture, ImmutabilityEnforced = ImmutabilityEnforced, RecoveryState = "primary_written" };
         }
 
         var mirrorPath = MirrorPath(manifestId);
@@ -34,6 +37,9 @@ public sealed partial class MirroredPlatformCatalogArchiveStorage : IPlatformCat
         return primary with
         {
             BackendName = BackendName,
+            BackendClass = BackendClass,
+            RetentionPosture = RetentionPosture,
+            ImmutabilityEnforced = ImmutabilityEnforced,
             StorageUri = $"{primary.StorageUri};mirror={MirrorStorageUri(manifestId)}",
             RecoveryState = "primary_and_mirror_written"
         };
@@ -49,13 +55,16 @@ public sealed partial class MirroredPlatformCatalogArchiveStorage : IPlatformCat
             return primary with
             {
                 BackendName = BackendName,
+                BackendClass = BackendClass,
+                RetentionPosture = RetentionPosture,
+                ImmutabilityEnforced = ImmutabilityEnforced,
                 RecoveryState = _options.EnableDossierArchiveMirror ? "primary_read_mirror_available" : "primary_read"
             };
         }
 
         if (!_options.EnableDossierArchiveMirror)
         {
-            return primary with { BackendName = BackendName, RecoveryState = "primary_missing" };
+            return primary with { BackendName = BackendName, BackendClass = BackendClass, RetentionPosture = RetentionPosture, ImmutabilityEnforced = ImmutabilityEnforced, RecoveryState = "primary_missing" };
         }
 
         var mirrorPath = MirrorPath(manifestId);
@@ -64,6 +73,9 @@ public sealed partial class MirroredPlatformCatalogArchiveStorage : IPlatformCat
             return primary with
             {
                 BackendName = BackendName,
+                BackendClass = BackendClass,
+                RetentionPosture = RetentionPosture,
+                ImmutabilityEnforced = ImmutabilityEnforced,
                 StorageUri = $"{primary.StorageUri};mirror={MirrorStorageUri(manifestId)}",
                 RecoveryState = "primary_and_mirror_missing"
             };
@@ -73,6 +85,9 @@ public sealed partial class MirroredPlatformCatalogArchiveStorage : IPlatformCat
         {
             Found = true,
             BackendName = BackendName,
+            BackendClass = BackendClass,
+            RetentionPosture = RetentionPosture,
+            ImmutabilityEnforced = ImmutabilityEnforced,
             ArchivePath = mirrorPath,
             StorageUri = MirrorStorageUri(manifestId),
             RecoveryState = "recovered_from_mirror",

@@ -1,4 +1,4 @@
-# Catalog Failure Drills - Sprint 12
+# Catalog Failure Drills - Sprint 18
 
 These drills certify that operators can recover catalog mutation safely.
 
@@ -88,6 +88,41 @@ Recovery:
 - remove bootstrap records from production config,
 - keep `AllowBootstrapConfigurationFallback=false` for normal production deployments.
 
+## Drill 6: Archive Backend Policy Failure
+
+Input: configure a production-like environment with `MinimumArchiveDurabilityClassForProductionLike=managed_durable`, archive through `filesystem_mirror`, then attempt rollout completion.
+
+Expected:
+
+- archive replay verification still passes,
+- rollout completion is rejected,
+- blockers include `dossier_archive_policy_failure:archive_durability_class_insufficient:mirrored_filesystem:managed_durable`,
+- blockers include `dossier_archive_policy_failure:archive_retention_posture_insufficient:metadata_only:retention_tracked`,
+- the dossier review surfaces matching policy warnings.
+
+Recovery:
+
+- switch `DossierArchiveBackend` to `managed_sql`, or temporarily lower policy only with documented non-production justification,
+- archive and replay-verify again,
+- confirm `BackendClass=managed_durable` and `RetentionPosture=retention_tracked`.
+
+## Drill 7: Managed Trust-Store Recovery
+
+Input: configure `SignerTrustStoreBackupBackend=managed_sql`, run backup, verify backup with the returned hash, replace the local signer trust-store file, then restore with the expected hash.
+
+Expected:
+
+- backup result reports `BackupBackendClass=managed_durable`,
+- backup result reports `CustodyBoundary=database_managed`,
+- verify backup succeeds with the expected hash,
+- restore rehydrates the governed signer lifecycle state,
+- a mismatched expected hash returns `trust_store_backup_hash_mismatch`.
+
+Recovery:
+
+- investigate any hash mismatch as a signer custody incident,
+- do not record production-like completion until signer trust recovery verifies against the expected hash.
+
 ## Evidence Capture
 
 After each drill completes in staging or another prod-like target, record one certification evidence item with:
@@ -101,3 +136,8 @@ After each drill completes in staging or another prod-like target, record one ce
 - verification result before evidence is used for a promotion manifest.
 
 Unit tests and local dry runs prove implementation behavior, but they do not satisfy live certification evidence.
+
+Sprint 18 adds these live evidence kinds to the production-like default set:
+
+- `archive_backend_policy_drill`
+- `managed_trust_store_recovery_drill`

@@ -1,4 +1,4 @@
-# Catalog Release Gates - Sprint 12
+# Catalog Release Gates - Sprint 18
 
 Catalog changes must pass promotion gates and issue an immutable promotion manifest before production-like rollout.
 
@@ -32,6 +32,9 @@ Promotion is blocked when any condition is true:
 - required certification evidence has insufficient trust tier.
 - required certification evidence is stale.
 - production-like rollout completion lacks an archived dossier.
+- production-like rollout completion archive replay verification fails.
+- production-like rollout completion archive backend class is weaker than policy.
+- production-like rollout completion archive retention posture is weaker than policy.
 
 ## CI/CD Usage
 
@@ -42,9 +45,11 @@ Promotion is blocked when any condition is true:
 5. Issue a promotion manifest with the approved change ids and trusted evidence ids.
 6. Archive the promotion dossier.
 7. Replay-verify the archived dossier package.
-8. Confirm signer trust-store backup after any signer lifecycle change.
-9. Apply only with manifest-backed release approval.
-10. Record rollout attestations and completion evidence.
+8. Confirm archive backend class, retention posture, immutability flag, storage URI, and recovery state.
+9. Confirm signer trust-store backup after any signer lifecycle change.
+10. Verify signer trust-store backup hash and custody boundary.
+11. Apply only with manifest-backed release approval.
+12. Record rollout attestations and completion evidence.
 
 The gate returns deterministic `blockers`, `warnings`, `evidenceMissing`, and `evidenceUntrusted` arrays for automation and operator review.
 

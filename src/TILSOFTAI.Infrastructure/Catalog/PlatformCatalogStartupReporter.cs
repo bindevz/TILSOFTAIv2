@@ -12,6 +12,7 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
     private readonly IPlatformCatalogProvider _catalogProvider;
     private readonly IPlatformCatalogSignerTrustStore _signerTrustStore;
     private readonly IPlatformCatalogArchiveStorage _archiveStorage;
+    private readonly IPlatformCatalogTrustStoreRecoveryStorage _trustStoreRecoveryStorage;
     private readonly IConfiguration _configuration;
     private readonly PlatformCatalogOptions _options;
     private readonly CatalogCertificationOptions _certificationOptions;
@@ -22,6 +23,7 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
         IPlatformCatalogProvider catalogProvider,
         IPlatformCatalogSignerTrustStore signerTrustStore,
         IPlatformCatalogArchiveStorage archiveStorage,
+        IPlatformCatalogTrustStoreRecoveryStorage trustStoreRecoveryStorage,
         IConfiguration configuration,
         IOptions<PlatformCatalogOptions> options,
         IOptions<CatalogCertificationOptions> certificationOptions,
@@ -31,6 +33,7 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
         _catalogProvider = catalogProvider ?? throw new ArgumentNullException(nameof(catalogProvider));
         _signerTrustStore = signerTrustStore ?? throw new ArgumentNullException(nameof(signerTrustStore));
         _archiveStorage = archiveStorage ?? throw new ArgumentNullException(nameof(archiveStorage));
+        _trustStoreRecoveryStorage = trustStoreRecoveryStorage ?? throw new ArgumentNullException(nameof(trustStoreRecoveryStorage));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _certificationOptions = certificationOptions?.Value ?? throw new ArgumentNullException(nameof(certificationOptions));
@@ -70,10 +73,16 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
             _options.AllowBootstrapConfigurationFallback);
 
         _logger.LogInformation(
-            "PlatformCatalogTrustInfrastructureReport | SignerCount: {SignerCount} | ActiveSigners: {ActiveSigners} | ArchiveBackend: {ArchiveBackend} | SignerTrustStorePath: {SignerTrustStorePath} | SignerTrustStoreBackupPath: {SignerTrustStoreBackupPath} | ArchiveMirrorEnabled: {ArchiveMirrorEnabled}",
+            "PlatformCatalogTrustInfrastructureReport | SignerCount: {SignerCount} | ActiveSigners: {ActiveSigners} | ArchiveBackend: {ArchiveBackend} | ArchiveBackendClass: {ArchiveBackendClass} | ArchiveRetentionPosture: {ArchiveRetentionPosture} | ArchiveImmutable: {ArchiveImmutable} | TrustBackupBackend: {TrustBackupBackend} | TrustBackupClass: {TrustBackupClass} | CustodyBoundary: {CustodyBoundary} | SignerTrustStorePath: {SignerTrustStorePath} | SignerTrustStoreBackupPath: {SignerTrustStoreBackupPath} | ArchiveMirrorEnabled: {ArchiveMirrorEnabled}",
             signers.Count,
             activeSigners,
             _archiveStorage.BackendName,
+            _archiveStorage.BackendClass,
+            _archiveStorage.RetentionPosture,
+            _archiveStorage.ImmutabilityEnforced,
+            _trustStoreRecoveryStorage.BackupBackendName,
+            _trustStoreRecoveryStorage.BackupBackendClass,
+            _trustStoreRecoveryStorage.CustodyBoundary,
             _certificationOptions.SignerTrustStorePath,
             _certificationOptions.SignerTrustStoreBackupPath,
             _certificationOptions.EnableDossierArchiveMirror);
@@ -83,6 +92,24 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
             _logger.LogWarning(
                 "PlatformCatalogSignerTrustMissing | Environment: {Environment} | Production-like signature policy requires active trusted signers before signed evidence can verify.",
                 EffectiveEnvironmentName());
+        }
+
+        if (productionLike
+            && CatalogDurabilityClasses.Rank(_archiveStorage.BackendClass) < CatalogDurabilityClasses.Rank(_certificationOptions.MinimumArchiveDurabilityClassForProductionLike))
+        {
+            _logger.LogWarning(
+                "PlatformCatalogArchiveDurabilityWeak | BackendClass: {BackendClass} | RequiredClass: {RequiredClass} | Production-like archive backend durability is weaker than policy.",
+                _archiveStorage.BackendClass,
+                _certificationOptions.MinimumArchiveDurabilityClassForProductionLike);
+        }
+
+        if (productionLike
+            && CatalogDurabilityClasses.Rank(_trustStoreRecoveryStorage.BackupBackendClass) < CatalogDurabilityClasses.Rank(_certificationOptions.MinimumTrustStoreDurabilityClassForProductionLike))
+        {
+            _logger.LogWarning(
+                "PlatformCatalogTrustStoreDurabilityWeak | BackupBackendClass: {BackupBackendClass} | RequiredClass: {RequiredClass} | Production-like trust-store recovery durability is weaker than policy.",
+                _trustStoreRecoveryStorage.BackupBackendClass,
+                _certificationOptions.MinimumTrustStoreDurabilityClassForProductionLike);
         }
 
         if (_certificationOptions.EnableDossierArchiveMirror

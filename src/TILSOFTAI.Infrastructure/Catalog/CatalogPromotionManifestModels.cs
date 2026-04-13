@@ -15,6 +15,36 @@ public static class CatalogRolloutAttestationStates
     public const string Superseded = "superseded";
 }
 
+public static class CatalogDurabilityClasses
+{
+    public const string LocalFilesystem = "local_filesystem";
+    public const string MirroredFilesystem = "mirrored_filesystem";
+    public const string ManagedDurable = "managed_durable";
+
+    public static int Rank(string value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            LocalFilesystem => 1,
+            MirroredFilesystem => 2,
+            ManagedDurable => 3,
+            _ => 0
+        };
+}
+
+public static class CatalogRetentionPostures
+{
+    public const string MetadataOnly = "metadata_only";
+    public const string RetentionTracked = "retention_tracked";
+
+    public static int Rank(string value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            MetadataOnly => 1,
+            RetentionTracked => 2,
+            _ => 0
+        };
+}
+
 public sealed class CatalogPromotionManifestIssueRequest
 {
     public string EnvironmentName { get; init; } = string.Empty;
@@ -82,6 +112,9 @@ public sealed class CatalogDossierArchiveVerificationResult
     public string ArchiveHash { get; init; } = string.Empty;
     public string ComputedArchiveHash { get; init; } = string.Empty;
     public string BackendName { get; init; } = string.Empty;
+    public string BackendClass { get; init; } = string.Empty;
+    public string RetentionPosture { get; init; } = string.Empty;
+    public bool ImmutabilityEnforced { get; init; }
     public string StorageUri { get; init; } = string.Empty;
     public string PolicyVersion { get; init; } = string.Empty;
     public string RecoveryState { get; init; } = string.Empty;
@@ -125,6 +158,9 @@ public sealed record CatalogDossierArchiveRecord
     public string ArchiveHash { get; init; } = string.Empty;
     public string ArchivePath { get; init; } = string.Empty;
     public string BackendName { get; init; } = string.Empty;
+    public string BackendClass { get; init; } = string.Empty;
+    public string RetentionPosture { get; init; } = string.Empty;
+    public bool ImmutabilityEnforced { get; init; }
     public string StorageUri { get; init; } = string.Empty;
     public string RecoveryState { get; init; } = string.Empty;
     public string SealAlgorithm { get; init; } = "sha256";
@@ -143,4 +179,6 @@ public sealed class CatalogAuditRetentionSnapshot
     public DateTime? DossierArchiveRetainUntilUtc { get; init; }
     public bool ArchiveRequired { get; init; }
     public bool RetentionCurrent { get; init; }
+    public string RequiredArchiveDurabilityClass { get; init; } = string.Empty;
+    public string RequiredRetentionPosture { get; init; } = string.Empty;
 }

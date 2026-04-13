@@ -38,7 +38,9 @@ public sealed partial class FileSystemPlatformCatalogDossierArchiveService : IPl
         }
 
         var envelope = JsonSerializer.Deserialize<CatalogDossierArchiveEnvelope>(stored.Content, JsonOptions);
-        return envelope?.Archive;
+        return envelope?.Archive is null
+            ? null
+            : WithStorageMetadata(envelope.Archive, stored);
     }
 
     public async Task<CatalogDossierArchiveRecord> ArchiveAsync(
@@ -68,20 +70,7 @@ public sealed partial class FileSystemPlatformCatalogDossierArchiveService : IPl
             Dossier = dossier with { Archive = archive }
         };
         var stored = await _archiveStorage.WriteAsync(dossier.Manifest.ManifestId, JsonSerializer.Serialize(envelope, JsonOptions), ct);
-        var storedArchive = archive with
-        {
-            BackendName = stored.BackendName,
-            ArchivePath = stored.ArchivePath,
-            StorageUri = stored.StorageUri,
-            RecoveryState = stored.RecoveryState
-        };
-        var storedEnvelope = new CatalogDossierArchiveEnvelope
-        {
-            Archive = storedArchive,
-            Dossier = dossier with { Archive = storedArchive }
-        };
-        await _archiveStorage.WriteAsync(dossier.Manifest.ManifestId, JsonSerializer.Serialize(storedEnvelope, JsonOptions), ct);
-        return storedArchive;
+        return WithStorageMetadata(archive, stored);
     }
 
     public async Task<CatalogDossierArchiveVerificationResult> VerifyArchiveAsync(
@@ -96,6 +85,9 @@ public sealed partial class FileSystemPlatformCatalogDossierArchiveService : IPl
                 IsVerified = false,
                 ManifestId = manifestId,
                 BackendName = stored.BackendName,
+                BackendClass = stored.BackendClass,
+                RetentionPosture = stored.RetentionPosture,
+                ImmutabilityEnforced = stored.ImmutabilityEnforced,
                 StorageUri = stored.StorageUri,
                 RecoveryState = stored.RecoveryState,
                 Errors = new[] { "archive_not_found" }
@@ -130,6 +122,9 @@ public sealed partial class FileSystemPlatformCatalogDossierArchiveService : IPl
                 ArchiveHash = envelope.Archive.ArchiveHash,
                 ComputedArchiveHash = computed,
                 BackendName = stored.BackendName,
+                BackendClass = stored.BackendClass,
+                RetentionPosture = stored.RetentionPosture,
+                ImmutabilityEnforced = stored.ImmutabilityEnforced,
                 StorageUri = stored.StorageUri,
                 RecoveryState = stored.RecoveryState,
                 PolicyVersion = envelope.Archive.PolicyVersion,
@@ -151,10 +146,41 @@ public sealed partial class FileSystemPlatformCatalogDossierArchiveService : IPl
             IsVerified = false,
             ManifestId = manifestId,
             BackendName = stored.BackendName,
+            BackendClass = stored.BackendClass,
+            RetentionPosture = stored.RetentionPosture,
+            ImmutabilityEnforced = stored.ImmutabilityEnforced,
             StorageUri = stored.StorageUri,
             RecoveryState = stored.RecoveryState,
             VerifiedAtUtc = DateTime.UtcNow,
             Errors = new[] { error }
+        };
+
+    private static CatalogDossierArchiveRecord WithStorageMetadata(
+        CatalogDossierArchiveRecord archive,
+        CatalogArchiveStorageWriteResult stored) =>
+        archive with
+        {
+            BackendName = stored.BackendName,
+            BackendClass = stored.BackendClass,
+            RetentionPosture = stored.RetentionPosture,
+            ImmutabilityEnforced = stored.ImmutabilityEnforced,
+            ArchivePath = stored.ArchivePath,
+            StorageUri = stored.StorageUri,
+            RecoveryState = stored.RecoveryState
+        };
+
+    private static CatalogDossierArchiveRecord WithStorageMetadata(
+        CatalogDossierArchiveRecord archive,
+        CatalogArchiveStorageReadResult stored) =>
+        archive with
+        {
+            BackendName = stored.BackendName,
+            BackendClass = stored.BackendClass,
+            RetentionPosture = stored.RetentionPosture,
+            ImmutabilityEnforced = stored.ImmutabilityEnforced,
+            ArchivePath = stored.ArchivePath,
+            StorageUri = stored.StorageUri,
+            RecoveryState = stored.RecoveryState
         };
 
     private static string ComputeArchiveHash(CatalogDossierArchiveRecord archive, CatalogPromotionDossier dossier)

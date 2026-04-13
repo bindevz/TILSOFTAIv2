@@ -886,3 +886,112 @@ BEGIN
     ORDER BY CreatedAtUtc ASC;
 END;
 GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_archive_upsert
+    @ManifestId NVARCHAR(64),
+    @ArchiveJson NVARCHAR(MAX),
+    @ArchiveHash NVARCHAR(128),
+    @BackendClass NVARCHAR(80),
+    @RetentionPosture NVARCHAR(80),
+    @ImmutabilityEnforced BIT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM dbo.PlatformCatalogDossierArchive WHERE ManifestId = @ManifestId)
+    BEGIN
+        IF EXISTS (
+            SELECT 1
+            FROM dbo.PlatformCatalogDossierArchive
+            WHERE ManifestId = @ManifestId
+              AND ArchiveHash <> @ArchiveHash
+        )
+        BEGIN
+            THROW 51201, 'Platform catalog dossier archive is immutable for this manifest.', 1;
+        END;
+
+        RETURN;
+    END;
+
+    INSERT INTO dbo.PlatformCatalogDossierArchive
+    (
+        ManifestId,
+        ArchiveJson,
+        ArchiveHash,
+        BackendClass,
+        RetentionPosture,
+        ImmutabilityEnforced
+    )
+    VALUES
+    (
+        @ManifestId,
+        @ArchiveJson,
+        @ArchiveHash,
+        @BackendClass,
+        @RetentionPosture,
+        @ImmutabilityEnforced
+    );
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_archive_get
+    @ManifestId NVARCHAR(64)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        ManifestId,
+        ArchiveJson,
+        ArchiveHash,
+        BackendClass,
+        RetentionPosture,
+        ImmutabilityEnforced,
+        CreatedAtUtc
+    FROM dbo.PlatformCatalogDossierArchive
+    WHERE ManifestId = @ManifestId;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_signertrust_backup_upsert
+    @BackupJson NVARCHAR(MAX),
+    @BackupBackendClass NVARCHAR(80),
+    @CustodyBoundary NVARCHAR(80)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @BackupHash NVARCHAR(128) = LOWER(CONVERT(NVARCHAR(128), HASHBYTES('SHA2_256', CONVERT(VARBINARY(MAX), @BackupJson)), 2));
+
+    MERGE dbo.PlatformCatalogSignerTrustBackup AS target
+    USING (SELECT 'current' AS BackupId) AS source
+       ON target.BackupId = source.BackupId
+    WHEN MATCHED THEN
+        UPDATE SET
+            BackupJson = @BackupJson,
+            BackupHash = @BackupHash,
+            BackupBackendClass = @BackupBackendClass,
+            CustodyBoundary = @CustodyBoundary,
+            UpdatedAtUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT (BackupId, BackupJson, BackupHash, BackupBackendClass, CustodyBoundary)
+        VALUES ('current', @BackupJson, @BackupHash, @BackupBackendClass, @CustodyBoundary);
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_signertrust_backup_get
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT TOP (1)
+        BackupId,
+        BackupJson,
+        BackupHash,
+        BackupBackendClass,
+        CustodyBoundary,
+        UpdatedAtUtc
+    FROM dbo.PlatformCatalogSignerTrustBackup
+    WHERE BackupId = 'current';
+END;
+GO

@@ -1,0 +1,215 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 18.
+
+Baseline repository reality (after Sprint 17):
+- Sprint 9 already retired `LegacyChatPipelineBridge`, `ChatPipeline`, `ChatRequest`, and `ChatResult`.
+- Production capability and external connection records load from `catalog/platform-catalog.json`.
+- The catalog control plane already supports preview, submit, approve, reject, and apply.
+- Mutation safety already includes `ExpectedVersionTag`, `IdempotencyKey`, duplicate pending-change detection, idempotent apply replay, and `RollbackOfChangeId`.
+- Promotion gating already exists through `IPlatformCatalogPromotionGate`.
+- Certification evidence already supports:
+  - lifecycle states
+  - verification status
+  - artifact hash metadata
+  - trust tiers
+  - freshness policy
+  - retention policy snapshotting
+  - signed payload fields
+  - signer identity fields
+  - verification method
+  - verification policy version
+  - signer public key fingerprint
+  - signer lifecycle snapshot
+  - signer trust-store version
+  - signer validity window
+- Controlled provider verification already exists for `artifact://catalog-evidence/...`.
+- Real RSA signature verification already exists through `RsaPlatformCatalogSignatureVerifier`.
+- Signer lifecycle is governed through `IPlatformCatalogSignerTrustStore`.
+- Trust-store recovery now supports:
+  - backup
+  - verify-backup
+  - restore-backup
+- Promotion manifests are immutable.
+- Rollout attestations are append-only.
+- Promotion dossiers include trust evaluations, retention snapshots, deterministic hashes, archive metadata, archive verification results, backend name, storage URI, and recovery state.
+- Archive storage now supports `filesystem` and `filesystem_mirror`.
+- Replay verification can recover from a mirror when the primary archive is lost.
+- Production-like environments can already require `signature_verified` evidence and archived dossiers for completion.
+
+The platform is already enterprise-grade and has a real high-assurance posture.
+However, it still has durability-boundary debt because:
+- trust-store recovery is still too dependent on file-backed local storage assumptions,
+- archive durability is still too dependent on filesystem-family storage assumptions,
+- production-like policy is not yet explicit enough about backend durability classes,
+- retention and immutability posture are not yet surfaced strongly enough as backend capabilities,
+- and recovery is still more “available” than “auditable as a control”.
+
+Sprint 18 mission:
+Turn the platform from “locally survivable” into “durable across a more independent custody boundary”.
+
+Primary objective:
+1. Add a stronger archive backend path or backend durability class.
+2. Add a stronger trust-store durability path or backend durability class.
+3. Add backend-class policy enforcement for production-like environments.
+4. Add stronger retention and immutability posture metadata.
+5. Add drillable recovery verification.
+6. Improve diagnostics and runbooks for backend durability classes.
+7. Keep Sprint 18 focused on custody separation and durability governance, not feature breadth.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the runtime orchestration owner.
+2. Platform catalog remains the production source-of-truth.
+3. Promotion gates, manifests, attestations, evidence trust, signer lifecycle, trust-store recovery, and archive replay verification remain mandatory release primitives.
+4. `filesystem` and `filesystem_mirror` remain valid current backends and must not regress.
+5. The next maturity step is stronger durability class and custody separation, not a redesign of the trust model.
+6. Historical signed releases must remain interpretable after stronger backend adoption, migration, or restore.
+7. Backend capability and retention posture must be surfaced honestly.
+8. Sprint 18 success is measured by stronger durability boundaries and policy enforcement, not runtime novelty.
+9. Avoid oversized backend abstractions with no concrete implementation.
+10. Do not turn Sprint 18 into a feature sprint.
+
+Primary Sprint 18 goals:
+
+A. Add a stronger archive durability class
+- Preserve `filesystem` and `filesystem_mirror`.
+- Introduce at least one stronger durability class beyond the filesystem family, or a concrete backend implementation representing one.
+- Support archive write, read, and replay verification through that stronger durability path.
+- Expose backend class and provenance clearly.
+
+B. Add a stronger trust-store durability class
+- Preserve current trust-store backup / verify / restore.
+- Introduce a stronger trust-store recovery target or backend class beyond local file-only assumptions.
+- Keep signer lifecycle governance behavior identical.
+- Support verify and restore against the stronger target.
+
+C. Add backend-class policy enforcement
+- Allow production-like policy to distinguish weak vs stronger durability classes.
+- Record policy provenance around selected backend class.
+- Emit warnings or blockers when the selected backend class is weaker than production-like expectations.
+
+D. Add retention and immutability posture metadata
+- Surface whether a backend provides only local storage, mirrored local storage, or stronger durability semantics.
+- Record retention / immutability expectation explicitly in review metadata.
+- Never imply immutability if the backend does not provide it.
+- Emit deterministic warnings or blockers when policy requires stronger posture than the backend provides.
+
+E. Add drillable recovery verification
+- Add a repeatable operator-usable flow proving:
+  - archive recovery / replay verification from the stronger backend,
+  - trust-store recovery from the stronger backend,
+  - restored proof still matches expected hashes / versions / provenance.
+- Make outputs machine-readable.
+
+F. Improve diagnostics and runbooks
+- Add readiness and startup diagnostics around backend class, custody separation, and weak production-like durability posture.
+- Add runbooks for backend migration and stronger durability verification.
+- Make degraded posture obvious to operators.
+
+G. Preserve enterprise-grade focus
+- Only add surface area that materially improves custody separation, backend durability, retention posture, recovery verification, or auditability.
+- Do not broaden product scope.
+- Keep implementation concrete and bounded.
+
+Non-negotiable rules:
+1. Do not weaken signer lifecycle governance, trust-store recovery, archive materialization, or archive replay verification.
+2. Do not remove filesystem-family backends unless a real replacement is present.
+3. Do not fake remote durability or immutability.
+4. Do not keep production-like policy blind to backend durability class.
+5. Do not break historical interpretation during backend migration or restore.
+6. Do not normalize emergency paths under weaker durability expectations.
+7. Do not create oversized abstractions without a concrete backend/recovery use case.
+8. Do not store secrets in review artifacts or archive bundles.
+9. Prefer deterministic warnings and blockers over hidden operator assumptions.
+10. Do not turn Sprint 18 into a feature sprint.
+
+Explicitly in scope:
+- stronger archive backend path or durability class
+- stronger trust-store durability path or durability class
+- backend-class policy enforcement
+- retention / immutability posture metadata
+- recovery drill verification
+- diagnostics, docs, and runbooks for the above
+- tests and validation for the above
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- large adapter ecosystem growth
+- product workflow breadth
+
+Recommended implementation order:
+1. Add stronger archive durability class / backend path.
+2. Add stronger trust-store durability class / backend path.
+3. Add backend-class policy enforcement.
+4. Add retention / immutability posture metadata.
+5. Add drillable recovery verification.
+6. Improve diagnostics and runbooks.
+7. Delete any dead code revealed by the work.
+
+Required architectural outcomes:
+1. Archive durability is no longer confined to the filesystem family.
+2. Trust-store recovery is no longer confined to the filesystem family.
+3. Production-like policy can enforce backend durability-class expectations.
+4. Retention and immutability posture are explicit and honest.
+5. Recovery from the stronger durability class is testable and operator-usable.
+6. Historical releases remain interpretable under stronger durability adoption.
+
+Definition of done:
+- A stronger archive durability path or durability class exists.
+- A stronger trust-store durability path or durability class exists.
+- Production-like policy can distinguish weaker and stronger durability classes.
+- Retention and immutability posture are surfaced in review outputs and diagnostics.
+- Recovery drill / verification exists and is testable.
+- Historical signed releases remain explainable after migration/restore.
+- The platform is more independently durable after Sprint 18 than after Sprint 17.
+
+Must-fail conditions:
+- archive durability still depends entirely on the filesystem family
+- trust-store recovery still depends entirely on the filesystem family
+- production-like policy cannot distinguish backend durability classes
+- retention / immutability posture remains implied instead of explicit
+- Sprint 18 drifts into feature work without materially improving custody separation
+
+Preferred implementation style:
+- concrete stronger backends
+- explicit backend classes
+- honest capability exposure
+- deterministic policy outcomes
+- drillable recovery
+- operator-usable diagnostics
+- preserved historical meaning
+- deletion over drift
+- no architecture theater
+
+Required deliverables:
+1. Archive durability changes
+2. Trust-store durability changes
+3. Backend-class policy changes
+4. Retention / immutability posture changes
+5. Recovery drill / restore verification changes
+6. Diagnostics / runbook / test improvements
+
+Required reporting after implementation:
+1. Summary of Sprint 18 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Archive durability changes
+6. Trust-store durability changes
+7. Backend-class policy changes
+8. Retention / immutability posture changes
+9. Recovery drill / restore verification changes
+10. Diagnostics / runbook / test improvements
+11. Remaining blockers
+12. Recommended Sprint 19 priorities
+
+Final instruction:
+Sprint 18 is about stronger custody separation, backend-class governance, and compliance-grade durability posture.
+
+Do not spend Sprint 18 adding runtime novelty.
+Do not turn Sprint 18 into a feature sprint.
+
+Spend it making the enterprise-grade platform more independently durable and more explicit about backend capability.

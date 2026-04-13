@@ -94,7 +94,7 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
         result.IsVerified.Should().BeTrue();
         result.TrustTier.Should().Be(CatalogEvidenceTrustTiers.SignatureVerified);
         result.VerificationMethod.Should().Be(CatalogEvidenceVerificationMethods.Signature);
-        result.VerificationPolicyVersion.Should().Be("sprint-16");
+        result.VerificationPolicyVersion.Should().Be("sprint-18");
         result.SignerStatusAtVerification.Should().Be(CatalogSignerLifecycleStates.Active);
         result.SignerPublicKeyFingerprint.Should().HaveLength(64);
         result.SignatureVerifiedAtUtc.Should().NotBeNull();
@@ -207,9 +207,14 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
 
         backup.IsVerified.Should().BeTrue();
         backup.TrustStoreHash.Should().HaveLength(64);
+        backup.BackupBackendName.Should().Be("filesystem");
+        backup.BackupBackendClass.Should().Be(CatalogDurabilityClasses.LocalFilesystem);
+        backup.CustodyBoundary.Should().Be("same_host_family");
         mismatch.IsVerified.Should().BeFalse();
         mismatch.Errors.Should().Contain("trust_store_backup_hash_mismatch");
         restored.IsVerified.Should().BeTrue();
+        restored.BackupBackendClass.Should().Be(CatalogDurabilityClasses.LocalFilesystem);
+        restored.CustodyBoundary.Should().Be("same_host_family");
         store.FindSigner("release-authority", "key-1")!.Status.Should().Be(CatalogSignerLifecycleStates.Active);
     }
 
@@ -367,6 +372,67 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
     }
 
     [Fact]
+    public async Task RecordAttestationAsync_ShouldBlockProductionCompletion_WhenArchiveBackendPolicyIsTooWeak()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tilsoftai-dossier-tests", Guid.NewGuid().ToString("N"));
+        var options = CertificationOptions();
+        options.DossierArchiveRootPath = Path.Combine(root, "primary");
+        options.DossierArchiveMirrorRootPath = Path.Combine(root, "mirror");
+        options.EnableDossierArchiveMirror = true;
+        options.MinimumArchiveDurabilityClassForProductionLike = CatalogDurabilityClasses.ManagedDurable;
+        options.RequiredArchiveRetentionPostureForProductionLike = CatalogRetentionPostures.RetentionTracked;
+        var evidence = RequiredEvidence();
+        var service = CreateService(evidence, options: options);
+        var issue = await service.IssueManifestAsync(new CatalogPromotionManifestIssueRequest
+        {
+            EnvironmentName = "prod",
+            ChangeIds = new[] { "chg-1" },
+            EvidenceIds = evidence.Select(item => item.EvidenceId).ToArray()
+        }, Context(), CancellationToken.None);
+        await service.ArchiveDossierAsync(issue.Manifest!.ManifestId, Context(), CancellationToken.None);
+
+        var result = await service.RecordAttestationAsync(issue.Manifest.ManifestId, new CatalogRolloutAttestationRequest
+        {
+            State = CatalogRolloutAttestationStates.Completed,
+            EvidenceIds = evidence.Select(item => item.EvidenceId).ToArray()
+        }, Context(), CancellationToken.None);
+
+        result.IsRecorded.Should().BeFalse();
+        result.Blockers.Should().Contain($"dossier_archive_policy_failure:archive_durability_class_insufficient:{CatalogDurabilityClasses.MirroredFilesystem}:{CatalogDurabilityClasses.ManagedDurable}");
+        result.Blockers.Should().Contain($"dossier_archive_policy_failure:archive_retention_posture_insufficient:{CatalogRetentionPostures.MetadataOnly}:{CatalogRetentionPostures.RetentionTracked}");
+    }
+
+    [Fact]
+    public async Task RecordAttestationAsync_ShouldAcceptProductionCompletion_WhenArchiveBackendPolicyAllowsMirror()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tilsoftai-dossier-tests", Guid.NewGuid().ToString("N"));
+        var options = CertificationOptions();
+        options.DossierArchiveRootPath = Path.Combine(root, "primary");
+        options.DossierArchiveMirrorRootPath = Path.Combine(root, "mirror");
+        options.EnableDossierArchiveMirror = true;
+        options.MinimumArchiveDurabilityClassForProductionLike = CatalogDurabilityClasses.MirroredFilesystem;
+        options.RequiredArchiveRetentionPostureForProductionLike = CatalogRetentionPostures.MetadataOnly;
+        var evidence = RequiredEvidence();
+        var service = CreateService(evidence, options: options);
+        var issue = await service.IssueManifestAsync(new CatalogPromotionManifestIssueRequest
+        {
+            EnvironmentName = "prod",
+            ChangeIds = new[] { "chg-1" },
+            EvidenceIds = evidence.Select(item => item.EvidenceId).ToArray()
+        }, Context(), CancellationToken.None);
+        await service.ArchiveDossierAsync(issue.Manifest!.ManifestId, Context(), CancellationToken.None);
+
+        var result = await service.RecordAttestationAsync(issue.Manifest.ManifestId, new CatalogRolloutAttestationRequest
+        {
+            State = CatalogRolloutAttestationStates.Completed,
+            EvidenceIds = evidence.Select(item => item.EvidenceId).ToArray()
+        }, Context(), CancellationToken.None);
+
+        result.IsRecorded.Should().BeTrue();
+        result.Blockers.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ArchiveDossierAsync_ShouldMaterializeTamperEvidentArchive()
     {
         var root = Path.Combine(Path.GetTempPath(), "tilsoftai-dossier-tests", Guid.NewGuid().ToString("N"));
@@ -388,9 +454,14 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
         archive.IsArchived.Should().BeTrue();
         archive.Archive.Should().NotBeNull();
         archive.Archive!.ArchiveHash.Should().HaveLength(64);
+        archive.Archive.BackendClass.Should().Be(CatalogDurabilityClasses.MirroredFilesystem);
+        archive.Archive.RetentionPosture.Should().Be(CatalogRetentionPostures.MetadataOnly);
+        archive.Archive.ImmutabilityEnforced.Should().BeFalse();
         File.Exists(archive.Archive.ArchivePath).Should().BeTrue();
         dossier!.Archive.Should().NotBeNull();
         dossier.ArchiveVerification!.IsVerified.Should().BeTrue();
+        dossier.ArchiveVerification.BackendClass.Should().Be(CatalogDurabilityClasses.MirroredFilesystem);
+        dossier.ArchiveVerification.RetentionPosture.Should().Be(CatalogRetentionPostures.MetadataOnly);
         dossier.ArchiveVerification.RecoveryState.Should().Be("primary_read_mirror_available");
         dossier.AuditWarnings.Should().NotContain("dossier_archive_required");
     }
@@ -418,6 +489,8 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
 
         verification.IsVerified.Should().BeTrue();
         verification.RecoveryState.Should().Be("recovered_from_mirror");
+        verification.BackendClass.Should().Be(CatalogDurabilityClasses.MirroredFilesystem);
+        verification.RetentionPosture.Should().Be(CatalogRetentionPostures.MetadataOnly);
     }
 
     [Fact]

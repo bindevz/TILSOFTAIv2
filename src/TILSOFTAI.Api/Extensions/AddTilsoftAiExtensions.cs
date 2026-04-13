@@ -153,11 +153,26 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<IPlatformCatalogControlPlane, PlatformCatalogControlPlane>();
         services.AddSingleton<IPlatformCatalogCertificationStore, SqlPlatformCatalogCertificationStore>();
         services.AddSingleton<IPlatformCatalogArtifactProvider, FileSystemCatalogArtifactProvider>();
+        services.AddSingleton<IPlatformCatalogTrustStoreRecoveryStorage>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<CatalogCertificationOptions>>().Value;
+            return string.Equals(options.SignerTrustStoreBackupBackend, "managed_sql", StringComparison.OrdinalIgnoreCase)
+                ? new SqlPlatformCatalogTrustStoreRecoveryStorage(sp.GetRequiredService<IOptions<SqlOptions>>())
+                : new FileSystemPlatformCatalogTrustStoreRecoveryStorage(sp.GetRequiredService<IOptions<CatalogCertificationOptions>>());
+        });
         services.AddSingleton<IPlatformCatalogSignerTrustStore, FileSystemPlatformCatalogSignerTrustStore>();
         services.AddSingleton<IPlatformCatalogSignatureVerifier, RsaPlatformCatalogSignatureVerifier>();
         services.AddSingleton<IPlatformCatalogEvidenceVerifier, PlatformCatalogEvidenceVerifier>();
         services.AddSingleton<IPlatformCatalogPromotionManifestStore, SqlPlatformCatalogPromotionManifestStore>();
-        services.AddSingleton<IPlatformCatalogArchiveStorage, MirroredPlatformCatalogArchiveStorage>();
+        services.AddSingleton<IPlatformCatalogArchiveStorage>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<CatalogCertificationOptions>>().Value;
+            return string.Equals(options.DossierArchiveBackend, "managed_sql", StringComparison.OrdinalIgnoreCase)
+                ? new SqlPlatformCatalogArchiveStorage(sp.GetRequiredService<IOptions<SqlOptions>>())
+                : string.Equals(options.DossierArchiveBackend, "filesystem", StringComparison.OrdinalIgnoreCase)
+                    ? new FileSystemPlatformCatalogArchiveStorage(sp.GetRequiredService<IOptions<CatalogCertificationOptions>>())
+                    : new MirroredPlatformCatalogArchiveStorage(sp.GetRequiredService<IOptions<CatalogCertificationOptions>>());
+        });
         services.AddSingleton<IPlatformCatalogDossierArchiveService, FileSystemPlatformCatalogDossierArchiveService>();
         services.AddSingleton<IPlatformCatalogPromotionManifestService, PlatformCatalogPromotionManifestService>();
         services.AddSingleton<IPlatformCatalogPromotionGate, PlatformCatalogPromotionGate>();
@@ -580,11 +595,19 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.AllowedSignatureAlgorithms.Length > 0, "CatalogCertification:AllowedSignatureAlgorithms must have at least one algorithm.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.SignerTrustStorePath), "CatalogCertification:SignerTrustStorePath is required.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.SignerTrustStoreBackupPath), "CatalogCertification:SignerTrustStoreBackupPath is required.")
+            .Validate(options => new[] { "filesystem", "managed_sql" }.Contains(options.SignerTrustStoreBackupBackend, StringComparer.OrdinalIgnoreCase),
+                "CatalogCertification:SignerTrustStoreBackupBackend currently supports 'filesystem' or 'managed_sql'.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.DossierArchiveBackend), "CatalogCertification:DossierArchiveBackend is required.")
-            .Validate(options => options.DossierArchiveBackend is "filesystem" or "filesystem_mirror",
-                "CatalogCertification:DossierArchiveBackend currently supports 'filesystem' or 'filesystem_mirror'.")
+            .Validate(options => new[] { "filesystem", "filesystem_mirror", "managed_sql" }.Contains(options.DossierArchiveBackend, StringComparer.OrdinalIgnoreCase),
+                "CatalogCertification:DossierArchiveBackend currently supports 'filesystem', 'filesystem_mirror', or 'managed_sql'.")
             .Validate(options => !options.EnableDossierArchiveMirror || !string.IsNullOrWhiteSpace(options.DossierArchiveMirrorRootPath),
                 "CatalogCertification:DossierArchiveMirrorRootPath is required when mirror archives are enabled.")
+            .Validate(options => CatalogDurabilityClasses.Rank(options.MinimumArchiveDurabilityClassForProductionLike) > 0,
+                "CatalogCertification:MinimumArchiveDurabilityClassForProductionLike is invalid.")
+            .Validate(options => CatalogDurabilityClasses.Rank(options.MinimumTrustStoreDurabilityClassForProductionLike) > 0,
+                "CatalogCertification:MinimumTrustStoreDurabilityClassForProductionLike is invalid.")
+            .Validate(options => CatalogRetentionPostures.Rank(options.RequiredArchiveRetentionPostureForProductionLike) > 0,
+                "CatalogCertification:RequiredArchiveRetentionPostureForProductionLike is invalid.")
             .Validate(options => options.TrustedEvidenceSigners.All(signer =>
                     !string.IsNullOrWhiteSpace(signer.SignerId)
                     && !string.IsNullOrWhiteSpace(signer.KeyId)

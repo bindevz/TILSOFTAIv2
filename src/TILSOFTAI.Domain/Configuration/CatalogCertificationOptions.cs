@@ -2,7 +2,7 @@ namespace TILSOFTAI.Domain.Configuration;
 
 public sealed class CatalogCertificationOptions
 {
-    public string PolicyVersion { get; set; } = "sprint-16";
+    public string PolicyVersion { get; set; } = "sprint-18";
     public string EnvironmentName { get; set; } = "development";
     public string[] ProductionLikeEnvironments { get; set; } = { "prod", "production", "staging" };
     public bool RequireCertificationEvidenceForProductionLikePromotion { get; set; } = true;
@@ -20,9 +20,13 @@ public sealed class CatalogCertificationOptions
     public string[] AllowedSignatureAlgorithms { get; set; } = { "RS256" };
     public string SignerTrustStorePath { get; set; } = "signer-trust-store.json";
     public string SignerTrustStoreBackupPath { get; set; } = "signer-trust-store.backup.json";
+    public string SignerTrustStoreBackupBackend { get; set; } = "managed_sql";
     public bool RequireIndependentSignerTrustApproval { get; set; } = true;
     public string DossierArchiveRootPath { get; set; } = "dossier-archives";
-    public string DossierArchiveBackend { get; set; } = "filesystem";
+    public string DossierArchiveBackend { get; set; } = "managed_sql";
+    public string MinimumArchiveDurabilityClassForProductionLike { get; set; } = "managed_durable";
+    public string MinimumTrustStoreDurabilityClassForProductionLike { get; set; } = "managed_durable";
+    public string RequiredArchiveRetentionPostureForProductionLike { get; set; } = "retention_tracked";
     public bool EnableDossierArchiveMirror { get; set; } = true;
     public string DossierArchiveMirrorRootPath { get; set; } = "dossier-archives-mirror";
     public bool RequireArchivedDossierForProductionLikeCompletion { get; set; } = true;
@@ -55,6 +59,8 @@ public sealed class CatalogCertificationOptions
         "duplicate_submit_drill",
         "sql_apply_outage_drill",
         "fallback_risk_drill",
+        "archive_backend_policy_drill",
+        "managed_trust_store_recovery_drill",
         "operator_signoff"
     };
 

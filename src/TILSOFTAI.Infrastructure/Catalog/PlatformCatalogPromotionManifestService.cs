@@ -202,6 +202,21 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
             blockers.Add("dossier_archive_required");
         }
 
+        if (productionLike
+            && string.Equals(state, CatalogRolloutAttestationStates.Completed, StringComparison.OrdinalIgnoreCase)
+            && _options.RequireArchivedDossierForProductionLikeCompletion)
+        {
+            var archiveVerification = await _archiveService.VerifyArchiveAsync(manifest.ManifestId, ct);
+            if (!archiveVerification.IsVerified)
+            {
+                blockers.AddRange(archiveVerification.Errors.Select(error => $"dossier_archive_verification_failed:{error}"));
+            }
+            else
+            {
+                blockers.AddRange(ArchivePolicyFailures(archiveVerification).Select(failure => $"dossier_archive_policy_failure:{failure}"));
+            }
+        }
+
         if (blockers.Count > 0)
         {
             return new CatalogRolloutAttestationResult
@@ -308,6 +323,7 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
             {
                 warnings.AddRange(archiveVerification.Errors.Select(error => $"dossier_archive_verification_failed:{error}"));
             }
+            warnings.AddRange(ArchivePolicyFailures(archiveVerification).Select(failure => $"dossier_archive_policy_warning:{failure}"));
         }
 
         var dossier = new CatalogPromotionDossier
@@ -412,8 +428,26 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
             AttestationRetainUntilUtc = attestationUntil,
             DossierArchiveRetainUntilUtc = dossierUntil,
             ArchiveRequired = _options.RequireArchiveForProductionLikeDossiers && IsProductionLike(manifest.EnvironmentName),
-            RetentionCurrent = !retainUntilValues.Any(item => item <= now)
+            RetentionCurrent = !retainUntilValues.Any(item => item <= now),
+            RequiredArchiveDurabilityClass = _options.MinimumArchiveDurabilityClassForProductionLike,
+            RequiredRetentionPosture = _options.RequiredArchiveRetentionPostureForProductionLike
         };
+    }
+
+    private IReadOnlyList<string> ArchivePolicyFailures(CatalogDossierArchiveVerificationResult archive)
+    {
+        var failures = new List<string>();
+        if (CatalogDurabilityClasses.Rank(archive.BackendClass) < CatalogDurabilityClasses.Rank(_options.MinimumArchiveDurabilityClassForProductionLike))
+        {
+            failures.Add($"archive_durability_class_insufficient:{archive.BackendClass}:{_options.MinimumArchiveDurabilityClassForProductionLike}");
+        }
+
+        if (CatalogRetentionPostures.Rank(archive.RetentionPosture) < CatalogRetentionPostures.Rank(_options.RequiredArchiveRetentionPostureForProductionLike))
+        {
+            failures.Add($"archive_retention_posture_insufficient:{archive.RetentionPosture}:{_options.RequiredArchiveRetentionPostureForProductionLike}");
+        }
+
+        return failures;
     }
 
     private async Task<List<CatalogCertificationEvidenceRecord>> LoadTrustedEvidenceAsync(
