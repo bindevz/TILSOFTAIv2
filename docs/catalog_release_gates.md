@@ -38,11 +38,12 @@ Promotion is blocked when any condition is true:
 1. Run preview gate with the proposed payload.
 2. Submit only if `isAllowed=true`.
 3. After approval, run change gate with `changeId`.
-4. Verify and accept required evidence, using signed evidence for high-assurance production-like releases.
+4. Verify and accept required evidence, using active lifecycle-managed signer keys for high-assurance production-like releases.
 5. Issue a promotion manifest with the approved change ids and trusted evidence ids.
 6. Archive the promotion dossier.
-7. Apply only with manifest-backed release approval.
-8. Record rollout attestations and completion evidence.
+7. Replay-verify the archived dossier package.
+8. Apply only with manifest-backed release approval.
+9. Record rollout attestations and completion evidence.
 
 The gate returns deterministic `blockers`, `warnings`, `evidenceMissing`, and `evidenceUntrusted` arrays for automation and operator review.
 

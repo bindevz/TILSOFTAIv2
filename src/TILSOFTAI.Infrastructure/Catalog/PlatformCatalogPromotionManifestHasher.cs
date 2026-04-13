@@ -53,6 +53,11 @@ public static class PlatformCatalogPromotionManifestHasher
                 item.SignerId,
                 item.SignerPublicKeyId,
                 item.SignatureVerifiedAtUtc,
+                item.SignerPublicKeyFingerprint,
+                item.SignerStatusAtVerification,
+                item.SignerTrustStoreVersion,
+                item.SignerValidFromUtc,
+                item.SignerValidUntilUtc,
                 item.ExpiresAtUtc
             }).OrderBy(item => item.EvidenceId, StringComparer.Ordinal).ToArray(),
             Attestations = dossier.Attestations.Select(item => new

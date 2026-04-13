@@ -10,6 +10,8 @@ namespace TILSOFTAI.Infrastructure.Catalog;
 public sealed class PlatformCatalogStartupReporter : IHostedService
 {
     private readonly IPlatformCatalogProvider _catalogProvider;
+    private readonly IPlatformCatalogSignerTrustStore _signerTrustStore;
+    private readonly IPlatformCatalogArchiveStorage _archiveStorage;
     private readonly IConfiguration _configuration;
     private readonly PlatformCatalogOptions _options;
     private readonly IMetricsService _metrics;
@@ -17,12 +19,16 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
 
     public PlatformCatalogStartupReporter(
         IPlatformCatalogProvider catalogProvider,
+        IPlatformCatalogSignerTrustStore signerTrustStore,
+        IPlatformCatalogArchiveStorage archiveStorage,
         IConfiguration configuration,
         IOptions<PlatformCatalogOptions> options,
         IMetricsService metrics,
         ILogger<PlatformCatalogStartupReporter> logger)
     {
         _catalogProvider = catalogProvider ?? throw new ArgumentNullException(nameof(catalogProvider));
+        _signerTrustStore = signerTrustStore ?? throw new ArgumentNullException(nameof(signerTrustStore));
+        _archiveStorage = archiveStorage ?? throw new ArgumentNullException(nameof(archiveStorage));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
@@ -32,6 +38,8 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
     public Task StartAsync(CancellationToken cancellationToken)
     {
         var snapshot = _catalogProvider.Load();
+        var signers = _signerTrustStore.ListSigners();
+        var activeSigners = signers.Count(item => string.Equals(item.Status, CatalogSignerLifecycleStates.Active, StringComparison.OrdinalIgnoreCase));
         var bootstrapCapabilities = _configuration.GetSection("Capabilities").GetChildren().Count();
         var bootstrapConnections = _configuration.GetSection("ExternalConnections:Connections").GetChildren().Count();
         var mode = DetermineMode(snapshot, bootstrapCapabilities, bootstrapConnections);
@@ -57,6 +65,19 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
             bootstrapCapabilities,
             bootstrapConnections,
             _options.AllowBootstrapConfigurationFallback);
+
+        _logger.LogInformation(
+            "PlatformCatalogTrustInfrastructureReport | SignerCount: {SignerCount} | ActiveSigners: {ActiveSigners} | ArchiveBackend: {ArchiveBackend}",
+            signers.Count,
+            activeSigners,
+            _archiveStorage.BackendName);
+
+        if (productionLike && activeSigners == 0)
+        {
+            _logger.LogWarning(
+                "PlatformCatalogSignerTrustMissing | Environment: {Environment} | Production-like signature policy requires active trusted signers before signed evidence can verify.",
+                EffectiveEnvironmentName());
+        }
 
         if (mode is "bootstrap_only" or "mixed")
         {

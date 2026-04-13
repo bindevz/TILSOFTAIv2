@@ -8,4 +8,8 @@ public interface IPlatformCatalogDossierArchiveService
         CatalogPromotionDossier dossier,
         CatalogMutationContext context,
         CancellationToken ct);
+
+    Task<CatalogDossierArchiveVerificationResult> VerifyArchiveAsync(
+        string manifestId,
+        CancellationToken ct);
 }

@@ -19,6 +19,7 @@ public sealed class PlatformCatalogController : ControllerBase
     private readonly IPlatformCatalogEvidenceVerifier _evidenceVerifier;
     private readonly IPlatformCatalogPromotionManifestStore _manifestStore;
     private readonly IPlatformCatalogPromotionManifestService _manifestService;
+    private readonly IPlatformCatalogSignerTrustStore _signerTrustStore;
     private readonly IExecutionContextAccessor _contextAccessor;
     private readonly CatalogControlPlaneOptions _options;
     private readonly IMetricsService _metrics;
@@ -30,6 +31,7 @@ public sealed class PlatformCatalogController : ControllerBase
         IPlatformCatalogEvidenceVerifier evidenceVerifier,
         IPlatformCatalogPromotionManifestStore manifestStore,
         IPlatformCatalogPromotionManifestService manifestService,
+        IPlatformCatalogSignerTrustStore signerTrustStore,
         IExecutionContextAccessor contextAccessor,
         IOptions<CatalogControlPlaneOptions> options,
         IMetricsService metrics)
@@ -40,6 +42,7 @@ public sealed class PlatformCatalogController : ControllerBase
         _evidenceVerifier = evidenceVerifier ?? throw new ArgumentNullException(nameof(evidenceVerifier));
         _manifestStore = manifestStore ?? throw new ArgumentNullException(nameof(manifestStore));
         _manifestService = manifestService ?? throw new ArgumentNullException(nameof(manifestService));
+        _signerTrustStore = signerTrustStore ?? throw new ArgumentNullException(nameof(signerTrustStore));
         _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(contextAccessor));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
@@ -291,6 +294,75 @@ public sealed class PlatformCatalogController : ControllerBase
         RequireAnyCatalogRole(context);
         var result = await _manifestService.ArchiveDossierAsync(manifestId, context, ct);
         return result.IsArchived ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpGet("promotion-manifests/{manifestId}/dossier/archive/verify")]
+    public async Task<ActionResult<CatalogDossierArchiveVerificationResult>> VerifyPromotionDossierArchive(
+        string manifestId,
+        CancellationToken ct)
+    {
+        var context = ToCatalogContext();
+        RequireAnyCatalogRole(context);
+        var result = await _manifestService.VerifyDossierArchiveAsync(manifestId, context, ct);
+        return result.IsVerified ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpGet("signer-trust/signers")]
+    public ActionResult<IReadOnlyList<CatalogTrustedSignerRecord>> ListTrustedSigners()
+    {
+        RequireAnyCatalogRole(ToCatalogContext());
+        return Ok(_signerTrustStore.ListSigners());
+    }
+
+    [HttpGet("signer-trust/changes")]
+    public ActionResult<IReadOnlyList<CatalogSignerTrustChangeRecord>> ListSignerTrustChanges()
+    {
+        RequireAnyCatalogRole(ToCatalogContext());
+        return Ok(_signerTrustStore.ListChanges());
+    }
+
+    [HttpPost("signer-trust/changes")]
+    public ActionResult<CatalogSignerTrustMutationResult> ProposeSignerTrustChange(
+        [FromBody] CatalogSignerTrustMutationApiRequest? request)
+    {
+        if (request is null)
+        {
+            return BadRequest("signer trust mutation request is required.");
+        }
+
+        var context = ToCatalogContext();
+        RequireAnyCatalogRole(context);
+        var result = _signerTrustStore.ProposeChange(request.ToMutationRequest(), context);
+        return result.IsAccepted ? Accepted(result) : BadRequest(result);
+    }
+
+    [HttpPost("signer-trust/changes/{changeId}/approve")]
+    public ActionResult<CatalogSignerTrustMutationResult> ApproveSignerTrustChange(string changeId)
+    {
+        var context = ToCatalogContext();
+        RequireAnyCatalogRole(context);
+        var result = _signerTrustStore.ApproveChange(changeId, context);
+        return result.IsAccepted ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpPost("signer-trust/changes/{changeId}/reject")]
+    public ActionResult<CatalogSignerTrustMutationResult> RejectSignerTrustChange(
+        string changeId,
+        [FromBody] CatalogSignerTrustRejectApiRequest? request)
+    {
+        var context = ToCatalogContext();
+        RequireAnyCatalogRole(context);
+        var result = _signerTrustStore.RejectChange(changeId, context, request?.Reason ?? string.Empty);
+        return result.IsAccepted ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpPost("signer-trust/changes/{changeId}/apply")]
+    public ActionResult<CatalogSignerTrustMutationResult> ApplySignerTrustChange(string changeId)
+    {
+        var context = ToCatalogContext();
+        RequireAnyCatalogRole(context);
+        var result = _signerTrustStore.ApplyChange(changeId, context);
+        return result.IsAccepted ? Ok(result) : BadRequest(result);
     }
 
     [HttpPost("changes/{changeId}/approve")]

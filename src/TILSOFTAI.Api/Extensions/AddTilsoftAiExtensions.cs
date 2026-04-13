@@ -153,9 +153,11 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<IPlatformCatalogControlPlane, PlatformCatalogControlPlane>();
         services.AddSingleton<IPlatformCatalogCertificationStore, SqlPlatformCatalogCertificationStore>();
         services.AddSingleton<IPlatformCatalogArtifactProvider, FileSystemCatalogArtifactProvider>();
+        services.AddSingleton<IPlatformCatalogSignerTrustStore, FileSystemPlatformCatalogSignerTrustStore>();
         services.AddSingleton<IPlatformCatalogSignatureVerifier, RsaPlatformCatalogSignatureVerifier>();
         services.AddSingleton<IPlatformCatalogEvidenceVerifier, PlatformCatalogEvidenceVerifier>();
         services.AddSingleton<IPlatformCatalogPromotionManifestStore, SqlPlatformCatalogPromotionManifestStore>();
+        services.AddSingleton<IPlatformCatalogArchiveStorage, FileSystemPlatformCatalogArchiveStorage>();
         services.AddSingleton<IPlatformCatalogDossierArchiveService, FileSystemPlatformCatalogDossierArchiveService>();
         services.AddSingleton<IPlatformCatalogPromotionManifestService, PlatformCatalogPromotionManifestService>();
         services.AddSingleton<IPlatformCatalogPromotionGate, PlatformCatalogPromotionGate>();
@@ -576,6 +578,10 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.DossierArchiveRetentionDays >= 0, "CatalogCertification:DossierArchiveRetentionDays must be >= 0.")
             .Validate(options => options.TrustedEvidenceStatuses.Length > 0, "CatalogCertification:TrustedEvidenceStatuses must have at least one status.")
             .Validate(options => options.AllowedSignatureAlgorithms.Length > 0, "CatalogCertification:AllowedSignatureAlgorithms must have at least one algorithm.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.SignerTrustStorePath), "CatalogCertification:SignerTrustStorePath is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.DossierArchiveBackend), "CatalogCertification:DossierArchiveBackend is required.")
+            .Validate(options => string.Equals(options.DossierArchiveBackend, "filesystem", StringComparison.OrdinalIgnoreCase),
+                "CatalogCertification:DossierArchiveBackend currently supports 'filesystem'.")
             .Validate(options => options.TrustedEvidenceSigners.All(signer =>
                     !string.IsNullOrWhiteSpace(signer.SignerId)
                     && !string.IsNullOrWhiteSpace(signer.KeyId)

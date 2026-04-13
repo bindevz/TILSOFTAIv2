@@ -479,7 +479,12 @@ BEGIN
         SignerPublicKeyId,
         SignatureVerifiedAtUtc,
         VerificationMethod,
-        VerificationPolicyVersion
+        VerificationPolicyVersion,
+        SignerPublicKeyFingerprint,
+        SignerStatusAtVerification,
+        SignerTrustStoreVersion,
+        SignerValidFromUtc,
+        SignerValidUntilUtc
     FROM dbo.PlatformCatalogCertificationEvidence
     WHERE EnvironmentName = @EnvironmentName
     ORDER BY CapturedAtUtc DESC;
@@ -528,7 +533,12 @@ BEGIN
         SignerPublicKeyId,
         SignatureVerifiedAtUtc,
         VerificationMethod,
-        VerificationPolicyVersion
+        VerificationPolicyVersion,
+        SignerPublicKeyFingerprint,
+        SignerStatusAtVerification,
+        SignerTrustStoreVersion,
+        SignerValidFromUtc,
+        SignerValidUntilUtc
     FROM dbo.PlatformCatalogCertificationEvidence
     WHERE EvidenceId = @EvidenceId;
 END;
@@ -569,7 +579,12 @@ CREATE OR ALTER PROCEDURE dbo.app_platform_catalogcertification_create
     @SignerPublicKeyId NVARCHAR(200) = NULL,
     @SignatureVerifiedAtUtc DATETIME2(7) = NULL,
     @VerificationMethod NVARCHAR(80) = NULL,
-    @VerificationPolicyVersion NVARCHAR(80) = NULL
+    @VerificationPolicyVersion NVARCHAR(80) = NULL,
+    @SignerPublicKeyFingerprint NVARCHAR(128) = NULL,
+    @SignerStatusAtVerification NVARCHAR(80) = NULL,
+    @SignerTrustStoreVersion NVARCHAR(100) = NULL,
+    @SignerValidFromUtc DATETIME2(7) = NULL,
+    @SignerValidUntilUtc DATETIME2(7) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -610,7 +625,12 @@ BEGIN
         SignerPublicKeyId,
         SignatureVerifiedAtUtc,
         VerificationMethod,
-        VerificationPolicyVersion
+        VerificationPolicyVersion,
+        SignerPublicKeyFingerprint,
+        SignerStatusAtVerification,
+        SignerTrustStoreVersion,
+        SignerValidFromUtc,
+        SignerValidUntilUtc
     )
     VALUES
     (
@@ -648,7 +668,12 @@ BEGIN
         NULLIF(LTRIM(RTRIM(@SignerPublicKeyId)), ''),
         @SignatureVerifiedAtUtc,
         NULLIF(LTRIM(RTRIM(@VerificationMethod)), ''),
-        NULLIF(LTRIM(RTRIM(@VerificationPolicyVersion)), '')
+        NULLIF(LTRIM(RTRIM(@VerificationPolicyVersion)), ''),
+        NULLIF(LTRIM(RTRIM(@SignerPublicKeyFingerprint)), ''),
+        NULLIF(LTRIM(RTRIM(@SignerStatusAtVerification)), ''),
+        NULLIF(LTRIM(RTRIM(@SignerTrustStoreVersion)), ''),
+        @SignerValidFromUtc,
+        @SignerValidUntilUtc
     );
 
     SELECT *
@@ -673,7 +698,12 @@ CREATE OR ALTER PROCEDURE dbo.app_platform_catalogcertification_verify
     @SignerPublicKeyId NVARCHAR(200) = NULL,
     @SignatureVerifiedAtUtc DATETIME2(7) = NULL,
     @VerificationMethod NVARCHAR(80) = NULL,
-    @VerificationPolicyVersion NVARCHAR(80) = NULL
+    @VerificationPolicyVersion NVARCHAR(80) = NULL,
+    @SignerPublicKeyFingerprint NVARCHAR(128) = NULL,
+    @SignerStatusAtVerification NVARCHAR(80) = NULL,
+    @SignerTrustStoreVersion NVARCHAR(100) = NULL,
+    @SignerValidFromUtc DATETIME2(7) = NULL,
+    @SignerValidUntilUtc DATETIME2(7) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -694,7 +724,12 @@ BEGIN
         SignerPublicKeyId = NULLIF(LTRIM(RTRIM(@SignerPublicKeyId)), ''),
         SignatureVerifiedAtUtc = @SignatureVerifiedAtUtc,
         VerificationMethod = NULLIF(LTRIM(RTRIM(@VerificationMethod)), ''),
-        VerificationPolicyVersion = NULLIF(LTRIM(RTRIM(@VerificationPolicyVersion)), '')
+        VerificationPolicyVersion = NULLIF(LTRIM(RTRIM(@VerificationPolicyVersion)), ''),
+        SignerPublicKeyFingerprint = NULLIF(LTRIM(RTRIM(@SignerPublicKeyFingerprint)), ''),
+        SignerStatusAtVerification = NULLIF(LTRIM(RTRIM(@SignerStatusAtVerification)), ''),
+        SignerTrustStoreVersion = NULLIF(LTRIM(RTRIM(@SignerTrustStoreVersion)), ''),
+        SignerValidFromUtc = @SignerValidFromUtc,
+        SignerValidUntilUtc = @SignerValidUntilUtc
     WHERE EvidenceId = @EvidenceId;
 
     SELECT *

@@ -1,7 +1,7 @@
 # Catalog Evidence Integrity - Sprint 15
 
 Sprint 13 upgraded certification evidence from operator metadata to a policy-bearing trust object. Sprint 14 adds provider-backed artifact verification and trust tiers.
-Sprint 15 adds signed evidence bundles and policy-version provenance.
+Sprint 15 adds signed evidence bundles and policy-version provenance. Sprint 16 adds lifecycle-managed signer trust and governed signer rotation/revocation.
 
 ## Evidence Lifecycle
 
@@ -29,10 +29,12 @@ Evidence verification checks:
 - content type and source system are allowed when provided,
 - collected timestamp exists, is not in the future, and is not stale,
 - signed payload and base64 RSA signature are valid when signature fields are supplied,
-- signer id and public key id match a configured trusted signer.
+- signer id and public key id match an active trusted signer,
+- signer validity windows allow verification at verification time,
+- signer has not been revoked, rotated, or retired for new verification.
 
 The verifier does not fetch arbitrary external links. It verifies policy metadata and allowed reference shape, and it can verify bytes only through controlled providers such as the filesystem-backed `artifact://catalog-evidence/` provider.
-Signed evidence uses local configured public keys. A valid `RS256` signature promotes trust to `signature_verified` and records the verification method and policy version.
+Signed evidence uses the lifecycle-aware signer trust store. A valid `RS256` signature promotes trust to `signature_verified` and records the verification method, policy version, signer lifecycle state, signer key fingerprint, validity window, and trust-store version.
 
 ## API Flow
 

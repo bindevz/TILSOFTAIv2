@@ -85,6 +85,11 @@ public sealed class SqlPlatformCatalogCertificationStore : IPlatformCatalogCerti
         command.Parameters.Add(new SqlParameter("@SignatureVerifiedAtUtc", SqlDbType.DateTime2) { Value = DbNullable(evidence.SignatureVerifiedAtUtc) });
         command.Parameters.Add(new SqlParameter("@VerificationMethod", SqlDbType.NVarChar, 80) { Value = DbNullable(evidence.VerificationMethod) });
         command.Parameters.Add(new SqlParameter("@VerificationPolicyVersion", SqlDbType.NVarChar, 80) { Value = DbNullable(evidence.VerificationPolicyVersion) });
+        command.Parameters.Add(new SqlParameter("@SignerPublicKeyFingerprint", SqlDbType.NVarChar, 128) { Value = DbNullable(evidence.SignerPublicKeyFingerprint) });
+        command.Parameters.Add(new SqlParameter("@SignerStatusAtVerification", SqlDbType.NVarChar, 80) { Value = DbNullable(evidence.SignerStatusAtVerification) });
+        command.Parameters.Add(new SqlParameter("@SignerTrustStoreVersion", SqlDbType.NVarChar, 100) { Value = DbNullable(evidence.SignerTrustStoreVersion) });
+        command.Parameters.Add(new SqlParameter("@SignerValidFromUtc", SqlDbType.DateTime2) { Value = DbNullable(evidence.SignerValidFromUtc) });
+        command.Parameters.Add(new SqlParameter("@SignerValidUntilUtc", SqlDbType.DateTime2) { Value = DbNullable(evidence.SignerValidUntilUtc) });
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         return await reader.ReadAsync(ct)
@@ -115,6 +120,11 @@ public sealed class SqlPlatformCatalogCertificationStore : IPlatformCatalogCerti
         command.Parameters.Add(new SqlParameter("@SignatureVerifiedAtUtc", SqlDbType.DateTime2) { Value = DbNullable(result.SignatureVerifiedAtUtc) });
         command.Parameters.Add(new SqlParameter("@VerificationMethod", SqlDbType.NVarChar, 80) { Value = DbNullable(result.VerificationMethod) });
         command.Parameters.Add(new SqlParameter("@VerificationPolicyVersion", SqlDbType.NVarChar, 80) { Value = DbNullable(result.VerificationPolicyVersion) });
+        command.Parameters.Add(new SqlParameter("@SignerPublicKeyFingerprint", SqlDbType.NVarChar, 128) { Value = DbNullable(result.SignerPublicKeyFingerprint) });
+        command.Parameters.Add(new SqlParameter("@SignerStatusAtVerification", SqlDbType.NVarChar, 80) { Value = DbNullable(result.SignerStatusAtVerification) });
+        command.Parameters.Add(new SqlParameter("@SignerTrustStoreVersion", SqlDbType.NVarChar, 100) { Value = DbNullable(result.SignerTrustStoreVersion) });
+        command.Parameters.Add(new SqlParameter("@SignerValidFromUtc", SqlDbType.DateTime2) { Value = DbNullable(result.SignerValidFromUtc) });
+        command.Parameters.Add(new SqlParameter("@SignerValidUntilUtc", SqlDbType.DateTime2) { Value = DbNullable(result.SignerValidUntilUtc) });
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         return await reader.ReadAsync(ct)
@@ -172,7 +182,12 @@ public sealed class SqlPlatformCatalogCertificationStore : IPlatformCatalogCerti
         SignerPublicKeyId = ReaderString(reader, "SignerPublicKeyId"),
         SignatureVerifiedAtUtc = ReaderDateTime(reader, "SignatureVerifiedAtUtc"),
         VerificationMethod = ReaderString(reader, "VerificationMethod"),
-        VerificationPolicyVersion = ReaderString(reader, "VerificationPolicyVersion")
+        VerificationPolicyVersion = ReaderString(reader, "VerificationPolicyVersion"),
+        SignerPublicKeyFingerprint = ReaderString(reader, "SignerPublicKeyFingerprint"),
+        SignerStatusAtVerification = ReaderString(reader, "SignerStatusAtVerification"),
+        SignerTrustStoreVersion = ReaderString(reader, "SignerTrustStoreVersion"),
+        SignerValidFromUtc = ReaderDateTime(reader, "SignerValidFromUtc"),
+        SignerValidUntilUtc = ReaderDateTime(reader, "SignerValidUntilUtc")
     };
 
     private static object DbNullable(string? value) =>

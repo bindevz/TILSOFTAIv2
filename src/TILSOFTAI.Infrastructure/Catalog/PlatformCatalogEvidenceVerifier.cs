@@ -9,11 +9,20 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
     private readonly CatalogCertificationOptions _options;
     private readonly IPlatformCatalogArtifactProvider _artifactProvider;
     private readonly IPlatformCatalogSignatureVerifier _signatureVerifier;
+    private readonly IPlatformCatalogSignerTrustStore _signerTrustStore;
 
     public PlatformCatalogEvidenceVerifier(
         IOptions<CatalogCertificationOptions> options,
         IPlatformCatalogArtifactProvider artifactProvider)
-        : this(options, artifactProvider, new RsaPlatformCatalogSignatureVerifier(options))
+        : this(options, artifactProvider, new FileSystemPlatformCatalogSignerTrustStore(options))
+    {
+    }
+
+    public PlatformCatalogEvidenceVerifier(
+        IOptions<CatalogCertificationOptions> options,
+        IPlatformCatalogArtifactProvider artifactProvider,
+        IPlatformCatalogSignerTrustStore signerTrustStore)
+        : this(options, artifactProvider, new RsaPlatformCatalogSignatureVerifier(options, signerTrustStore), signerTrustStore)
     {
     }
 
@@ -21,10 +30,20 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
         IOptions<CatalogCertificationOptions> options,
         IPlatformCatalogArtifactProvider artifactProvider,
         IPlatformCatalogSignatureVerifier signatureVerifier)
+        : this(options, artifactProvider, signatureVerifier, new FileSystemPlatformCatalogSignerTrustStore(options))
+    {
+    }
+
+    public PlatformCatalogEvidenceVerifier(
+        IOptions<CatalogCertificationOptions> options,
+        IPlatformCatalogArtifactProvider artifactProvider,
+        IPlatformCatalogSignatureVerifier signatureVerifier,
+        IPlatformCatalogSignerTrustStore signerTrustStore)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _artifactProvider = artifactProvider ?? throw new ArgumentNullException(nameof(artifactProvider));
         _signatureVerifier = signatureVerifier ?? throw new ArgumentNullException(nameof(signatureVerifier));
+        _signerTrustStore = signerTrustStore ?? throw new ArgumentNullException(nameof(signerTrustStore));
     }
 
     public CatalogEvidenceVerificationResult Verify(
@@ -92,6 +111,11 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
             SignatureVerifiedAtUtc = signatureVerification.SignatureVerifiedAtUtc,
             VerificationMethod = verificationMethod,
             VerificationPolicyVersion = _options.PolicyVersion,
+            SignerPublicKeyFingerprint = signatureVerification.SignerPublicKeyFingerprint,
+            SignerStatusAtVerification = signatureVerification.SignerStatusAtVerification,
+            SignerTrustStoreVersion = signatureVerification.SignerTrustStoreVersion,
+            SignerValidFromUtc = signatureVerification.SignerValidFromUtc,
+            SignerValidUntilUtc = signatureVerification.SignerValidUntilUtc,
             Errors = errors
         };
     }
@@ -104,6 +128,7 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
         ArgumentNullException.ThrowIfNull(evidence);
 
         var failures = new List<string>();
+        var warnings = new List<string>();
         var requiredTrustTier = RequiredTrustTier(evidence.EnvironmentName);
         var trustTier = string.IsNullOrWhiteSpace(evidence.TrustTier)
             ? CatalogEvidenceTrustTiers.MetadataVerified
@@ -144,6 +169,7 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
         }
 
         failures.AddRange(ValidateEvidence(evidence, utcNow));
+        warnings.AddRange(EvaluateHistoricalSignerState(evidence, utcNow));
 
         return new CatalogEvidenceTrustEvaluation
         {
@@ -155,6 +181,7 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
             FreshUntilUtc = freshUntil,
             VerificationMethod = evidence.VerificationMethod,
             VerificationPolicyVersion = evidence.VerificationPolicyVersion,
+            Warnings = warnings.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             Failures = failures.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
         };
     }
@@ -238,6 +265,51 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
             : _options.ProductionLikeEnvironments.Any(item => string.Equals(item, environmentName, StringComparison.OrdinalIgnoreCase))
                 ? _options.MinimumEvidenceTrustTierForProductionLikePromotion
                 : CatalogEvidenceTrustTiers.MetadataVerified;
+
+    private IReadOnlyList<string> EvaluateHistoricalSignerState(CatalogCertificationEvidenceRecord evidence, DateTime utcNow)
+    {
+        if (!string.Equals(evidence.VerificationMethod, CatalogEvidenceVerificationMethods.Signature, StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(evidence.SignerId)
+            || string.IsNullOrWhiteSpace(evidence.SignerPublicKeyId))
+        {
+            return Array.Empty<string>();
+        }
+
+        var warnings = new List<string>();
+        var signer = _signerTrustStore.FindSigner(evidence.SignerId, evidence.SignerPublicKeyId);
+        if (signer is null)
+        {
+            warnings.Add("signer_currently_missing");
+            return warnings;
+        }
+
+        if (!string.IsNullOrWhiteSpace(evidence.SignerPublicKeyFingerprint)
+            && !string.Equals(signer.PublicKeyFingerprint, evidence.SignerPublicKeyFingerprint, StringComparison.OrdinalIgnoreCase))
+        {
+            warnings.Add("signer_public_key_fingerprint_changed");
+        }
+
+        if (string.Equals(signer.Status, CatalogSignerLifecycleStates.Revoked, StringComparison.OrdinalIgnoreCase)
+            && (!signer.RevokedAtUtc.HasValue || !evidence.SignatureVerifiedAtUtc.HasValue || signer.RevokedAtUtc.Value > evidence.SignatureVerifiedAtUtc.Value))
+        {
+            warnings.Add("signer_revoked_after_verification");
+        }
+
+        if (string.Equals(signer.Status, CatalogSignerLifecycleStates.Rotated, StringComparison.OrdinalIgnoreCase)
+            && (!evidence.SignatureVerifiedAtUtc.HasValue || !signer.ValidUntilUtc.HasValue || signer.ValidUntilUtc.Value > evidence.SignatureVerifiedAtUtc.Value))
+        {
+            warnings.Add("signer_rotated_after_verification");
+        }
+
+        if (signer.ValidUntilUtc.HasValue
+            && signer.ValidUntilUtc.Value <= utcNow
+            && (!evidence.SignatureVerifiedAtUtc.HasValue || signer.ValidUntilUtc.Value > evidence.SignatureVerifiedAtUtc.Value))
+        {
+            warnings.Add("signer_expired_after_verification");
+        }
+
+        return warnings;
+    }
 
     private static string TrustTier(
         CatalogArtifactVerificationResult artifactVerification,

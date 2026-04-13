@@ -74,6 +74,19 @@ public sealed class CatalogDossierArchiveResult
     public IReadOnlyList<string> Blockers { get; init; } = Array.Empty<string>();
 }
 
+public sealed class CatalogDossierArchiveVerificationResult
+{
+    public bool IsVerified { get; init; }
+    public string ManifestId { get; init; } = string.Empty;
+    public string DossierHash { get; init; } = string.Empty;
+    public string ArchiveHash { get; init; } = string.Empty;
+    public string ComputedArchiveHash { get; init; } = string.Empty;
+    public string BackendName { get; init; } = string.Empty;
+    public string StorageUri { get; init; } = string.Empty;
+    public string PolicyVersion { get; init; } = string.Empty;
+    public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
+}
+
 public sealed class CatalogRolloutAttestationRecord
 {
     public string AttestationId { get; init; } = string.Empty;
@@ -97,6 +110,7 @@ public sealed record CatalogPromotionDossier
     public IReadOnlyList<CatalogRolloutAttestationRecord> Attestations { get; init; } = Array.Empty<CatalogRolloutAttestationRecord>();
     public CatalogAuditRetentionSnapshot Retention { get; init; } = new();
     public CatalogDossierArchiveRecord? Archive { get; init; }
+    public CatalogDossierArchiveVerificationResult? ArchiveVerification { get; init; }
     public string DossierHash { get; init; } = string.Empty;
     public IReadOnlyList<string> AuditWarnings { get; init; } = Array.Empty<string>();
     public DateTime GeneratedAtUtc { get; init; } = DateTime.UtcNow;
@@ -108,6 +122,8 @@ public sealed record CatalogDossierArchiveRecord
     public string DossierHash { get; init; } = string.Empty;
     public string ArchiveHash { get; init; } = string.Empty;
     public string ArchivePath { get; init; } = string.Empty;
+    public string BackendName { get; init; } = string.Empty;
+    public string StorageUri { get; init; } = string.Empty;
     public string SealAlgorithm { get; init; } = "sha256";
     public string PolicyVersion { get; init; } = string.Empty;
     public string CreatedByUserId { get; init; } = string.Empty;

@@ -287,6 +287,8 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
         warnings.AddRange(evidenceTrust
             .Where(item => !item.IsTrusted)
             .Select(item => $"dossier_evidence_not_trusted:{item.EvidenceId}"));
+        warnings.AddRange(evidenceTrust
+            .SelectMany(item => item.Warnings.Select(warning => $"dossier_evidence_trust_warning:{item.EvidenceId}:{warning}")));
 
         if (!retention.RetentionCurrent)
         {
@@ -294,9 +296,18 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
         }
 
         var archive = await _archiveService.GetArchiveAsync(manifest.ManifestId, ct);
+        CatalogDossierArchiveVerificationResult? archiveVerification = null;
         if (retention.ArchiveRequired && archive is null)
         {
             warnings.Add("dossier_archive_required");
+        }
+        else if (archive is not null)
+        {
+            archiveVerification = await _archiveService.VerifyArchiveAsync(manifest.ManifestId, ct);
+            if (!archiveVerification.IsVerified)
+            {
+                warnings.AddRange(archiveVerification.Errors.Select(error => $"dossier_archive_verification_failed:{error}"));
+            }
         }
 
         var dossier = new CatalogPromotionDossier
@@ -308,6 +319,7 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
             Attestations = attestations,
             Retention = retention,
             Archive = archive,
+            ArchiveVerification = archiveVerification,
             AuditWarnings = warnings,
             GeneratedAtUtc = DateTime.UtcNow
         };
@@ -365,6 +377,15 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
             IsArchived = true,
             Archive = archive
         };
+    }
+
+    public Task<CatalogDossierArchiveVerificationResult> VerifyDossierArchiveAsync(
+        string manifestId,
+        CatalogMutationContext context,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return _archiveService.VerifyArchiveAsync(manifestId, ct);
     }
 
     private CatalogAuditRetentionSnapshot RetentionSnapshot(

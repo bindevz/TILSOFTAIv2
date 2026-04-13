@@ -16,6 +16,7 @@ The dossier includes:
 - rollout attestations,
 - retention and archive policy snapshot,
 - archive metadata when materialized,
+- archive verification outcome when available,
 - deterministic dossier hash,
 - audit warnings,
 - generation timestamp.
@@ -45,5 +46,7 @@ The dossier emits deterministic warnings when:
 - retention windows have expired.
 - a production-like dossier requires an archive but none exists.
 - an existing archive no longer matches the current dossier hash.
+- archive replay verification fails.
+- signer lifecycle changed after evidence verification.
 
 Warnings are machine-readable and should block compliance sign-off until resolved.

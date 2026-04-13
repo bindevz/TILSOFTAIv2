@@ -94,8 +94,89 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
         result.IsVerified.Should().BeTrue();
         result.TrustTier.Should().Be(CatalogEvidenceTrustTiers.SignatureVerified);
         result.VerificationMethod.Should().Be(CatalogEvidenceVerificationMethods.Signature);
-        result.VerificationPolicyVersion.Should().Be("sprint-15");
+        result.VerificationPolicyVersion.Should().Be("sprint-16");
+        result.SignerStatusAtVerification.Should().Be(CatalogSignerLifecycleStates.Active);
+        result.SignerPublicKeyFingerprint.Should().HaveLength(64);
         result.SignatureVerifiedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Verify_ShouldRejectRevokedSigner()
+    {
+        using var rsa = RSA.Create(2048);
+        var payload = "{\"release\":\"sprint-16\"}";
+        var options = CertificationOptions();
+        options.TrustedEvidenceSigners = new[]
+        {
+            new CatalogTrustedSignerOptions
+            {
+                SignerId = "release-authority",
+                KeyId = "key-1",
+                PublicKeyPem = rsa.ExportSubjectPublicKeyInfoPem(),
+                Status = CatalogSignerLifecycleStates.Revoked,
+                RevokedAtUtc = DateTime.UtcNow.AddMinutes(-5)
+            }
+        };
+        var evidence = TrustedEvidence("ev-revoked") with
+        {
+            SignedPayload = payload,
+            Signature = Convert.ToBase64String(rsa.SignData(Encoding.UTF8.GetBytes(payload), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)),
+            SignatureAlgorithm = "RS256",
+            SignerId = "release-authority",
+            SignerPublicKeyId = "key-1"
+        };
+        var verifier = new PlatformCatalogEvidenceVerifier(
+            Options.Create(options),
+            new StubArtifactProvider(),
+            new RsaPlatformCatalogSignatureVerifier(Options.Create(options)));
+
+        var result = verifier.Verify(evidence, Context(), acceptAsTrusted: true, "signature verify");
+
+        result.IsVerified.Should().BeFalse();
+        result.Errors.Should().Contain(item => item.StartsWith("signature_signer_not_active", StringComparison.OrdinalIgnoreCase));
+        result.Errors.Should().Contain("signature_signer_revoked");
+    }
+
+    [Fact]
+    public void SignerTrustStore_ShouldGovernRotationThroughApproval()
+    {
+        using var original = RSA.Create(2048);
+        using var rotated = RSA.Create(2048);
+        var root = Path.Combine(Path.GetTempPath(), "tilsoftai-signer-tests", Guid.NewGuid().ToString("N"));
+        var options = CertificationOptions();
+        options.SignerTrustStorePath = Path.Combine(root, "trust-store.json");
+        options.TrustedEvidenceSigners = new[]
+        {
+            new CatalogTrustedSignerOptions
+            {
+                SignerId = "release-authority",
+                KeyId = "key-1",
+                PublicKeyPem = original.ExportSubjectPublicKeyInfoPem()
+            }
+        };
+        var store = new FileSystemPlatformCatalogSignerTrustStore(Options.Create(options));
+
+        var proposed = store.ProposeChange(new CatalogSignerTrustMutationRequest
+        {
+            Operation = CatalogSignerTrustChangeOperations.RotateSignerKey,
+            SignerId = "release-authority",
+            KeyId = "key-2",
+            RotatesFromKeyId = "key-1",
+            PublicKeyPem = rotated.ExportSubjectPublicKeyInfoPem(),
+            Reason = "scheduled signer rotation"
+        }, Context());
+        var selfApproval = store.ApproveChange(proposed.Change!.ChangeId, Context());
+        var approved = store.ApproveChange(proposed.Change.ChangeId, Context(userId: "independent-approver"));
+        var applied = store.ApplyChange(proposed.Change.ChangeId, Context(userId: "release-operator"));
+
+        proposed.IsAccepted.Should().BeTrue();
+        selfApproval.IsAccepted.Should().BeFalse();
+        selfApproval.Blockers.Should().Contain("signer_trust_independent_approval_required");
+        approved.IsAccepted.Should().BeTrue();
+        applied.IsAccepted.Should().BeTrue();
+        store.FindSigner("release-authority", "key-1")!.Status.Should().Be(CatalogSignerLifecycleStates.Rotated);
+        store.FindSigner("release-authority", "key-2")!.Status.Should().Be(CatalogSignerLifecycleStates.Active);
+        store.ListChanges().Should().ContainSingle(item => item.Status == CatalogSignerTrustChangeStatus.Applied);
     }
 
     [Fact]
@@ -275,7 +356,32 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
         archive.Archive!.ArchiveHash.Should().HaveLength(64);
         File.Exists(archive.Archive.ArchivePath).Should().BeTrue();
         dossier!.Archive.Should().NotBeNull();
+        dossier.ArchiveVerification!.IsVerified.Should().BeTrue();
         dossier.AuditWarnings.Should().NotContain("dossier_archive_required");
+    }
+
+    [Fact]
+    public async Task VerifyDossierArchiveAsync_ShouldDetectArchiveTampering()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tilsoftai-dossier-tests", Guid.NewGuid().ToString("N"));
+        var options = CertificationOptions();
+        options.DossierArchiveRootPath = root;
+        var evidence = RequiredEvidence();
+        var store = new StubManifestStore();
+        var service = CreateService(evidence, store, options);
+        var issue = await service.IssueManifestAsync(new CatalogPromotionManifestIssueRequest
+        {
+            EnvironmentName = "prod",
+            ChangeIds = new[] { "chg-1" },
+            EvidenceIds = evidence.Select(item => item.EvidenceId).ToArray()
+        }, Context(), CancellationToken.None);
+        var archive = await service.ArchiveDossierAsync(issue.Manifest!.ManifestId, Context(), CancellationToken.None);
+        File.AppendAllText(archive.Archive!.ArchivePath, "tampered");
+
+        var verification = await service.VerifyDossierArchiveAsync(issue.Manifest.ManifestId, Context(), CancellationToken.None);
+
+        verification.IsVerified.Should().BeFalse();
+        verification.Errors.Should().Contain("archive_json_invalid");
     }
 
     private static PlatformCatalogPromotionManifestService CreateService(
@@ -345,10 +451,10 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
         ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
     };
 
-    private static CatalogMutationContext Context() => new()
+    private static CatalogMutationContext Context(string userId = "release-authority") => new()
     {
         TenantId = "tenant-1",
-        UserId = "release-authority",
+        UserId = userId,
         Roles = new[] { "platform_catalog_admin" },
         CorrelationId = "corr-1"
     };

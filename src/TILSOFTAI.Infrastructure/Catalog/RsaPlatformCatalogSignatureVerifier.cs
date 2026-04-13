@@ -8,10 +8,19 @@ namespace TILSOFTAI.Infrastructure.Catalog;
 public sealed class RsaPlatformCatalogSignatureVerifier : IPlatformCatalogSignatureVerifier
 {
     private readonly CatalogCertificationOptions _options;
+    private readonly IPlatformCatalogSignerTrustStore _trustStore;
 
     public RsaPlatformCatalogSignatureVerifier(IOptions<CatalogCertificationOptions> options)
+        : this(options, new FileSystemPlatformCatalogSignerTrustStore(options))
+    {
+    }
+
+    public RsaPlatformCatalogSignatureVerifier(
+        IOptions<CatalogCertificationOptions> options,
+        IPlatformCatalogSignerTrustStore trustStore)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _trustStore = trustStore ?? throw new ArgumentNullException(nameof(trustStore));
     }
 
     public CatalogEvidenceSignatureVerificationResult Verify(CatalogCertificationEvidenceRecord evidence, DateTime utcNow)
@@ -51,18 +60,19 @@ public sealed class RsaPlatformCatalogSignatureVerifier : IPlatformCatalogSignat
             errors.Add("signature_algorithm_not_allowed");
         }
 
-        var signer = _options.TrustedEvidenceSigners.FirstOrDefault(item =>
-            string.Equals(item.SignerId, evidence.SignerId, StringComparison.OrdinalIgnoreCase)
-            && (string.IsNullOrWhiteSpace(evidence.SignerPublicKeyId)
-                || string.Equals(item.KeyId, evidence.SignerPublicKeyId, StringComparison.OrdinalIgnoreCase)));
+        var signer = _trustStore.FindSigner(evidence.SignerId, evidence.SignerPublicKeyId);
         if (signer is null)
         {
             errors.Add("signature_signer_not_trusted");
         }
+        else
+        {
+            errors.AddRange(ValidateSignerLifecycle(signer, utcNow));
+        }
 
         if (errors.Count > 0)
         {
-            return Failed(evidence, algorithm, errors);
+            return Failed(evidence, signer, algorithm, errors);
         }
 
         try
@@ -78,7 +88,7 @@ public sealed class RsaPlatformCatalogSignatureVerifier : IPlatformCatalogSignat
 
             if (!verified)
             {
-                return Failed(evidence, algorithm, new[] { "signature_invalid" });
+                return Failed(evidence, signer, algorithm, new[] { "signature_invalid" });
             }
 
             return new CatalogEvidenceSignatureVerificationResult
@@ -88,21 +98,53 @@ public sealed class RsaPlatformCatalogSignatureVerifier : IPlatformCatalogSignat
                 SignerId = signer.SignerId,
                 SignerPublicKeyId = signer.KeyId,
                 SignatureAlgorithm = algorithm,
-                SignatureVerifiedAtUtc = utcNow
+                SignatureVerifiedAtUtc = utcNow,
+                SignerPublicKeyFingerprint = signer.PublicKeyFingerprint,
+                SignerStatusAtVerification = signer.Status,
+                SignerTrustStoreVersion = signer.TrustStoreVersion,
+                SignerValidFromUtc = signer.ValidFromUtc,
+                SignerValidUntilUtc = signer.ValidUntilUtc
             };
         }
         catch (FormatException)
         {
-            return Failed(evidence, algorithm, new[] { "signature_base64_invalid" });
+            return Failed(evidence, signer, algorithm, new[] { "signature_base64_invalid" });
         }
         catch (CryptographicException)
         {
-            return Failed(evidence, algorithm, new[] { "signature_key_invalid" });
+            return Failed(evidence, signer, algorithm, new[] { "signature_key_invalid" });
         }
+    }
+
+    private static IReadOnlyList<string> ValidateSignerLifecycle(CatalogTrustedSignerRecord signer, DateTime utcNow)
+    {
+        var errors = new List<string>();
+        if (!string.Equals(signer.Status, CatalogSignerLifecycleStates.Active, StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add($"signature_signer_not_active:{signer.Status}");
+        }
+
+        if (signer.ValidFromUtc.HasValue && signer.ValidFromUtc.Value > utcNow)
+        {
+            errors.Add("signature_signer_not_yet_valid");
+        }
+
+        if (signer.ValidUntilUtc.HasValue && signer.ValidUntilUtc.Value <= utcNow)
+        {
+            errors.Add("signature_signer_expired");
+        }
+
+        if (signer.RevokedAtUtc.HasValue && signer.RevokedAtUtc.Value <= utcNow)
+        {
+            errors.Add("signature_signer_revoked");
+        }
+
+        return errors;
     }
 
     private static CatalogEvidenceSignatureVerificationResult Failed(
         CatalogCertificationEvidenceRecord evidence,
+        CatalogTrustedSignerRecord? signer,
         string algorithm,
         IReadOnlyList<string> errors) => new()
         {
@@ -111,6 +153,11 @@ public sealed class RsaPlatformCatalogSignatureVerifier : IPlatformCatalogSignat
             SignerId = evidence.SignerId,
             SignerPublicKeyId = evidence.SignerPublicKeyId,
             SignatureAlgorithm = algorithm,
+            SignerPublicKeyFingerprint = signer?.PublicKeyFingerprint ?? string.Empty,
+            SignerStatusAtVerification = signer?.Status ?? string.Empty,
+            SignerTrustStoreVersion = signer?.TrustStoreVersion ?? string.Empty,
+            SignerValidFromUtc = signer?.ValidFromUtc,
+            SignerValidUntilUtc = signer?.ValidUntilUtc,
             Errors = errors
         };
 }

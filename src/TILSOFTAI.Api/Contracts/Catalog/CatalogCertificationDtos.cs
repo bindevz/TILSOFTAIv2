@@ -82,3 +82,32 @@ public sealed class CatalogRolloutAttestationApiRequest
         AcceptedByUserId = AcceptedByUserId
     };
 }
+
+public sealed class CatalogSignerTrustMutationApiRequest
+{
+    public string Operation { get; init; } = string.Empty;
+    public string SignerId { get; init; } = string.Empty;
+    public string KeyId { get; init; } = string.Empty;
+    public string PublicKeyPem { get; init; } = string.Empty;
+    public string RotatesFromKeyId { get; init; } = string.Empty;
+    public DateTime? ValidFromUtc { get; init; }
+    public DateTime? ValidUntilUtc { get; init; }
+    public string Reason { get; init; } = string.Empty;
+
+    public CatalogSignerTrustMutationRequest ToMutationRequest() => new()
+    {
+        Operation = Operation,
+        SignerId = SignerId,
+        KeyId = KeyId,
+        PublicKeyPem = PublicKeyPem,
+        RotatesFromKeyId = RotatesFromKeyId,
+        ValidFromUtc = ValidFromUtc,
+        ValidUntilUtc = ValidUntilUtc,
+        Reason = Reason
+    };
+}
+
+public sealed class CatalogSignerTrustRejectApiRequest
+{
+    public string Reason { get; init; } = string.Empty;
+}

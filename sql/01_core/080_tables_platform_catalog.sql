@@ -242,6 +242,17 @@ BEGIN
 END;
 GO
 
+IF COL_LENGTH('dbo.PlatformCatalogCertificationEvidence', 'SignerPublicKeyFingerprint') IS NULL
+BEGIN
+    ALTER TABLE dbo.PlatformCatalogCertificationEvidence ADD
+        SignerPublicKeyFingerprint NVARCHAR(128) NULL,
+        SignerStatusAtVerification NVARCHAR(80) NULL,
+        SignerTrustStoreVersion NVARCHAR(100) NULL,
+        SignerValidFromUtc DATETIME2(7) NULL,
+        SignerValidUntilUtc DATETIME2(7) NULL;
+END;
+GO
+
 IF OBJECT_ID('dbo.CK_PlatformCatalogCertificationEvidence_VerificationStatus', 'C') IS NULL
 BEGIN
     ALTER TABLE dbo.PlatformCatalogCertificationEvidence

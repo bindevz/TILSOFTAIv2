@@ -22,4 +22,9 @@ public interface IPlatformCatalogPromotionManifestService
         string manifestId,
         CatalogMutationContext context,
         CancellationToken ct);
+
+    Task<CatalogDossierArchiveVerificationResult> VerifyDossierArchiveAsync(
+        string manifestId,
+        CatalogMutationContext context,
+        CancellationToken ct);
 }

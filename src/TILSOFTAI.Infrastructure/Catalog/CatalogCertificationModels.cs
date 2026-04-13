@@ -56,6 +56,92 @@ public static class CatalogEvidenceVerificationMethods
     public const string Signature = "signature";
 }
 
+public static class CatalogSignerLifecycleStates
+{
+    public const string Active = "active";
+    public const string Rotated = "rotated";
+    public const string Revoked = "revoked";
+    public const string Retired = "retired";
+}
+
+public static class CatalogSignerTrustChangeOperations
+{
+    public const string AddSignerKey = "add_signer_key";
+    public const string RotateSignerKey = "rotate_signer_key";
+    public const string RevokeSignerKey = "revoke_signer_key";
+    public const string RetireSignerKey = "retire_signer_key";
+}
+
+public static class CatalogSignerTrustChangeStatus
+{
+    public const string Proposed = "proposed";
+    public const string Approved = "approved";
+    public const string Rejected = "rejected";
+    public const string Applied = "applied";
+}
+
+public sealed record CatalogTrustedSignerRecord
+{
+    public string SignerId { get; init; } = string.Empty;
+    public string KeyId { get; init; } = string.Empty;
+    public string PublicKeyPem { get; init; } = string.Empty;
+    public string PublicKeyFingerprint { get; init; } = string.Empty;
+    public string Status { get; init; } = CatalogSignerLifecycleStates.Active;
+    public DateTime? ValidFromUtc { get; init; }
+    public DateTime? ValidUntilUtc { get; init; }
+    public DateTime? RevokedAtUtc { get; init; }
+    public string RotatedToKeyId { get; init; } = string.Empty;
+    public string TrustStoreVersion { get; init; } = string.Empty;
+    public string ApprovedChangeId { get; init; } = string.Empty;
+    public DateTime? LastChangedAtUtc { get; init; }
+    public string Source { get; init; } = string.Empty;
+}
+
+public sealed class CatalogSignerTrustMutationRequest
+{
+    public string Operation { get; init; } = string.Empty;
+    public string SignerId { get; init; } = string.Empty;
+    public string KeyId { get; init; } = string.Empty;
+    public string PublicKeyPem { get; init; } = string.Empty;
+    public string RotatesFromKeyId { get; init; } = string.Empty;
+    public DateTime? ValidFromUtc { get; init; }
+    public DateTime? ValidUntilUtc { get; init; }
+    public string Reason { get; init; } = string.Empty;
+}
+
+public sealed record CatalogSignerTrustChangeRecord
+{
+    public string ChangeId { get; init; } = string.Empty;
+    public string Operation { get; init; } = string.Empty;
+    public string Status { get; init; } = CatalogSignerTrustChangeStatus.Proposed;
+    public string SignerId { get; init; } = string.Empty;
+    public string KeyId { get; init; } = string.Empty;
+    public string PublicKeyPem { get; init; } = string.Empty;
+    public string PublicKeyFingerprint { get; init; } = string.Empty;
+    public string RotatesFromKeyId { get; init; } = string.Empty;
+    public DateTime? ValidFromUtc { get; init; }
+    public DateTime? ValidUntilUtc { get; init; }
+    public string Reason { get; init; } = string.Empty;
+    public string PolicyVersion { get; init; } = string.Empty;
+    public string RequestedByUserId { get; init; } = string.Empty;
+    public string ApprovedByUserId { get; init; } = string.Empty;
+    public string AppliedByUserId { get; init; } = string.Empty;
+    public string RejectedByUserId { get; init; } = string.Empty;
+    public string CorrelationId { get; init; } = string.Empty;
+    public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
+    public DateTime? ApprovedAtUtc { get; init; }
+    public DateTime? AppliedAtUtc { get; init; }
+    public DateTime? RejectedAtUtc { get; init; }
+    public string ResultingTrustStoreVersion { get; init; } = string.Empty;
+}
+
+public sealed class CatalogSignerTrustMutationResult
+{
+    public bool IsAccepted { get; init; }
+    public CatalogSignerTrustChangeRecord? Change { get; init; }
+    public IReadOnlyList<string> Blockers { get; init; } = Array.Empty<string>();
+}
+
 public sealed record CatalogCertificationEvidenceRecord
 {
     public string EvidenceId { get; init; } = string.Empty;
@@ -94,6 +180,11 @@ public sealed record CatalogCertificationEvidenceRecord
     public DateTime? SignatureVerifiedAtUtc { get; init; }
     public string VerificationMethod { get; init; } = string.Empty;
     public string VerificationPolicyVersion { get; init; } = string.Empty;
+    public string SignerPublicKeyFingerprint { get; init; } = string.Empty;
+    public string SignerStatusAtVerification { get; init; } = string.Empty;
+    public string SignerTrustStoreVersion { get; init; } = string.Empty;
+    public DateTime? SignerValidFromUtc { get; init; }
+    public DateTime? SignerValidUntilUtc { get; init; }
 }
 
 public sealed class CatalogEvidenceVerificationResult
@@ -115,6 +206,11 @@ public sealed class CatalogEvidenceVerificationResult
     public DateTime? SignatureVerifiedAtUtc { get; init; }
     public string VerificationMethod { get; init; } = string.Empty;
     public string VerificationPolicyVersion { get; init; } = string.Empty;
+    public string SignerPublicKeyFingerprint { get; init; } = string.Empty;
+    public string SignerStatusAtVerification { get; init; } = string.Empty;
+    public string SignerTrustStoreVersion { get; init; } = string.Empty;
+    public DateTime? SignerValidFromUtc { get; init; }
+    public DateTime? SignerValidUntilUtc { get; init; }
     public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
 }
 
@@ -126,6 +222,11 @@ public sealed class CatalogEvidenceSignatureVerificationResult
     public string SignerPublicKeyId { get; init; } = string.Empty;
     public string SignatureAlgorithm { get; init; } = string.Empty;
     public DateTime? SignatureVerifiedAtUtc { get; init; }
+    public string SignerPublicKeyFingerprint { get; init; } = string.Empty;
+    public string SignerStatusAtVerification { get; init; } = string.Empty;
+    public string SignerTrustStoreVersion { get; init; } = string.Empty;
+    public DateTime? SignerValidFromUtc { get; init; }
+    public DateTime? SignerValidUntilUtc { get; init; }
     public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
 }
 
@@ -139,6 +240,7 @@ public sealed class CatalogEvidenceTrustEvaluation
     public DateTime? FreshUntilUtc { get; init; }
     public string VerificationMethod { get; init; } = string.Empty;
     public string VerificationPolicyVersion { get; init; } = string.Empty;
+    public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> Failures { get; init; } = Array.Empty<string>();
 }
 

@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
 
@@ -15,22 +14,30 @@ public sealed partial class FileSystemPlatformCatalogDossierArchiveService : IPl
     };
 
     private readonly CatalogCertificationOptions _options;
+    private readonly IPlatformCatalogArchiveStorage _archiveStorage;
 
     public FileSystemPlatformCatalogDossierArchiveService(IOptions<CatalogCertificationOptions> options)
+        : this(options, new FileSystemPlatformCatalogArchiveStorage(options))
+    {
+    }
+
+    public FileSystemPlatformCatalogDossierArchiveService(
+        IOptions<CatalogCertificationOptions> options,
+        IPlatformCatalogArchiveStorage archiveStorage)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _archiveStorage = archiveStorage ?? throw new ArgumentNullException(nameof(archiveStorage));
     }
 
     public async Task<CatalogDossierArchiveRecord?> GetArchiveAsync(string manifestId, CancellationToken ct)
     {
-        var path = ArchivePath(manifestId);
-        if (!File.Exists(path))
+        var stored = await _archiveStorage.ReadAsync(manifestId, ct);
+        if (!stored.Found)
         {
             return null;
         }
 
-        var json = await File.ReadAllTextAsync(path, ct);
-        var envelope = JsonSerializer.Deserialize<CatalogDossierArchiveEnvelope>(json, JsonOptions);
+        var envelope = JsonSerializer.Deserialize<CatalogDossierArchiveEnvelope>(stored.Content, JsonOptions);
         return envelope?.Archive;
     }
 
@@ -42,20 +49,110 @@ public sealed partial class FileSystemPlatformCatalogDossierArchiveService : IPl
         ArgumentNullException.ThrowIfNull(dossier);
         ArgumentNullException.ThrowIfNull(context);
 
-        Directory.CreateDirectory(ArchiveRootPath());
         var now = DateTime.UtcNow;
-        var path = ArchivePath(dossier.Manifest.ManifestId);
         var archive = new CatalogDossierArchiveRecord
         {
             ManifestId = dossier.Manifest.ManifestId,
             DossierHash = dossier.DossierHash,
-            ArchivePath = path,
             PolicyVersion = _options.PolicyVersion,
             CreatedByUserId = context.UserId,
             CreatedAtUtc = now,
             RetainUntilUtc = dossier.Retention.DossierArchiveRetainUntilUtc
         };
 
+        archive = archive with { ArchiveHash = ComputeArchiveHash(archive, dossier) };
+
+        var envelope = new CatalogDossierArchiveEnvelope
+        {
+            Archive = archive,
+            Dossier = dossier with { Archive = archive }
+        };
+        var stored = await _archiveStorage.WriteAsync(dossier.Manifest.ManifestId, JsonSerializer.Serialize(envelope, JsonOptions), ct);
+        var storedArchive = archive with
+        {
+            BackendName = stored.BackendName,
+            ArchivePath = stored.ArchivePath,
+            StorageUri = stored.StorageUri
+        };
+        var storedEnvelope = new CatalogDossierArchiveEnvelope
+        {
+            Archive = storedArchive,
+            Dossier = dossier with { Archive = storedArchive }
+        };
+        await _archiveStorage.WriteAsync(dossier.Manifest.ManifestId, JsonSerializer.Serialize(storedEnvelope, JsonOptions), ct);
+        return storedArchive;
+    }
+
+    public async Task<CatalogDossierArchiveVerificationResult> VerifyArchiveAsync(
+        string manifestId,
+        CancellationToken ct)
+    {
+        var stored = await _archiveStorage.ReadAsync(manifestId, ct);
+        if (!stored.Found)
+        {
+            return new CatalogDossierArchiveVerificationResult
+            {
+                IsVerified = false,
+                ManifestId = manifestId,
+                BackendName = stored.BackendName,
+                StorageUri = stored.StorageUri,
+                Errors = new[] { "archive_not_found" }
+            };
+        }
+
+        try
+        {
+            var envelope = JsonSerializer.Deserialize<CatalogDossierArchiveEnvelope>(stored.Content, JsonOptions);
+            if (envelope?.Archive is null || envelope.Dossier is null)
+            {
+                return VerificationFailed(manifestId, stored, "archive_envelope_invalid");
+            }
+
+            var computed = ComputeArchiveHash(envelope.Archive, envelope.Dossier);
+            var errors = new List<string>();
+            if (!string.Equals(envelope.Archive.ArchiveHash, computed, StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add("archive_hash_mismatch");
+            }
+
+            if (!string.Equals(envelope.Archive.ManifestId, envelope.Dossier.Manifest.ManifestId, StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add("archive_manifest_mismatch");
+            }
+
+            return new CatalogDossierArchiveVerificationResult
+            {
+                IsVerified = errors.Count == 0,
+                ManifestId = envelope.Archive.ManifestId,
+                DossierHash = envelope.Archive.DossierHash,
+                ArchiveHash = envelope.Archive.ArchiveHash,
+                ComputedArchiveHash = computed,
+                BackendName = stored.BackendName,
+                StorageUri = stored.StorageUri,
+                PolicyVersion = envelope.Archive.PolicyVersion,
+                Errors = errors
+            };
+        }
+        catch (JsonException)
+        {
+            return VerificationFailed(manifestId, stored, "archive_json_invalid");
+        }
+    }
+
+    private static CatalogDossierArchiveVerificationResult VerificationFailed(
+        string manifestId,
+        CatalogArchiveStorageReadResult stored,
+        string error) => new()
+        {
+            IsVerified = false,
+            ManifestId = manifestId,
+            BackendName = stored.BackendName,
+            StorageUri = stored.StorageUri,
+            Errors = new[] { error }
+        };
+
+    private static string ComputeArchiveHash(CatalogDossierArchiveRecord archive, CatalogPromotionDossier dossier)
+    {
         var sealPayload = new
         {
             archive.ManifestId,
@@ -71,36 +168,18 @@ public sealed partial class FileSystemPlatformCatalogDossierArchiveService : IPl
                 item.ArtifactHash,
                 item.TrustTier,
                 item.SignatureVerifiedAtUtc,
-                item.VerificationPolicyVersion
+                item.VerificationPolicyVersion,
+                item.SignerId,
+                item.SignerPublicKeyId,
+                item.SignerPublicKeyFingerprint,
+                item.SignerTrustStoreVersion
             }).OrderBy(item => item.EvidenceId, StringComparer.Ordinal).ToArray()
         };
-        archive = archive with { ArchiveHash = Sha256(JsonSerializer.Serialize(sealPayload, JsonOptions)) };
-
-        var envelope = new CatalogDossierArchiveEnvelope
-        {
-            Archive = archive,
-            Dossier = dossier with { Archive = archive }
-        };
-        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(envelope, JsonOptions), ct);
-        return archive;
-    }
-
-    private string ArchivePath(string manifestId) =>
-        Path.Combine(ArchiveRootPath(), $"{SafeFileName(manifestId)}.dossier.archive.json");
-
-    private string ArchiveRootPath() => Path.GetFullPath(_options.DossierArchiveRootPath);
-
-    private static string SafeFileName(string value)
-    {
-        var cleaned = SafeFileNameRegex().Replace(value.Trim(), "_");
-        return string.IsNullOrWhiteSpace(cleaned) ? "manifest" : cleaned;
+        return Sha256(JsonSerializer.Serialize(sealPayload, JsonOptions));
     }
 
     private static string Sha256(string payload) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
-
-    [GeneratedRegex("[^a-zA-Z0-9_.-]")]
-    private static partial Regex SafeFileNameRegex();
 
     private sealed class CatalogDossierArchiveEnvelope
     {

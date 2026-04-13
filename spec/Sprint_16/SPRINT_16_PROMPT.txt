@@ -1,0 +1,207 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 16.
+
+Baseline repository reality (after Sprint 15):
+- Sprint 9 already retired `LegacyChatPipelineBridge`, `ChatPipeline`, `ChatRequest`, and `ChatResult`.
+- Production capability and external connection records load from `catalog/platform-catalog.json`.
+- The catalog control plane already supports preview, submit, approve, reject, and apply.
+- Mutation safety already includes `ExpectedVersionTag`, `IdempotencyKey`, duplicate pending-change detection, idempotent apply replay, and `RollbackOfChangeId`.
+- Promotion gating already exists through `IPlatformCatalogPromotionGate`.
+- Certification evidence already supports:
+  - lifecycle states
+  - verification status
+  - artifact hash metadata
+  - trust tiers
+  - freshness policy
+  - retention policy snapshotting
+  - signed payload fields
+  - signer identity fields
+  - verification method
+  - verification policy version
+- Controlled provider verification already exists for `artifact://catalog-evidence/...`.
+- Real RSA signature verification already exists through `RsaPlatformCatalogSignatureVerifier`.
+- Promotion manifests are immutable.
+- Rollout attestations are append-only.
+- Promotion dossiers include trust evaluations, retention snapshots, deterministic hashes, and archive metadata.
+- Dossier archives can already be materialized through `FileSystemPlatformCatalogDossierArchiveService`.
+- Production-like environments can already require `signature_verified` evidence and archived dossiers for completion.
+
+The platform is already enterprise-grade and now has a real high-assurance posture.
+However, it still has operational trust-infrastructure debt because:
+- trusted signers are still mainly static config entries,
+- signer rotation/revocation lifecycle is not yet a first-class governed operation,
+- archive storage is still filesystem-centric,
+- archive packages are not yet re-verified through a first-class verification flow,
+- trust-store evolution and archive operations are not yet surfaced strongly enough for long-lived audit interpretability,
+- and the platform still relies too much on current configuration state for some trust explanations.
+
+Sprint 16 mission:
+Turn the platform from “high-assurance in repository/runtime behavior” into “high-assurance in trust operations and archive durability”.
+
+Primary objective:
+1. Add signer lifecycle semantics.
+2. Add governed trust-store mutation.
+3. Add stronger archive backend/storage boundaries.
+4. Add archive verification/replay capability.
+5. Preserve historical interpretability under signer lifecycle evolution.
+6. Strengthen trust-store and archive provenance in review surfaces.
+7. Keep Sprint 16 focused on operationalized trust infrastructure, not feature work.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the runtime orchestration owner.
+2. Platform catalog remains the production source-of-truth.
+3. Promotion gates, manifests, attestations, evidence trust, and dossier archives remain mandatory release primitives.
+4. `provider_verified` and `signature_verified` remain valid and must not regress.
+5. Signer trust must evolve from static configuration to lifecycle-managed trust operations.
+6. Archive packaging must remain durable and reviewable even as storage backends evolve.
+7. Historical signed releases must remain interpretable after signer rotation or revocation.
+8. Governed mutation discipline must apply to trust-store changes, not only catalog record changes.
+9. Sprint 16 success is measured by operationalized trust infrastructure, not runtime novelty.
+10. Do not turn Sprint 16 into a feature sprint.
+
+Primary Sprint 16 goals:
+
+A. Add signer lifecycle semantics
+- Introduce signer lifecycle concepts such as:
+  - active
+  - rotated
+  - revoked
+  - retired
+- Support multiple keys per signer or explicit key rotation semantics.
+- Add validity windows for signer keys where appropriate.
+- Preserve enough historical signer metadata so old releases remain auditable.
+
+B. Add governed trust-store mutation
+- Signer and trust-store changes must not be ad hoc config edits.
+- Add governed mutation or an equivalent controlled path for signer trust changes.
+- Audit signer additions, rotations, revocations, and removals.
+- Require explicit review/approval semantics for trust-store changes.
+
+C. Add stronger archive backend/storage boundaries
+- Decouple archive packaging from archive storage location assumptions.
+- Keep the current filesystem backend working.
+- Introduce a boundary that makes additional durable backends possible without redesign.
+- Keep scope tight and concrete.
+
+D. Add archive verification/replay
+- Add a flow to re-open and verify archived dossier packages later.
+- Validate archive hash/seal deterministically.
+- Return machine-readable mismatch or corruption signals.
+- Make the verification path usable by operators and auditors.
+
+E. Preserve historical interpretability
+- Historical releases must remain understandable even if signer keys rotate or become revoked later.
+- Keep signer/key metadata or provenance linkage sufficient for later review.
+- Ensure emergency and rollback releases remain interpretable under trust-store evolution.
+
+F. Strengthen review surfaces
+- Expose signer lifecycle, key id, trust-store provenance, archive backend/source, and verification outcomes in dossier or related review APIs.
+- Emit warnings when historical signer state changed after verification in ways relevant to audit.
+- Keep outputs operator-usable and machine-readable.
+
+G. Preserve enterprise-grade focus
+- Only add surface area that materially improves trust operations, archive durability, or historical interpretability.
+- Do not broaden product scope.
+- Avoid generic plugin or marketplace sprawl.
+
+Non-negotiable rules:
+1. Do not weaken signature verification, provider verification, manifests, attestations, or archive generation.
+2. Do not treat signer lifecycle as a documentation-only concept.
+3. Do not leave trust-store mutation outside governed policy.
+4. Do not make archive review depend only on live runtime state.
+5. Do not break interpretation of existing signed releases.
+6. Do not normalize emergency paths under weaker trust-store policy.
+7. Do not create oversized abstraction layers without a concrete operational need.
+8. Do not store secrets in review artifacts or archive bundles.
+9. Prefer deterministic lifecycle and verification outcomes over operator guesswork.
+10. Do not turn Sprint 16 into a feature sprint.
+
+Explicitly in scope:
+- signer lifecycle model
+- governed trust-store mutation
+- archive backend/storage boundary
+- archive verification/replay
+- trust-store/archive provenance in review surfaces
+- historical interpretability under signer evolution
+- tests, docs, and runbooks for the above
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- large adapter ecosystem growth
+- product workflow breadth
+
+Recommended implementation order:
+1. Add signer lifecycle model.
+2. Add governed trust-store mutation path.
+3. Add archive storage/backend boundary.
+4. Add archive verification/replay flow.
+5. Extend review surfaces with signer/archive provenance.
+6. Harden historical interpretability for rollback/emergency paths.
+7. Delete any dead code revealed by the work.
+
+Required architectural outcomes:
+1. Trusted signers have lifecycle semantics beyond static config.
+2. Trust-store changes are governed and auditable.
+3. Archive packaging is less tightly coupled to a single filesystem assumption.
+4. Archived dossiers can be re-verified independently later.
+5. Historical releases remain interpretable under signer rotation or revocation.
+6. Remaining platform debt is no longer trust-infrastructure immaturity.
+
+Definition of done:
+- Signer lifecycle semantics exist.
+- Trust-store mutation is governed and auditable.
+- Archive verification/replay exists.
+- Review surfaces expose signer and archive provenance more clearly.
+- Historical signed releases remain explainable after trust-store evolution.
+- The platform is stronger operationally after Sprint 16 than after Sprint 15.
+
+Must-fail conditions:
+- trusted signers remain effectively static config only
+- signer lifecycle changes are not governed
+- archive packages cannot be re-verified later
+- historical releases become harder to interpret after signer evolution
+- Sprint 16 drifts into feature work without materially improving trust-infrastructure operations
+
+Preferred implementation style:
+- explicit lifecycle states
+- governed mutation
+- deterministic verification
+- durable historical interpretability
+- narrow abstractions
+- operator-usable review outputs
+- deletion over drift
+- no architecture theater
+
+Required deliverables:
+1. Signer lifecycle changes
+2. Trust-store governance changes
+3. Archive durability/storage-boundary changes
+4. Archive verification/replay changes
+5. Historical interpretability changes
+6. Validation / test / runbook updates
+
+Required reporting after implementation:
+1. Summary of Sprint 16 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Signer lifecycle changes
+6. Trust-store governance changes
+7. Archive durability changes
+8. Archive verification changes
+9. Historical interpretability changes
+10. Validation / test / runbook improvements
+11. Remaining blockers
+12. Recommended Sprint 17 priorities
+
+Final instruction:
+Sprint 16 is about operationalizing signer trust and archive durability.
+
+Do not spend Sprint 16 adding runtime novelty.
+Do not turn Sprint 16 into a feature sprint.
+
+Spend it making the trust model safer to operate over time and the archive proof easier to verify later.
