@@ -1,4 +1,4 @@
-# Platform Catalog Governance - Sprint 13
+# Platform Catalog Governance - Sprint 14
 
 Production capability and external connection records are now platform catalog records.
 
@@ -97,7 +97,7 @@ Operators should preview every production change before submit, include a ticket
 
 ## Certification Evidence
 
-Sprint 12 added durable certification evidence for staging and production-like catalog operations. Sprint 13 requires trusted evidence, not simply accepted metadata, before production-like manifest issuance.
+Sprint 12 added durable certification evidence for staging and production-like catalog operations. Sprint 13 required trusted evidence, not simply accepted metadata, before production-like manifest issuance. Sprint 14 adds trust tiers, provider-backed hash verification, freshness windows, and retention-aware dossiers.
 
 Required evidence kinds are configured in `CatalogCertification:RequiredEvidenceKinds`. The default package requires:
 

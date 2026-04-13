@@ -237,6 +237,8 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
         }
 
         var attestations = await _manifestStore.ListAttestationsAsync(manifest.ManifestId, ct);
+        var evidenceTrust = evidence.Select(item => _evidenceVerifier.EvaluateTrust(item, DateTime.UtcNow)).ToArray();
+        var retention = RetentionSnapshot(manifest, evidence, attestations);
         var warnings = new List<string>();
         if (!string.Equals(manifest.ManifestHash, PlatformCatalogPromotionManifestHasher.ComputeHash(manifest), StringComparison.OrdinalIgnoreCase))
         {
@@ -253,14 +255,53 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
             warnings.Add("manifest_evidence_record_missing");
         }
 
-        return new CatalogPromotionDossier
+        warnings.AddRange(evidenceTrust
+            .Where(item => !item.IsTrusted)
+            .Select(item => $"dossier_evidence_not_trusted:{item.EvidenceId}"));
+
+        if (!retention.RetentionCurrent)
+        {
+            warnings.Add("dossier_retention_window_expired");
+        }
+
+        var dossier = new CatalogPromotionDossier
         {
             Manifest = manifest,
             Changes = changes,
             Evidence = evidence,
+            EvidenceTrust = evidenceTrust,
             Attestations = attestations,
+            Retention = retention,
             AuditWarnings = warnings,
             GeneratedAtUtc = DateTime.UtcNow
+        };
+        return dossier with { DossierHash = PlatformCatalogPromotionManifestHasher.ComputeDossierHash(dossier) };
+    }
+
+    private CatalogAuditRetentionSnapshot RetentionSnapshot(
+        CatalogPromotionManifestRecord manifest,
+        IReadOnlyList<CatalogCertificationEvidenceRecord> evidence,
+        IReadOnlyList<CatalogRolloutAttestationRecord> attestations)
+    {
+        var manifestUntil = _options.ManifestRetentionDays > 0 ? manifest.IssuedAtUtc.AddDays(_options.ManifestRetentionDays) : (DateTime?)null;
+        var evidenceUntil = _options.EvidenceRetentionDays > 0 && evidence.Count > 0
+            ? evidence.Min(item => item.CapturedAtUtc).AddDays(_options.EvidenceRetentionDays)
+            : (DateTime?)null;
+        var attestationUntil = _options.AttestationRetentionDays > 0 && attestations.Count > 0
+            ? attestations.Min(item => item.CreatedAtUtc).AddDays(_options.AttestationRetentionDays)
+            : (DateTime?)null;
+        var dossierUntil = _options.DossierArchiveRetentionDays > 0 ? manifest.IssuedAtUtc.AddDays(_options.DossierArchiveRetentionDays) : (DateTime?)null;
+        var now = DateTime.UtcNow;
+        var retainUntilValues = new[] { manifestUntil, evidenceUntil, attestationUntil, dossierUntil }.Where(item => item.HasValue).Select(item => item!.Value);
+
+        return new CatalogAuditRetentionSnapshot
+        {
+            ManifestRetainUntilUtc = manifestUntil,
+            EvidenceRetainUntilUtc = evidenceUntil,
+            AttestationRetainUntilUtc = attestationUntil,
+            DossierArchiveRetainUntilUtc = dossierUntil,
+            ArchiveRequired = _options.RequireArchiveForProductionLikeDossiers && IsProductionLike(manifest.EnvironmentName),
+            RetentionCurrent = !retainUntilValues.Any(item => item <= now)
         };
     }
 
@@ -289,6 +330,8 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
             if (!_evidenceVerifier.IsTrusted(evidence, DateTime.UtcNow))
             {
                 blockers.Add($"evidence_untrusted:{evidenceId}");
+                var trust = _evidenceVerifier.EvaluateTrust(evidence, DateTime.UtcNow);
+                blockers.AddRange(trust.Failures.Select(failure => $"evidence_trust_failure:{evidenceId}:{failure}"));
                 continue;
             }
 
@@ -308,7 +351,8 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
         gate.Blockers,
         gate.Warnings,
         gate.EvidenceMissing,
-        gate.EvidenceUntrusted
+        gate.EvidenceUntrusted,
+        gate.EvidenceTrustFailures
     };
 
     private static List<string> CleanDistinct(IReadOnlyList<string> values) =>

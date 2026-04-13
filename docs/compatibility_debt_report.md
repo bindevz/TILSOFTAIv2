@@ -1,4 +1,4 @@
-# Compatibility Debt Report - Sprint 13
+# Compatibility Debt Report - Sprint 14
 
 This document tracks transitional components that still exist after Sprint 9, plus the components removed or reduced during the sprint.
 
@@ -58,6 +58,15 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Promotion history | Immutable manifest | Manifest identity and hash bind change ids, evidence ids, gate results, environment, and actors. |
 | Rollout history | Append-only | Rollout state is captured as attestation records instead of mutable notes. |
 | Audit review | Dossier-backed | Promotion dossiers make manifest/change/evidence/attestation lineage machine-readable. |
+
+## Changed In Sprint 14
+
+| Component | Result | Notes |
+|-----------|--------|-------|
+| Artifact trust | Provider-backed | Controlled artifact bytes can be read from a trusted root and compared with declared SHA-256. |
+| Evidence policy | Tier-aware | Production-like policy can require `provider_verified` evidence. |
+| Live certification | Freshness-aware | Required evidence kinds can expire by freshness window. |
+| Audit retention | Policy-backed | Dossiers include retention snapshots and deterministic dossier hash. |
 
 ## Removed In Sprint 7
 
@@ -135,4 +144,4 @@ Current classifications:
 
 ## Sprint 12 Debt Priorities
 
-Completed in code. Remaining priorities are live staging/prod-like certification evidence, signed artifact-provider verification, operator training, and any future removal of non-runtime packages when packaging/diagnostic ownership no longer needs them.
+Completed in code. Remaining priorities are live staging/prod-like certification evidence, signed bundle verification where required, operator training, and any future removal of non-runtime packages when packaging/diagnostic ownership no longer needs them.

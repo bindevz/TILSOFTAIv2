@@ -32,4 +32,40 @@ public static class PlatformCatalogPromotionManifestHasher
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
+
+    public static string ComputeDossierHash(CatalogPromotionDossier dossier)
+    {
+        ArgumentNullException.ThrowIfNull(dossier);
+
+        var payload = new
+        {
+            dossier.Manifest.ManifestId,
+            dossier.Manifest.ManifestHash,
+            ChangeIds = dossier.Changes.Select(item => item.ChangeId).OrderBy(item => item, StringComparer.Ordinal).ToArray(),
+            Evidence = dossier.Evidence.Select(item => new
+            {
+                item.EvidenceId,
+                item.ArtifactHash,
+                item.TrustTier,
+                item.VerificationStatus,
+                item.ExpiresAtUtc
+            }).OrderBy(item => item.EvidenceId, StringComparer.Ordinal).ToArray(),
+            Attestations = dossier.Attestations.Select(item => new
+            {
+                item.AttestationId,
+                item.State,
+                item.CreatedAtUtc
+            }).OrderBy(item => item.AttestationId, StringComparer.Ordinal).ToArray(),
+            dossier.Retention.PolicyVersion,
+            dossier.Retention.ManifestRetainUntilUtc,
+            dossier.Retention.EvidenceRetainUntilUtc,
+            dossier.Retention.AttestationRetainUntilUtc,
+            dossier.Retention.DossierArchiveRetainUntilUtc,
+            dossier.Retention.ArchiveRequired
+        };
+
+        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
 }

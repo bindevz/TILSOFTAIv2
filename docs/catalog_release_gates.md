@@ -29,13 +29,15 @@ Promotion is blocked when any condition is true:
 - break-glass change lacks after-action evidence,
 - required certification evidence is missing.
 - required certification evidence is present but untrusted.
+- required certification evidence has insufficient trust tier.
+- required certification evidence is stale.
 
 ## CI/CD Usage
 
 1. Run preview gate with the proposed payload.
 2. Submit only if `isAllowed=true`.
 3. After approval, run change gate with `changeId`.
-4. Verify and accept required evidence.
+4. Verify and accept required evidence, using provider-backed artifact verification for production-like releases.
 5. Issue a promotion manifest with the approved change ids and trusted evidence ids.
 6. Apply only with manifest-backed release approval.
 7. Record rollout attestations and completion evidence.

@@ -81,12 +81,26 @@ public sealed class CatalogRolloutAttestationRecord
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
 }
 
-public sealed class CatalogPromotionDossier
+public sealed record CatalogPromotionDossier
 {
     public CatalogPromotionManifestRecord Manifest { get; init; } = new();
     public IReadOnlyList<CatalogChangeRequestRecord> Changes { get; init; } = Array.Empty<CatalogChangeRequestRecord>();
     public IReadOnlyList<CatalogCertificationEvidenceRecord> Evidence { get; init; } = Array.Empty<CatalogCertificationEvidenceRecord>();
+    public IReadOnlyList<CatalogEvidenceTrustEvaluation> EvidenceTrust { get; init; } = Array.Empty<CatalogEvidenceTrustEvaluation>();
     public IReadOnlyList<CatalogRolloutAttestationRecord> Attestations { get; init; } = Array.Empty<CatalogRolloutAttestationRecord>();
+    public CatalogAuditRetentionSnapshot Retention { get; init; } = new();
+    public string DossierHash { get; init; } = string.Empty;
     public IReadOnlyList<string> AuditWarnings { get; init; } = Array.Empty<string>();
     public DateTime GeneratedAtUtc { get; init; } = DateTime.UtcNow;
+}
+
+public sealed class CatalogAuditRetentionSnapshot
+{
+    public string PolicyVersion { get; init; } = "sprint-14";
+    public DateTime? ManifestRetainUntilUtc { get; init; }
+    public DateTime? EvidenceRetainUntilUtc { get; init; }
+    public DateTime? AttestationRetainUntilUtc { get; init; }
+    public DateTime? DossierArchiveRetainUntilUtc { get; init; }
+    public bool ArchiveRequired { get; init; }
+    public bool RetentionCurrent { get; init; }
 }

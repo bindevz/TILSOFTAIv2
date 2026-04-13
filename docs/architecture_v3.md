@@ -1,4 +1,4 @@
-# Architecture V3 - Sprint 13
+# Architecture V3 - Sprint 14
 
 ## Runtime Shape
 
@@ -125,6 +125,16 @@ Write path:
 | Rollout provenance | Rollout state is append-only attestation history, not mutable operator notes. |
 | Audit dossier | Promotion dossiers bind manifest, change records, evidence, attestations, hash verification, and audit warnings. |
 | Release path | Production-like rollout completion requires manifest-backed release proof and trusted attestation evidence. |
+
+## Sprint 14 Ownership Changes
+
+| Area | Sprint 14 state |
+|------|-----------------|
+| Artifact trust | `FileSystemCatalogArtifactProvider` verifies controlled `artifact://catalog-evidence/` bytes under a trusted root and compares SHA-256 hashes. |
+| Trust tiers | Evidence trust can be `metadata_verified`, `provider_verified`, `signature_verified`, or `compliance_grade_trusted`; production-like policy defaults to `provider_verified`. |
+| Freshness | Required evidence kinds can carry freshness windows that block stale promotion and manifest issuance. |
+| Retention | Promotion dossiers include retention snapshots for evidence, manifests, attestations, and dossier archives. |
+| Audit export | Dossiers include deterministic dossier hashes, evidence trust evaluations, and retention warnings. |
 
 ## Capabilities
 

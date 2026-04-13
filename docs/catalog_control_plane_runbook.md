@@ -42,9 +42,10 @@ Production-like environments require two-person review and independent apply by 
 10. Verify `/health/ready` remains `platform` mode and the changed record resolves as expected.
 11. Record certification evidence with `POST /api/platform-catalog/certification-evidence` when the runbook or drill was actually executed in the target environment.
 12. Verify evidence with `POST /api/platform-catalog/certification-evidence/{evidenceId}/verify`.
-13. Issue a promotion manifest with `POST /api/platform-catalog/promotion-manifests`.
-14. Record rollout attestations with `POST /api/platform-catalog/promotion-manifests/{manifestId}/attestations`.
-15. Review `GET /api/platform-catalog/promotion-manifests/{manifestId}/dossier` before compliance sign-off.
+13. Confirm production-like evidence reaches the configured trust tier, normally `provider_verified`.
+14. Issue a promotion manifest with `POST /api/platform-catalog/promotion-manifests`.
+15. Record rollout attestations with `POST /api/platform-catalog/promotion-manifests/{manifestId}/attestations`.
+16. Review `GET /api/platform-catalog/promotion-manifests/{manifestId}/dossier` before compliance sign-off.
 
 ## High-Risk Changes
 

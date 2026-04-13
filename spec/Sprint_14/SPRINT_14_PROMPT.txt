@@ -1,0 +1,230 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 14.
+
+Baseline repository reality (after Sprint 13):
+- Sprint 9 already retired `LegacyChatPipelineBridge`, `ChatPipeline`, `ChatRequest`, and `ChatResult`.
+- Production capability and external connection records load from `catalog/platform-catalog.json`.
+- The catalog control plane already supports:
+  - preview
+  - submit
+  - approve
+  - reject
+  - apply
+- Mutation safety already includes:
+  - `ExpectedVersionTag`
+  - `IdempotencyKey`
+  - duplicate pending-change detection
+  - idempotent apply replay
+  - `RollbackOfChangeId`
+- Promotion gating already exists through `IPlatformCatalogPromotionGate`.
+- Evidence verification now exists through `IPlatformCatalogEvidenceVerifier`.
+- Certification evidence now includes:
+  - lifecycle states
+  - verification status
+  - artifact hash metadata
+  - source/content metadata
+  - collection timestamp
+  - expiry-aware trust checks
+- Immutable promotion manifests now exist.
+- Append-only rollout attestations now exist.
+- Promotion dossiers now exist.
+- Production-like promotion now requires trusted evidence, not just accepted metadata.
+- Production-like rollout completion now requires manifest-backed proof and trusted attestation evidence by default.
+
+The platform is now extremely close to full enterprise-grade maturity.
+However, it is still not fully enterprise-grade because:
+- evidence verification is still primarily metadata-centric,
+- the platform does not yet verify remote artifact bytes or signed artifact bundles,
+- evidence trust does not yet have stronger assurance tiers beyond metadata verification,
+- live-certification freshness is not yet strict enough as a policy dimension,
+- retention and archival expectations for proof are not yet hardened enough,
+- and audit-proof durability still relies too much on mutable external references.
+
+Sprint 14 mission:
+Turn the platform from “trust-aware and provenance-bearing” into “compliance-hardened and artifact-verifiable”.
+
+Primary objective:
+1. Add stronger artifact-provider or signed-bundle verification.
+2. Add evidence trust tiers and environment-aware trust policy.
+3. Add retention and archival rules for manifests, attestations, and evidence.
+4. Add live-certification freshness enforcement.
+5. Harden dossier/export output for durable audit review.
+6. Keep emergency-path operations fully attributable under stronger trust policy.
+7. Close the final enterprise-grade maturity gap without drifting into feature work.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the runtime orchestration owner.
+2. Platform catalog remains the production source-of-truth.
+3. Promotion gates, manifests, and attestations remain mandatory release primitives.
+4. Metadata-only evidence trust is no longer sufficient for the final maturity step.
+5. Stronger environments must be able to demand stronger evidence assurance.
+6. Audit proof must become more durable than external link references alone.
+7. Live certification must remain current, not merely historically recorded.
+8. Emergency paths must remain rare, visible, reviewable, and strongly attributable.
+9. Sprint 14 success is measured by stronger artifact trust and durable audit proof, not runtime novelty.
+10. Do not convert Sprint 14 into a feature sprint.
+
+Primary Sprint 14 goals:
+
+A. Add stronger artifact-provider or signed-bundle trust
+- Add at least one stronger trust path than metadata-only verification.
+- Support one or both of:
+  - controlled artifact-provider verification
+  - signed evidence / signed bundle verification
+- Where provider-backed retrieval exists, compare declared hash to recomputed artifact bytes.
+- Where signed-bundle verification exists, validate signature/publisher trust according to policy.
+- Do not fetch arbitrary untrusted URLs.
+
+B. Add evidence trust tiers
+- Extend evidence policy beyond a binary trusted/untrusted idea.
+- Support trust levels such as:
+  - metadata-verified
+  - provider-verified
+  - signature-verified
+  - compliance-grade trusted
+- Allow stricter environments to require stronger trust tiers.
+- Surface trust-tier diagnostics clearly in gate results and review surfaces.
+
+C. Add live-certification freshness policy
+- Define freshness windows for required certification evidence kinds.
+- Block production-like promotion when required evidence is stale.
+- Support environment-specific freshness posture where appropriate.
+- Return deterministic blocker codes for stale or insufficiently fresh evidence.
+
+D. Add retention and archival policy
+- Define retention classes and archival expectations for:
+  - manifests
+  - rollout attestations
+  - evidence records
+  - audit bundles/dossiers
+- Add export/archival package rules and stable review outputs.
+- Define stale/expired/archived proof handling semantics.
+
+E. Harden dossier/export for durable audit review
+- Improve dossier/export output so that it carries:
+  - manifest identity
+  - evidence trust level
+  - attestation lineage
+  - blocker/warning context
+  - retention/archival metadata where appropriate
+- Make review less dependent on mutable external references.
+
+F. Keep emergency-path operations fully attributable under stronger trust rules
+- Ensure fallback/break-glass/rollback paths still carry:
+  - manifest lineage
+  - incident linkage
+  - stronger proof expectations when policy requires
+  - after-action traceability
+- Do not allow emergency paths to silently downgrade trust without explicit policy outcome.
+
+G. Preserve enterprise-grade focus
+- Only add runtime surface area if it directly improves artifact trust, policy enforcement, or audit durability.
+- Do not broaden product scope.
+- Do not introduce generic abstraction layers without concrete trust use cases.
+
+Non-negotiable rules:
+1. Do not weaken preview / submit / approve / apply / promotion-gate / manifest / attestation discipline.
+2. Do not trust arbitrary external evidence URLs.
+3. Do not claim byte-level or signature-level trust unless it is actually verified.
+4. Do not leave stricter environments unable to demand stronger trust.
+5. Do not make retention policy doc-only.
+6. Do not let stale live-certification evidence pass silently.
+7. Do not normalize emergency paths under weaker proof.
+8. Do not store secrets in manifests, evidence metadata, or archival bundles.
+9. Prefer deterministic machine-readable policy outcomes over operator guesswork.
+10. Do not turn Sprint 14 into a feature sprint.
+
+Explicitly in scope:
+- stronger artifact-provider or signed-bundle verification
+- evidence trust-tier model
+- trust-tier-aware promotion policy
+- live-certification freshness policy
+- retention and archival policy
+- dossier/export hardening
+- emergency-path proof hardening
+- tests, docs, runbooks for the above
+
+Explicitly out of scope:
+- broad new product features
+- major UI efforts
+- planner runtime
+- graph orchestration
+- large adapter ecosystem growth
+- product workflow breadth
+
+Recommended implementation order:
+1. Add stronger trust-tier model and provider/signed-bundle verification.
+2. Wire trust-tier policy into promotion gates and manifest issuance.
+3. Add live-certification freshness enforcement.
+4. Add retention / archival / export rules.
+5. Harden dossier/export output.
+6. Strengthen emergency-path proof requirements.
+7. Delete any dead code revealed by the trust hardening work.
+
+Required architectural outcomes:
+1. At least one stronger evidence trust path exists beyond metadata-only verification.
+2. Stricter environments can require stronger trust than lower environments.
+3. Stale live-certification evidence can block promotion.
+4. Audit-proof durability is stronger and less dependent on mutable external references.
+5. Emergency-path operations remain attributable under stronger trust rules.
+6. The remaining gap to full enterprise-grade is no longer trust/provenance/compliance maturity.
+
+Definition of done:
+- Stronger artifact-provider or signed-bundle verification exists.
+- Evidence trust tiers are real and policy-enforced.
+- Promotion gates can block for insufficient trust tier or stale certification evidence.
+- Retention and archival rules exist in code and docs, not only prose.
+- Dossier/export output is more durable and review-friendly.
+- Emergency-path proof remains strong and attributable.
+- The platform is more credible as a compliance-hardened enterprise platform after Sprint 14 than after Sprint 13.
+
+Must-fail conditions:
+- evidence trust remains metadata-only in all practical cases
+- stricter environments cannot demand stronger trust
+- stale live-certification evidence can still pass without consequence
+- retention/archival remains mostly narrative
+- audit packages still rely too heavily on mutable external references
+- Sprint 14 drifts into feature work without materially improving final enterprise-grade closure
+
+Preferred implementation style:
+- concrete trust semantics
+- narrow, justified abstractions
+- deterministic policy
+- durable audit proof
+- explicit trust tiers
+- operator-usable diagnostics
+- deletion over drift
+- no architecture theater
+
+Required deliverables:
+1. Artifact trust and verification changes
+2. Trust-tier policy changes
+3. Live-certification freshness changes
+4. Retention / archival changes
+5. Dossier/export hardening changes
+6. Emergency-path trust changes
+7. Validation / test / runbook updates
+
+Required reporting after implementation:
+1. Summary of Sprint 14 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Artifact trust and verification changes
+6. Trust-tier policy changes
+7. Retention / archival changes
+8. Live-certification freshness changes
+9. Dossier/export hardening changes
+10. Emergency-path trust changes
+11. Validation / test / runbook improvements
+12. Remaining enterprise-grade blockers
+13. Recommended Sprint 15 priorities
+
+Final instruction:
+Sprint 14 is about final enterprise-grade closure through stronger artifact trust and durable audit proof.
+
+Do not spend Sprint 14 adding runtime novelty.
+Do not turn Sprint 14 into a feature sprint.
+
+Spend it grounding evidence trust more strongly, hardening proof retention, enforcing freshness, and closing the last compliance-grade maturity gap.

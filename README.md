@@ -1,8 +1,8 @@
 # TILSOFTAI V3
 
-TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 13 adds verified evidence, immutable promotion manifests, rollout attestations, and audit dossiers around the governed platform catalog.
+TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 14 adds provider-backed artifact verification, evidence trust tiers, freshness policy, retention snapshots, and hardened audit dossiers around the governed platform catalog.
 
-## Current Runtime Shape (Sprint 13)
+## Current Runtime Shape (Sprint 14)
 
 ```text
 API / Hub / OpenAI surface
@@ -54,23 +54,22 @@ Write requests:
      -> SqlToolAdapter
 ```
 
-## Sprint 13 Changes
+## Sprint 14 Changes
 
-### Evidence trust
-- Evidence lifecycle now distinguishes recorded, verified, accepted, expired, superseded, and rejected evidence.
-- Trusted evidence requires verification status, allowed evidence references, artifact hashes, source metadata, and collection timestamps.
+### Artifact trust
+- Evidence now has trust tiers including metadata-verified and provider-verified.
+- The controlled artifact provider verifies `artifact://catalog-evidence/` bytes under a configured trusted root and compares SHA-256 hashes.
 
-### Promotion provenance
-- Added immutable promotion manifests with manifest hashes, change ids, evidence ids, gate summaries, actor identity, and environment.
-- Added append-only rollout attestations for issued, started, completed, failed, aborted, and superseded rollout states.
+### Freshness and policy
+- Production-like environments require provider-verified evidence by default.
+- Required certification evidence has per-kind freshness windows that block stale promotion.
 
 ### Audit dossiers
-- Added deterministic dossier output for manifest, change, evidence, and attestation review.
-- Added docs for evidence integrity, manifest provenance, and audit bundle review.
+- Dossiers now include evidence trust evaluations, retention snapshots, and deterministic dossier hashes.
 
 ### Release discipline
-- Production-like promotion now requires trusted evidence, not just accepted evidence metadata.
-- Production-like rollout completion requires trusted attestation evidence by default.
+- Release policy can require stronger trust tiers per environment.
+- Retention policy is executable review data, not only documentation.
 
 ## Remaining Transitional Components
 
@@ -95,6 +94,7 @@ See `docs/compatibility_debt_report.md` and `docs/enterprise_readiness_gap_repor
 - `docs/catalog_contract_schema_lifecycle.md`
 - `docs/catalog_live_certification_evidence.md`
 - `docs/catalog_evidence_integrity.md`
+- `docs/catalog_artifact_trust_and_retention.md`
 - `docs/catalog_release_gates.md`
 - `docs/catalog_promotion_manifest_provenance.md`
 - `docs/catalog_promotion_audit_dossier.md`

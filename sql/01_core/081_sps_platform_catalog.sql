@@ -467,7 +467,11 @@ BEGIN
         VerifiedByUserId,
         VerifiedAtUtc,
         ExpiresAtUtc,
-        SupersededByEvidenceId
+        SupersededByEvidenceId,
+        TrustTier,
+        ArtifactProvider,
+        ProviderVerifiedAtUtc,
+        ArtifactSizeBytes
     FROM dbo.PlatformCatalogCertificationEvidence
     WHERE EnvironmentName = @EnvironmentName
     ORDER BY CapturedAtUtc DESC;
@@ -504,7 +508,11 @@ BEGIN
         VerifiedByUserId,
         VerifiedAtUtc,
         ExpiresAtUtc,
-        SupersededByEvidenceId
+        SupersededByEvidenceId,
+        TrustTier,
+        ArtifactProvider,
+        ProviderVerifiedAtUtc,
+        ArtifactSizeBytes
     FROM dbo.PlatformCatalogCertificationEvidence
     WHERE EvidenceId = @EvidenceId;
 END;
@@ -533,7 +541,11 @@ CREATE OR ALTER PROCEDURE dbo.app_platform_catalogcertification_create
     @VerifiedByUserId NVARCHAR(200) = NULL,
     @VerifiedAtUtc DATETIME2(7) = NULL,
     @ExpiresAtUtc DATETIME2(7) = NULL,
-    @SupersededByEvidenceId NVARCHAR(64) = NULL
+    @SupersededByEvidenceId NVARCHAR(64) = NULL,
+    @TrustTier NVARCHAR(80) = NULL,
+    @ArtifactProvider NVARCHAR(100) = NULL,
+    @ProviderVerifiedAtUtc DATETIME2(7) = NULL,
+    @ArtifactSizeBytes BIGINT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -562,7 +574,11 @@ BEGIN
         VerifiedByUserId,
         VerifiedAtUtc,
         ExpiresAtUtc,
-        SupersededByEvidenceId
+        SupersededByEvidenceId,
+        TrustTier,
+        ArtifactProvider,
+        ProviderVerifiedAtUtc,
+        ArtifactSizeBytes
     )
     VALUES
     (
@@ -588,7 +604,11 @@ BEGIN
         NULLIF(LTRIM(RTRIM(@VerifiedByUserId)), ''),
         @VerifiedAtUtc,
         @ExpiresAtUtc,
-        NULLIF(LTRIM(RTRIM(@SupersededByEvidenceId)), '')
+        NULLIF(LTRIM(RTRIM(@SupersededByEvidenceId)), ''),
+        NULLIF(LTRIM(RTRIM(@TrustTier)), ''),
+        NULLIF(LTRIM(RTRIM(@ArtifactProvider)), ''),
+        @ProviderVerifiedAtUtc,
+        @ArtifactSizeBytes
     );
 
     SELECT *
@@ -604,7 +624,11 @@ CREATE OR ALTER PROCEDURE dbo.app_platform_catalogcertification_verify
     @VerificationNotes NVARCHAR(1000) = NULL,
     @VerifiedByUserId NVARCHAR(200),
     @VerifiedAtUtc DATETIME2(7),
-    @ExpiresAtUtc DATETIME2(7) = NULL
+    @ExpiresAtUtc DATETIME2(7) = NULL,
+    @TrustTier NVARCHAR(80) = NULL,
+    @ArtifactProvider NVARCHAR(100) = NULL,
+    @ProviderVerifiedAtUtc DATETIME2(7) = NULL,
+    @ArtifactSizeBytes BIGINT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -616,7 +640,11 @@ BEGIN
         VerificationNotes = NULLIF(LTRIM(RTRIM(@VerificationNotes)), ''),
         VerifiedByUserId = LTRIM(RTRIM(@VerifiedByUserId)),
         VerifiedAtUtc = @VerifiedAtUtc,
-        ExpiresAtUtc = @ExpiresAtUtc
+        ExpiresAtUtc = @ExpiresAtUtc,
+        TrustTier = NULLIF(LTRIM(RTRIM(@TrustTier)), ''),
+        ArtifactProvider = NULLIF(LTRIM(RTRIM(@ArtifactProvider)), ''),
+        ProviderVerifiedAtUtc = @ProviderVerifiedAtUtc,
+        ArtifactSizeBytes = @ArtifactSizeBytes
     WHERE EvidenceId = @EvidenceId;
 
     SELECT *

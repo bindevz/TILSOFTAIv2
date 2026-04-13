@@ -73,6 +73,10 @@ public sealed class SqlPlatformCatalogCertificationStore : IPlatformCatalogCerti
         command.Parameters.Add(new SqlParameter("@VerifiedAtUtc", SqlDbType.DateTime2) { Value = DbNullable(evidence.VerifiedAtUtc) });
         command.Parameters.Add(new SqlParameter("@ExpiresAtUtc", SqlDbType.DateTime2) { Value = DbNullable(evidence.ExpiresAtUtc) });
         command.Parameters.Add(new SqlParameter("@SupersededByEvidenceId", SqlDbType.NVarChar, 64) { Value = DbNullable(evidence.SupersededByEvidenceId) });
+        command.Parameters.Add(new SqlParameter("@TrustTier", SqlDbType.NVarChar, 80) { Value = DbNullable(evidence.TrustTier) });
+        command.Parameters.Add(new SqlParameter("@ArtifactProvider", SqlDbType.NVarChar, 100) { Value = DbNullable(evidence.ArtifactProvider) });
+        command.Parameters.Add(new SqlParameter("@ProviderVerifiedAtUtc", SqlDbType.DateTime2) { Value = DbNullable(evidence.ProviderVerifiedAtUtc) });
+        command.Parameters.Add(new SqlParameter("@ArtifactSizeBytes", SqlDbType.BigInt) { Value = DbNullable(evidence.ArtifactSizeBytes) });
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         return await reader.ReadAsync(ct)
@@ -94,6 +98,10 @@ public sealed class SqlPlatformCatalogCertificationStore : IPlatformCatalogCerti
         command.Parameters.Add(new SqlParameter("@VerifiedByUserId", SqlDbType.NVarChar, 200) { Value = result.VerifiedByUserId });
         command.Parameters.Add(new SqlParameter("@VerifiedAtUtc", SqlDbType.DateTime2) { Value = result.VerifiedAtUtc });
         command.Parameters.Add(new SqlParameter("@ExpiresAtUtc", SqlDbType.DateTime2) { Value = DbNullable(result.ExpiresAtUtc) });
+        command.Parameters.Add(new SqlParameter("@TrustTier", SqlDbType.NVarChar, 80) { Value = DbNullable(result.TrustTier) });
+        command.Parameters.Add(new SqlParameter("@ArtifactProvider", SqlDbType.NVarChar, 100) { Value = DbNullable(result.ArtifactProvider) });
+        command.Parameters.Add(new SqlParameter("@ProviderVerifiedAtUtc", SqlDbType.DateTime2) { Value = DbNullable(result.ProviderVerifiedAtUtc) });
+        command.Parameters.Add(new SqlParameter("@ArtifactSizeBytes", SqlDbType.BigInt) { Value = DbNullable(result.ArtifactSizeBytes) });
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         return await reader.ReadAsync(ct)
@@ -139,7 +147,11 @@ public sealed class SqlPlatformCatalogCertificationStore : IPlatformCatalogCerti
         VerifiedByUserId = ReaderString(reader, "VerifiedByUserId"),
         VerifiedAtUtc = ReaderDateTime(reader, "VerifiedAtUtc"),
         ExpiresAtUtc = ReaderDateTime(reader, "ExpiresAtUtc"),
-        SupersededByEvidenceId = ReaderString(reader, "SupersededByEvidenceId")
+        SupersededByEvidenceId = ReaderString(reader, "SupersededByEvidenceId"),
+        TrustTier = ReaderString(reader, "TrustTier"),
+        ArtifactProvider = ReaderString(reader, "ArtifactProvider"),
+        ProviderVerifiedAtUtc = ReaderDateTime(reader, "ProviderVerifiedAtUtc"),
+        ArtifactSizeBytes = ReaderLong(reader, "ArtifactSizeBytes")
     };
 
     private static object DbNullable(string? value) =>
@@ -148,11 +160,17 @@ public sealed class SqlPlatformCatalogCertificationStore : IPlatformCatalogCerti
     private static object DbNullable(DateTime? value) =>
         value.HasValue ? value.Value : DBNull.Value;
 
+    private static object DbNullable(long? value) =>
+        value.HasValue ? value.Value : DBNull.Value;
+
     private static string ReaderString(SqlDataReader reader, string name) =>
         HasColumn(reader, name) && reader[name] != DBNull.Value ? reader[name] as string ?? string.Empty : string.Empty;
 
     private static DateTime? ReaderDateTime(SqlDataReader reader, string name) =>
         HasColumn(reader, name) && reader[name] != DBNull.Value ? (DateTime)reader[name] : null;
+
+    private static long? ReaderLong(SqlDataReader reader, string name) =>
+        HasColumn(reader, name) && reader[name] != DBNull.Value ? Convert.ToInt64(reader[name]) : null;
 
     private static bool HasColumn(SqlDataReader reader, string name)
     {

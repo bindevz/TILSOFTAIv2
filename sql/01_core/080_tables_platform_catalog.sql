@@ -210,7 +210,21 @@ BEGIN
         VerifiedByUserId NVARCHAR(200) NULL,
         VerifiedAtUtc DATETIME2(7) NULL,
         ExpiresAtUtc DATETIME2(7) NULL,
-        SupersededByEvidenceId NVARCHAR(64) NULL;
+        SupersededByEvidenceId NVARCHAR(64) NULL,
+        TrustTier NVARCHAR(80) NULL,
+        ArtifactProvider NVARCHAR(100) NULL,
+        ProviderVerifiedAtUtc DATETIME2(7) NULL,
+        ArtifactSizeBytes BIGINT NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.PlatformCatalogCertificationEvidence', 'TrustTier') IS NULL
+BEGIN
+    ALTER TABLE dbo.PlatformCatalogCertificationEvidence ADD
+        TrustTier NVARCHAR(80) NULL,
+        ArtifactProvider NVARCHAR(100) NULL,
+        ProviderVerifiedAtUtc DATETIME2(7) NULL,
+        ArtifactSizeBytes BIGINT NULL;
 END;
 GO
 

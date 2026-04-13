@@ -1,4 +1,4 @@
-# Operational Runtime Observability - Sprint 13
+# Operational Runtime Observability - Sprint 14
 
 Sprint 9 removes the legacy bridge/ChatPipeline execution path. Bridge metrics remain as historical instrumentation and to record explicit retired-legacy attempts, but there is no production bridge executor.
 
@@ -42,7 +42,7 @@ Catalog mutation emits `PlatformCatalogMutationProposed` and governance/config-c
 
 Promotion gate results are deterministic API responses with `blockers`, `warnings`, `evidenceMissing`, `evidenceUntrusted`, source mode, environment, and production-like posture. Certification evidence capture stores operator, approver, correlation id, related change/incident ids, evidence kind, verification status, artifact metadata, status, and evidence URI.
 
-Promotion manifests and rollout attestations provide immutable provenance and append-only rollout state for audit review.
+Promotion manifests and rollout attestations provide immutable provenance and append-only rollout state for audit review. Dossiers now include evidence trust tier, freshness, retention, and dossier hash context.
 
 Look for these fields:
 - `Path`: `supervisor`, `native`, `bridge`, or `approval`

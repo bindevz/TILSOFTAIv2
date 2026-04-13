@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
+using System.Text;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Infrastructure.Catalog;
 using TILSOFTAI.Orchestration.Capabilities;
@@ -12,7 +14,7 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
     [Fact]
     public void Verify_ShouldRejectUntrustedEvidenceReference()
     {
-        var verifier = new PlatformCatalogEvidenceVerifier(Options.Create(CertificationOptions()));
+        var verifier = new PlatformCatalogEvidenceVerifier(Options.Create(CertificationOptions()), new StubArtifactProvider());
         var evidence = TrustedEvidence("ev-1") with { EvidenceUri = "https://untrusted.example/evidence.json" };
 
         var result = verifier.Verify(evidence, Context(), acceptAsTrusted: true, "verify");
@@ -20,6 +22,40 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
         result.IsVerified.Should().BeFalse();
         result.Errors.Should().Contain("evidence_uri_not_allowed");
         verifier.IsTrusted(evidence, DateTime.UtcNow).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Verify_ShouldProviderVerifyControlledArtifactBytes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tilsoftai-evidence-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var payload = "{\"proof\":\"ok\"}";
+        var artifactPath = Path.Combine(root, "proof.json");
+        File.WriteAllText(artifactPath, payload);
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
+        var options = CertificationOptions();
+        options.TrustedArtifactRootPath = root;
+        options.ControlledArtifactUriPrefixes = new[] { "artifact://catalog-evidence/" };
+        options.AllowedEvidenceUriPrefixes = new[] { "artifact://catalog-evidence/" };
+        var verifier = new PlatformCatalogEvidenceVerifier(
+            Options.Create(options),
+            new FileSystemCatalogArtifactProvider(Options.Create(options)));
+        var evidence = TrustedEvidence("ev-1") with
+        {
+            EvidenceUri = "artifact://catalog-evidence/proof.json",
+            ArtifactHash = hash,
+            TrustTier = string.Empty,
+            ArtifactProvider = string.Empty,
+            ProviderVerifiedAtUtc = null,
+            ArtifactSizeBytes = null
+        };
+
+        var result = verifier.Verify(evidence, Context(), acceptAsTrusted: true, "provider verify");
+
+        result.IsVerified.Should().BeTrue();
+        result.TrustTier.Should().Be(CatalogEvidenceTrustTiers.ProviderVerified);
+        result.ArtifactProvider.Should().Be("filesystem");
+        result.ArtifactSizeBytes.Should().Be(14);
     }
 
     [Fact]
@@ -37,6 +73,48 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
 
         result.IsIssued.Should().BeFalse();
         result.Blockers.Should().Contain("evidence_untrusted:ev-1");
+    }
+
+    [Fact]
+    public async Task IssueManifestAsync_ShouldBlock_WhenTrustTierIsTooWeakForProduction()
+    {
+        var evidence = RequiredEvidence()
+            .Select(item => item with { TrustTier = CatalogEvidenceTrustTiers.MetadataVerified })
+            .ToArray();
+        var service = CreateService(evidence);
+
+        var result = await service.IssueManifestAsync(new CatalogPromotionManifestIssueRequest
+        {
+            EnvironmentName = "prod",
+            ChangeIds = new[] { "chg-1" },
+            EvidenceIds = evidence.Select(item => item.EvidenceId).ToArray()
+        }, Context(), CancellationToken.None);
+
+        result.IsIssued.Should().BeFalse();
+        result.Blockers.Should().Contain(item => item.Contains("evidence_trust_tier_insufficient", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task IssueManifestAsync_ShouldBlock_WhenLiveCertificationEvidenceIsStale()
+    {
+        var evidence = RequiredEvidence()
+            .Select(item => item with
+            {
+                CollectedAtUtc = DateTime.UtcNow.AddDays(-45),
+                ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
+            })
+            .ToArray();
+        var service = CreateService(evidence);
+
+        var result = await service.IssueManifestAsync(new CatalogPromotionManifestIssueRequest
+        {
+            EnvironmentName = "prod",
+            ChangeIds = new[] { "chg-1" },
+            EvidenceIds = evidence.Select(item => item.EvidenceId).ToArray()
+        }, Context(), CancellationToken.None);
+
+        result.IsIssued.Should().BeFalse();
+        result.Blockers.Should().Contain(item => item.Contains("evidence_freshness_expired", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -88,7 +166,7 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
             new StubCertificationStore(evidence),
             new StubMutationStore(),
             manifestStore ?? new StubManifestStore(),
-            new PlatformCatalogEvidenceVerifier(Options.Create(CertificationOptions())),
+            new PlatformCatalogEvidenceVerifier(Options.Create(CertificationOptions()), new StubArtifactProvider()),
             Options.Create(CertificationOptions()));
 
     private static CatalogCertificationOptions CertificationOptions() => new()
@@ -100,7 +178,13 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
             CatalogCertificationEvidenceKinds.OperatorSignoff
         },
         AllowedEvidenceUriPrefixes = new[] { "https://evidence.example/" },
-        TrustedEvidenceStatuses = new[] { CatalogCertificationEvidenceStatus.Accepted }
+        TrustedEvidenceStatuses = new[] { CatalogCertificationEvidenceStatus.Accepted },
+        MinimumEvidenceTrustTierForProductionLikePromotion = CatalogEvidenceTrustTiers.ProviderVerified,
+        EvidenceFreshnessDaysByKind = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            [CatalogCertificationEvidenceKinds.RunbookExecution] = 30,
+            [CatalogCertificationEvidenceKinds.OperatorSignoff] = 14
+        }
     };
 
     private static IReadOnlyList<CatalogCertificationEvidenceRecord> RequiredEvidence() => new[]
@@ -127,6 +211,10 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
         SourceSystem = "runbook",
         CollectedAtUtc = DateTime.UtcNow,
         VerificationStatus = CatalogEvidenceVerificationStatus.Verified,
+        TrustTier = CatalogEvidenceTrustTiers.ProviderVerified,
+        ArtifactProvider = "test-provider",
+        ProviderVerifiedAtUtc = DateTime.UtcNow,
+        ArtifactSizeBytes = 128,
         VerifiedByUserId = "verifier",
         VerifiedAtUtc = DateTime.UtcNow,
         ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
@@ -153,6 +241,18 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
             });
 
         public IReadOnlyList<CatalogControlPlaneSloDefinition> GetSloDefinitions() => Array.Empty<CatalogControlPlaneSloDefinition>();
+    }
+
+    private sealed class StubArtifactProvider : IPlatformCatalogArtifactProvider
+    {
+        public CatalogArtifactVerificationResult Verify(CatalogCertificationEvidenceRecord evidence) => new()
+        {
+            WasProviderControlled = true,
+            IsVerified = true,
+            ProviderName = "test-provider",
+            ComputedSha256 = evidence.ArtifactHash,
+            ArtifactSizeBytes = 128
+        };
     }
 
     private sealed class StubCertificationStore : IPlatformCatalogCertificationStore

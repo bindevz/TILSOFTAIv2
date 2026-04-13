@@ -7,10 +7,14 @@ namespace TILSOFTAI.Infrastructure.Catalog;
 public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEvidenceVerifier
 {
     private readonly CatalogCertificationOptions _options;
+    private readonly IPlatformCatalogArtifactProvider _artifactProvider;
 
-    public PlatformCatalogEvidenceVerifier(IOptions<CatalogCertificationOptions> options)
+    public PlatformCatalogEvidenceVerifier(
+        IOptions<CatalogCertificationOptions> options,
+        IPlatformCatalogArtifactProvider artifactProvider)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _artifactProvider = artifactProvider ?? throw new ArgumentNullException(nameof(artifactProvider));
     }
 
     public CatalogEvidenceVerificationResult Verify(
@@ -24,7 +28,18 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
 
         var now = DateTime.UtcNow;
         var errors = ValidateEvidence(evidence, now);
+        var artifactVerification = _artifactProvider.Verify(evidence);
+        if (artifactVerification.WasProviderControlled && !artifactVerification.IsVerified)
+        {
+            errors.AddRange(artifactVerification.Errors);
+        }
+
         var verified = errors.Count == 0;
+        var trustTier = verified && artifactVerification.IsVerified
+            ? CatalogEvidenceTrustTiers.ProviderVerified
+            : verified
+                ? CatalogEvidenceTrustTiers.MetadataVerified
+                : string.Empty;
         var notes = string.Join("; ", errors);
         if (!string.IsNullOrWhiteSpace(verificationNotes))
         {
@@ -49,29 +64,43 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
             VerifiedByUserId = context.UserId,
             VerifiedAtUtc = now,
             ExpiresAtUtc = verified && evidence.CollectedAtUtc.HasValue && _options.MaxTrustedEvidenceAgeDays > 0
-                ? evidence.CollectedAtUtc.Value.AddDays(_options.MaxTrustedEvidenceAgeDays)
+                ? evidence.CollectedAtUtc.Value.AddDays(FreshnessDays(evidence))
                 : evidence.ExpiresAtUtc,
+            TrustTier = trustTier,
+            ArtifactProvider = artifactVerification.ProviderName,
+            ProviderVerifiedAtUtc = artifactVerification.IsVerified ? now : null,
+            ArtifactSizeBytes = artifactVerification.ArtifactSizeBytes,
             Errors = errors
         };
     }
 
-    public bool IsTrusted(CatalogCertificationEvidenceRecord evidence, DateTime utcNow)
+    public bool IsTrusted(CatalogCertificationEvidenceRecord evidence, DateTime utcNow) =>
+        EvaluateTrust(evidence, utcNow).IsTrusted;
+
+    public CatalogEvidenceTrustEvaluation EvaluateTrust(CatalogCertificationEvidenceRecord evidence, DateTime utcNow)
     {
         ArgumentNullException.ThrowIfNull(evidence);
 
+        var failures = new List<string>();
+        var requiredTrustTier = RequiredTrustTier(evidence.EnvironmentName);
+        var trustTier = string.IsNullOrWhiteSpace(evidence.TrustTier)
+            ? CatalogEvidenceTrustTiers.MetadataVerified
+            : evidence.TrustTier;
+        var freshUntil = evidence.CollectedAtUtc?.AddDays(FreshnessDays(evidence));
+
         if (!string.Equals(evidence.VerificationStatus, CatalogEvidenceVerificationStatus.Verified, StringComparison.OrdinalIgnoreCase))
         {
-            return false;
+            failures.Add("evidence_not_verified");
         }
 
         if (!_options.TrustedEvidenceStatuses.Any(status => string.Equals(status, evidence.Status, StringComparison.OrdinalIgnoreCase)))
         {
-            return false;
+            failures.Add("evidence_status_not_trusted");
         }
 
         if (evidence.ExpiresAtUtc.HasValue && evidence.ExpiresAtUtc.Value <= utcNow)
         {
-            return false;
+            failures.Add("evidence_expired");
         }
 
         if (string.Equals(evidence.Status, CatalogCertificationEvidenceStatus.Expired, StringComparison.OrdinalIgnoreCase)
@@ -79,10 +108,31 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
             || string.Equals(evidence.VerificationStatus, CatalogEvidenceVerificationStatus.Expired, StringComparison.OrdinalIgnoreCase)
             || string.Equals(evidence.VerificationStatus, CatalogEvidenceVerificationStatus.Superseded, StringComparison.OrdinalIgnoreCase))
         {
-            return false;
+            failures.Add("evidence_lifecycle_not_current");
         }
 
-        return ValidateEvidence(evidence, utcNow).Count == 0;
+        if (CatalogEvidenceTrustTiers.Rank(trustTier) < CatalogEvidenceTrustTiers.Rank(requiredTrustTier))
+        {
+            failures.Add($"evidence_trust_tier_insufficient:{trustTier}:{requiredTrustTier}");
+        }
+
+        if (freshUntil.HasValue && freshUntil.Value <= utcNow)
+        {
+            failures.Add($"evidence_freshness_expired:{evidence.EvidenceKind}");
+        }
+
+        failures.AddRange(ValidateEvidence(evidence, utcNow));
+
+        return new CatalogEvidenceTrustEvaluation
+        {
+            IsTrusted = failures.Count == 0,
+            EvidenceId = evidence.EvidenceId,
+            TrustTier = trustTier,
+            RequiredTrustTier = requiredTrustTier,
+            IsFresh = !freshUntil.HasValue || freshUntil.Value > utcNow,
+            FreshUntilUtc = freshUntil,
+            Failures = failures.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+        };
     }
 
     private List<string> ValidateEvidence(CatalogCertificationEvidenceRecord evidence, DateTime utcNow)
@@ -143,8 +193,8 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
                 errors.Add("collected_at_in_future");
             }
 
-            if (_options.MaxTrustedEvidenceAgeDays > 0
-                && evidence.CollectedAtUtc.Value < utcNow.AddDays(-_options.MaxTrustedEvidenceAgeDays))
+            if (FreshnessDays(evidence) > 0
+                && evidence.CollectedAtUtc.Value < utcNow.AddDays(-FreshnessDays(evidence)))
             {
                 errors.Add("evidence_stale");
             }
@@ -152,6 +202,18 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
 
         return errors;
     }
+
+    private int FreshnessDays(CatalogCertificationEvidenceRecord evidence) =>
+        _options.EvidenceFreshnessDaysByKind.TryGetValue(evidence.EvidenceKind, out var days)
+            ? days
+            : _options.MaxTrustedEvidenceAgeDays;
+
+    private string RequiredTrustTier(string environmentName) =>
+        _options.EnvironmentMinimumEvidenceTrustTiers.TryGetValue(environmentName, out var tier)
+            ? tier
+            : _options.ProductionLikeEnvironments.Any(item => string.Equals(item, environmentName, StringComparison.OrdinalIgnoreCase))
+                ? _options.MinimumEvidenceTrustTierForProductionLikePromotion
+                : CatalogEvidenceTrustTiers.MetadataVerified;
 
     [GeneratedRegex("^[a-fA-F0-9]{64}$")]
     private static partial Regex Sha256HexRegex();

@@ -56,6 +56,7 @@ public sealed class PlatformCatalogPromotionGate : IPlatformCatalogPromotionGate
         var warnings = new List<string>();
         var missingEvidence = new List<string>();
         var untrustedEvidence = new List<string>();
+        var evidenceTrustFailures = new List<string>();
         var sourceMode = DetermineSourceMode();
         CatalogMutationPreviewResult? preview = null;
         CatalogChangeRequestRecord? change = null;
@@ -114,16 +115,25 @@ public sealed class PlatformCatalogPromotionGate : IPlatformCatalogPromotionGate
             && _certificationOptions.RequireCertificationEvidenceForProductionLikePromotion)
         {
             var evidence = await _certificationStore.ListEvidenceAsync(environment, ct);
+            var trustEvaluations = evidence
+                .Select(item => _evidenceVerifier.EvaluateTrust(item, DateTime.UtcNow))
+                .ToDictionary(item => item.EvidenceId, StringComparer.OrdinalIgnoreCase);
             var trustedEvidence = evidence
-                .Where(item => !_certificationOptions.RequireTrustedEvidenceForProductionLikePromotion || _evidenceVerifier.IsTrusted(item, DateTime.UtcNow))
+                .Where(item => !_certificationOptions.RequireTrustedEvidenceForProductionLikePromotion
+                    || (trustEvaluations.TryGetValue(item.EvidenceId, out var trust) && trust.IsTrusted))
                 .ToArray();
             var acceptedKinds = trustedEvidence
                 .Select(item => item.EvidenceKind)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             untrustedEvidence.AddRange(evidence
                 .Where(item => _certificationOptions.RequiredEvidenceKinds.Contains(item.EvidenceKind, StringComparer.OrdinalIgnoreCase))
-                .Where(item => _certificationOptions.RequireTrustedEvidenceForProductionLikePromotion && !_evidenceVerifier.IsTrusted(item, DateTime.UtcNow))
+                .Where(item => _certificationOptions.RequireTrustedEvidenceForProductionLikePromotion
+                    && trustEvaluations.TryGetValue(item.EvidenceId, out var trust)
+                    && !trust.IsTrusted)
                 .Select(item => item.EvidenceId));
+            evidenceTrustFailures.AddRange(trustEvaluations.Values
+                .Where(item => !item.IsTrusted)
+                .SelectMany(item => item.Failures.Select(failure => $"{item.EvidenceId}:{failure}")));
 
             missingEvidence.AddRange(_certificationOptions.RequiredEvidenceKinds
                 .Where(required => !acceptedKinds.Contains(required)));
@@ -146,6 +156,7 @@ public sealed class PlatformCatalogPromotionGate : IPlatformCatalogPromotionGate
             Warnings = warnings,
             EvidenceMissing = missingEvidence,
             EvidenceUntrusted = untrustedEvidence,
+            EvidenceTrustFailures = evidenceTrustFailures,
             Preview = preview
         };
 

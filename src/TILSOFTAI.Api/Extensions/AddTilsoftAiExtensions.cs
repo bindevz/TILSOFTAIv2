@@ -152,6 +152,7 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<IPlatformCatalogMutationStore, SqlPlatformCatalogMutationStore>();
         services.AddSingleton<IPlatformCatalogControlPlane, PlatformCatalogControlPlane>();
         services.AddSingleton<IPlatformCatalogCertificationStore, SqlPlatformCatalogCertificationStore>();
+        services.AddSingleton<IPlatformCatalogArtifactProvider, FileSystemCatalogArtifactProvider>();
         services.AddSingleton<IPlatformCatalogEvidenceVerifier, PlatformCatalogEvidenceVerifier>();
         services.AddSingleton<IPlatformCatalogPromotionManifestStore, SqlPlatformCatalogPromotionManifestStore>();
         services.AddSingleton<IPlatformCatalogPromotionManifestService, PlatformCatalogPromotionManifestService>();
@@ -566,6 +567,10 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.ApproveSuccessSloPercent is >= 0 and <= 100, "CatalogCertification:ApproveSuccessSloPercent must be between 0 and 100.")
             .Validate(options => options.ApplySuccessSloPercent is >= 0 and <= 100, "CatalogCertification:ApplySuccessSloPercent must be between 0 and 100.")
             .Validate(options => options.MaxTrustedEvidenceAgeDays >= 0, "CatalogCertification:MaxTrustedEvidenceAgeDays must be >= 0.")
+            .Validate(options => options.EvidenceRetentionDays >= 0, "CatalogCertification:EvidenceRetentionDays must be >= 0.")
+            .Validate(options => options.ManifestRetentionDays >= 0, "CatalogCertification:ManifestRetentionDays must be >= 0.")
+            .Validate(options => options.AttestationRetentionDays >= 0, "CatalogCertification:AttestationRetentionDays must be >= 0.")
+            .Validate(options => options.DossierArchiveRetentionDays >= 0, "CatalogCertification:DossierArchiveRetentionDays must be >= 0.")
             .Validate(options => options.TrustedEvidenceStatuses.Length > 0, "CatalogCertification:TrustedEvidenceStatuses must have at least one status.")
             .ValidateOnStart();
         

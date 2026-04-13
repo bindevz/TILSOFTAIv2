@@ -1,4 +1,4 @@
-# Catalog Promotion Manifest Provenance - Sprint 13
+# Catalog Promotion Manifest Provenance - Sprint 14
 
 Promotion manifests are immutable release records that bind together the reviewed change, trusted evidence, gate result, environment, actor, and manifest hash.
 
@@ -17,6 +17,8 @@ The platform issues a manifest only when:
 
 - all listed evidence exists in the target environment,
 - required production-like evidence kinds are covered by trusted evidence,
+- trusted evidence meets the target environment trust tier,
+- live-certification evidence is fresh enough for its evidence kind,
 - every change passes promotion gate evaluation,
 - source mode and expected-version blockers are absent.
 

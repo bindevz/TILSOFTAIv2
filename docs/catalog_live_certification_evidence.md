@@ -45,8 +45,10 @@ Sprint 13 trusted evidence requires:
 
 - lifecycle status accepted by a verifier or release authority,
 - `VerificationStatus=verified`,
+- trust tier meets the target environment requirement,
 - allowed evidence URI prefix,
 - SHA-256 artifact hash,
+- provider-recomputed artifact hash when the URI is provider-backed,
 - source system and content metadata when supplied,
 - non-stale collection timestamp.
 

@@ -127,7 +127,9 @@ public sealed class PlatformCatalogPromotionGateTests
             controlPlane,
             mutationStore,
             certificationStore,
-            new PlatformCatalogEvidenceVerifier(Options.Create(new CatalogCertificationOptions { EnvironmentName = "prod" })),
+            new PlatformCatalogEvidenceVerifier(
+                Options.Create(new CatalogCertificationOptions { EnvironmentName = "prod" }),
+                new StubArtifactProvider()),
             configuration,
             Options.Create(new PlatformCatalogOptions
             {
@@ -186,6 +188,10 @@ public sealed class PlatformCatalogPromotionGateTests
                 SourceSystem = "runbook",
                 CollectedAtUtc = DateTime.UtcNow,
                 VerificationStatus = CatalogEvidenceVerificationStatus.Verified,
+                TrustTier = CatalogEvidenceTrustTiers.ProviderVerified,
+                ArtifactProvider = "test-provider",
+                ProviderVerifiedAtUtc = DateTime.UtcNow,
+                ArtifactSizeBytes = 128,
                 VerifiedByUserId = "verifier",
                 VerifiedAtUtc = DateTime.UtcNow,
                 ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
@@ -211,6 +217,18 @@ public sealed class PlatformCatalogPromotionGateTests
                 }
             },
             ExternalConnections = new Dictionary<string, ExternalConnectionOptions>(StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    private sealed class StubArtifactProvider : IPlatformCatalogArtifactProvider
+    {
+        public CatalogArtifactVerificationResult Verify(CatalogCertificationEvidenceRecord evidence) => new()
+        {
+            WasProviderControlled = true,
+            IsVerified = true,
+            ProviderName = "test-provider",
+            ComputedSha256 = evidence.ArtifactHash,
+            ArtifactSizeBytes = 128
         };
     }
 

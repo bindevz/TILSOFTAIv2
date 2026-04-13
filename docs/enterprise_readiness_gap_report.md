@@ -1,6 +1,6 @@
-# Enterprise Readiness Gap Report - Sprint 13
+# Enterprise Readiness Gap Report - Sprint 14
 
-Sprint 13 turns the governed catalog control plane into a provenance-bearing production path. Evidence now has verification/trust semantics, promotion has immutable manifest identity, rollout state is append-only attestation history, and promotion dossiers provide a compliance review surface.
+Sprint 14 turns the governed catalog control plane into an artifact-verifiable production path. Evidence now has trust tiers, controlled-provider byte verification, freshness enforcement, retention snapshots, and hardened dossier hashes.
 
 ## Completed Through Sprint 7
 
@@ -52,6 +52,10 @@ Sprint 13 turns the governed catalog control plane into a provenance-bearing pro
 - Promotion manifests bind environment, change ids, evidence ids, gate results, actors, and manifest hash.
 - Rollout attestations preserve issued/started/completed/failed/aborted/superseded history.
 - Promotion dossiers expose manifest, changes, evidence, attestations, and machine-readable audit warnings.
+- Controlled artifact provider verification can recompute SHA-256 for `artifact://catalog-evidence/` references under a trusted root.
+- Production-like environments can require `provider_verified` evidence while staging can accept weaker tiers.
+- Live-certification evidence freshness windows block stale runbook/drill/signoff evidence.
+- Dossiers include retention policy snapshots and deterministic dossier hashes.
 
 ## Remaining Enterprise Blockers
 
@@ -62,7 +66,7 @@ Sprint 13 turns the governed catalog control plane into a provenance-bearing pro
 | Module packages still physically exist | Their end-state is non-runtime, but physical removal is optional future cleanup. | Remove packages only when packaging/diagnostic ownership no longer needs them. |
 | SQL remains dominant | Most production capabilities are still SQL-backed even with two governed REST paths. | Continue adding governed non-SQL capabilities where production workflows require them. |
 | Contract richness still depends on capability shape | Schema lifecycle exists, but future records must keep using it consistently. | Enforce preview and contract review in catalog operations and evaluate JSON Schema artifacts when schemas become shared. |
-| Evidence artifact content is not fetched or cryptographically compared to remote bytes | Sprint 13 verifies metadata, allowed references, and declared hashes, but does not download arbitrary evidence artifacts. | Add signed bundles or controlled artifact-provider integrations when compliance requires byte-level remote verification. |
+| Signed bundle verification is still reserved | Sprint 14 adds controlled provider byte verification, but not signed publisher validation. | Add `signature_verified` support when compliance requires publisher-signature proof. |
 
 ## Verification Notes
 

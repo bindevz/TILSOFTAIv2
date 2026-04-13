@@ -31,6 +31,24 @@ public static class CatalogEvidenceVerificationStatus
     public const string Superseded = "superseded";
 }
 
+public static class CatalogEvidenceTrustTiers
+{
+    public const string MetadataVerified = "metadata_verified";
+    public const string ProviderVerified = "provider_verified";
+    public const string SignatureVerified = "signature_verified";
+    public const string ComplianceGradeTrusted = "compliance_grade_trusted";
+
+    public static int Rank(string trustTier) =>
+        trustTier?.Trim().ToLowerInvariant() switch
+        {
+            MetadataVerified => 1,
+            ProviderVerified => 2,
+            SignatureVerified => 3,
+            ComplianceGradeTrusted => 4,
+            _ => 0
+        };
+}
+
 public sealed record CatalogCertificationEvidenceRecord
 {
     public string EvidenceId { get; init; } = string.Empty;
@@ -57,6 +75,10 @@ public sealed record CatalogCertificationEvidenceRecord
     public DateTime? VerifiedAtUtc { get; init; }
     public DateTime? ExpiresAtUtc { get; init; }
     public string SupersededByEvidenceId { get; init; } = string.Empty;
+    public string TrustTier { get; init; } = string.Empty;
+    public string ArtifactProvider { get; init; } = string.Empty;
+    public DateTime? ProviderVerifiedAtUtc { get; init; }
+    public long? ArtifactSizeBytes { get; init; }
 }
 
 public sealed class CatalogEvidenceVerificationResult
@@ -69,7 +91,22 @@ public sealed class CatalogEvidenceVerificationResult
     public string VerifiedByUserId { get; init; } = string.Empty;
     public DateTime VerifiedAtUtc { get; init; } = DateTime.UtcNow;
     public DateTime? ExpiresAtUtc { get; init; }
+    public string TrustTier { get; init; } = string.Empty;
+    public string ArtifactProvider { get; init; } = string.Empty;
+    public DateTime? ProviderVerifiedAtUtc { get; init; }
+    public long? ArtifactSizeBytes { get; init; }
     public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
+}
+
+public sealed class CatalogEvidenceTrustEvaluation
+{
+    public bool IsTrusted { get; init; }
+    public string EvidenceId { get; init; } = string.Empty;
+    public string TrustTier { get; init; } = string.Empty;
+    public string RequiredTrustTier { get; init; } = string.Empty;
+    public bool IsFresh { get; init; }
+    public DateTime? FreshUntilUtc { get; init; }
+    public IReadOnlyList<string> Failures { get; init; } = Array.Empty<string>();
 }
 
 public sealed class CatalogPromotionGateRequest
@@ -92,6 +129,7 @@ public sealed class CatalogPromotionGateResult
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> EvidenceMissing { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> EvidenceUntrusted { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> EvidenceTrustFailures { get; init; } = Array.Empty<string>();
     public CatalogMutationPreviewResult? Preview { get; init; }
 }
 

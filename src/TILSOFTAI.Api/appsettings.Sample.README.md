@@ -151,8 +151,30 @@ Production-like promotion requires accepted certification evidence before catalo
     "RequireEvidenceUriForTrustedEvidence": true,
     "RequireRolloutAttestationEvidenceForProductionLikeCompletion": true,
     "MaxTrustedEvidenceAgeDays": 90,
+    "MinimumEvidenceTrustTierForProductionLikePromotion": "provider_verified",
+    "EnvironmentMinimumEvidenceTrustTiers": {
+      "prod": "provider_verified",
+      "production": "provider_verified",
+      "staging": "metadata_verified"
+    },
+    "EvidenceFreshnessDaysByKind": {
+      "runbook_execution": 30,
+      "preview_failure_drill": 30,
+      "version_conflict_drill": 30,
+      "duplicate_submit_drill": 30,
+      "sql_apply_outage_drill": 30,
+      "fallback_risk_drill": 30,
+      "operator_signoff": 14
+    },
+    "TrustedArtifactRootPath": "evidence-artifacts",
+    "ControlledArtifactUriPrefixes": [ "artifact://catalog-evidence/" ],
+    "EvidenceRetentionDays": 2555,
+    "ManifestRetentionDays": 2555,
+    "AttestationRetentionDays": 2555,
+    "DossierArchiveRetentionDays": 2555,
+    "RequireArchiveForProductionLikeDossiers": true,
     "TrustedEvidenceStatuses": [ "accepted" ],
-    "AllowedEvidenceUriPrefixes": [ "https://evidence.example/" ],
+    "AllowedEvidenceUriPrefixes": [ "https://evidence.example/", "artifact://catalog-evidence/" ],
     "AllowedEvidenceContentTypes": [ "application/json", "application/pdf", "text/plain", "text/markdown" ],
     "AllowedEvidenceSourceSystems": [ "ci", "runbook", "incident", "release" ],
     "RequiredEvidenceKinds": [
@@ -190,7 +212,7 @@ Promotion gate endpoints:
 - `POST /api/platform-catalog/promotion-manifests/{manifestId}/attestations`
 - `GET /api/platform-catalog/promotion-manifests/{manifestId}/dossier`
 
-The gate blocks unsafe source modes, failed previews, missing expected versions, unapproved changes, break-glass changes that lack after-action evidence, missing certification evidence, and untrusted certification evidence. Promotion manifests become the immutable release record after gate success and trusted evidence verification.
+The gate blocks unsafe source modes, failed previews, missing expected versions, unapproved changes, break-glass changes that lack after-action evidence, missing certification evidence, untrusted certification evidence, insufficient trust tier, and stale live-certification evidence. Promotion manifests become the immutable release record after gate success and trusted evidence verification.
 
 The control plane stores pending changes in SQL before applying them to `PlatformCapabilityCatalog` or `PlatformExternalConnectionCatalog`. Each change must include an owner, change note, record type, operation, and record payload. Capability records must include an `ArgumentContract`; REST records must reference a configured external connection and secret references instead of raw secret values.
 

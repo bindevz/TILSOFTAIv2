@@ -9,4 +9,6 @@ public interface IPlatformCatalogEvidenceVerifier
         string verificationNotes);
 
     bool IsTrusted(CatalogCertificationEvidenceRecord evidence, DateTime utcNow);
+
+    CatalogEvidenceTrustEvaluation EvaluateTrust(CatalogCertificationEvidenceRecord evidence, DateTime utcNow);
 }

@@ -10,8 +10,18 @@ public sealed class CatalogCertificationOptions
     public bool RequireEvidenceUriForTrustedEvidence { get; set; } = true;
     public bool RequireRolloutAttestationEvidenceForProductionLikeCompletion { get; set; } = true;
     public int MaxTrustedEvidenceAgeDays { get; set; } = 90;
+    public string MinimumEvidenceTrustTierForProductionLikePromotion { get; set; } = "provider_verified";
+    public Dictionary<string, string> EnvironmentMinimumEvidenceTrustTiers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, int> EvidenceFreshnessDaysByKind { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public string TrustedArtifactRootPath { get; set; } = "evidence-artifacts";
+    public string[] ControlledArtifactUriPrefixes { get; set; } = { "artifact://catalog-evidence/" };
+    public int EvidenceRetentionDays { get; set; } = 2555;
+    public int ManifestRetentionDays { get; set; } = 2555;
+    public int AttestationRetentionDays { get; set; } = 2555;
+    public int DossierArchiveRetentionDays { get; set; } = 2555;
+    public bool RequireArchiveForProductionLikeDossiers { get; set; } = true;
     public string[] TrustedEvidenceStatuses { get; set; } = { "accepted" };
-    public string[] AllowedEvidenceUriPrefixes { get; set; } = { "https://evidence.example/" };
+    public string[] AllowedEvidenceUriPrefixes { get; set; } = { "https://evidence.example/", "artifact://catalog-evidence/" };
     public string[] AllowedEvidenceContentTypes { get; set; } =
     {
         "application/json",
