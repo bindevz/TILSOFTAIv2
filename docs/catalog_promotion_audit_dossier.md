@@ -17,6 +17,7 @@ The dossier includes:
 - retention and archive policy snapshot,
 - archive metadata when materialized,
 - archive verification outcome when available,
+- archive backend, storage URI, and recovery state,
 - deterministic dossier hash,
 - audit warnings,
 - generation timestamp.
@@ -48,5 +49,6 @@ The dossier emits deterministic warnings when:
 - an existing archive no longer matches the current dossier hash.
 - archive replay verification fails.
 - signer lifecycle changed after evidence verification.
+- replay verification recovered from a mirror after primary archive loss.
 
 Warnings are machine-readable and should block compliance sign-off until resolved.

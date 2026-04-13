@@ -5,6 +5,7 @@ public sealed record CatalogArchiveStorageWriteResult
     public string BackendName { get; init; } = string.Empty;
     public string ArchivePath { get; init; } = string.Empty;
     public string StorageUri { get; init; } = string.Empty;
+    public string RecoveryState { get; init; } = string.Empty;
 }
 
 public sealed record CatalogArchiveStorageReadResult
@@ -13,6 +14,7 @@ public sealed record CatalogArchiveStorageReadResult
     public string BackendName { get; init; } = string.Empty;
     public string ArchivePath { get; init; } = string.Empty;
     public string StorageUri { get; init; } = string.Empty;
+    public string RecoveryState { get; init; } = string.Empty;
     public string Content { get; init; } = string.Empty;
 }
 

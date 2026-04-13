@@ -42,8 +42,9 @@ Promotion is blocked when any condition is true:
 5. Issue a promotion manifest with the approved change ids and trusted evidence ids.
 6. Archive the promotion dossier.
 7. Replay-verify the archived dossier package.
-8. Apply only with manifest-backed release approval.
-9. Record rollout attestations and completion evidence.
+8. Confirm signer trust-store backup after any signer lifecycle change.
+9. Apply only with manifest-backed release approval.
+10. Record rollout attestations and completion evidence.
 
 The gate returns deterministic `blockers`, `warnings`, `evidenceMissing`, and `evidenceUntrusted` arrays for automation and operator review.
 

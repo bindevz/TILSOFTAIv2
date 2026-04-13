@@ -72,7 +72,8 @@ public sealed partial class FileSystemPlatformCatalogDossierArchiveService : IPl
         {
             BackendName = stored.BackendName,
             ArchivePath = stored.ArchivePath,
-            StorageUri = stored.StorageUri
+            StorageUri = stored.StorageUri,
+            RecoveryState = stored.RecoveryState
         };
         var storedEnvelope = new CatalogDossierArchiveEnvelope
         {
@@ -96,6 +97,7 @@ public sealed partial class FileSystemPlatformCatalogDossierArchiveService : IPl
                 ManifestId = manifestId,
                 BackendName = stored.BackendName,
                 StorageUri = stored.StorageUri,
+                RecoveryState = stored.RecoveryState,
                 Errors = new[] { "archive_not_found" }
             };
         }
@@ -129,7 +131,9 @@ public sealed partial class FileSystemPlatformCatalogDossierArchiveService : IPl
                 ComputedArchiveHash = computed,
                 BackendName = stored.BackendName,
                 StorageUri = stored.StorageUri,
+                RecoveryState = stored.RecoveryState,
                 PolicyVersion = envelope.Archive.PolicyVersion,
+                VerifiedAtUtc = DateTime.UtcNow,
                 Errors = errors
             };
         }
@@ -148,6 +152,8 @@ public sealed partial class FileSystemPlatformCatalogDossierArchiveService : IPl
             ManifestId = manifestId,
             BackendName = stored.BackendName,
             StorageUri = stored.StorageUri,
+            RecoveryState = stored.RecoveryState,
+            VerifiedAtUtc = DateTime.UtcNow,
             Errors = new[] { error }
         };
 

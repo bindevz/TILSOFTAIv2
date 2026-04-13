@@ -157,7 +157,7 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<IPlatformCatalogSignatureVerifier, RsaPlatformCatalogSignatureVerifier>();
         services.AddSingleton<IPlatformCatalogEvidenceVerifier, PlatformCatalogEvidenceVerifier>();
         services.AddSingleton<IPlatformCatalogPromotionManifestStore, SqlPlatformCatalogPromotionManifestStore>();
-        services.AddSingleton<IPlatformCatalogArchiveStorage, FileSystemPlatformCatalogArchiveStorage>();
+        services.AddSingleton<IPlatformCatalogArchiveStorage, MirroredPlatformCatalogArchiveStorage>();
         services.AddSingleton<IPlatformCatalogDossierArchiveService, FileSystemPlatformCatalogDossierArchiveService>();
         services.AddSingleton<IPlatformCatalogPromotionManifestService, PlatformCatalogPromotionManifestService>();
         services.AddSingleton<IPlatformCatalogPromotionGate, PlatformCatalogPromotionGate>();
@@ -579,9 +579,12 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.TrustedEvidenceStatuses.Length > 0, "CatalogCertification:TrustedEvidenceStatuses must have at least one status.")
             .Validate(options => options.AllowedSignatureAlgorithms.Length > 0, "CatalogCertification:AllowedSignatureAlgorithms must have at least one algorithm.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.SignerTrustStorePath), "CatalogCertification:SignerTrustStorePath is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.SignerTrustStoreBackupPath), "CatalogCertification:SignerTrustStoreBackupPath is required.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.DossierArchiveBackend), "CatalogCertification:DossierArchiveBackend is required.")
-            .Validate(options => string.Equals(options.DossierArchiveBackend, "filesystem", StringComparison.OrdinalIgnoreCase),
-                "CatalogCertification:DossierArchiveBackend currently supports 'filesystem'.")
+            .Validate(options => options.DossierArchiveBackend is "filesystem" or "filesystem_mirror",
+                "CatalogCertification:DossierArchiveBackend currently supports 'filesystem' or 'filesystem_mirror'.")
+            .Validate(options => !options.EnableDossierArchiveMirror || !string.IsNullOrWhiteSpace(options.DossierArchiveMirrorRootPath),
+                "CatalogCertification:DossierArchiveMirrorRootPath is required when mirror archives are enabled.")
             .Validate(options => options.TrustedEvidenceSigners.All(signer =>
                     !string.IsNullOrWhiteSpace(signer.SignerId)
                     && !string.IsNullOrWhiteSpace(signer.KeyId)

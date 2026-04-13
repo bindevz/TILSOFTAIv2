@@ -222,6 +222,74 @@ public sealed class FileSystemPlatformCatalogSignerTrustStore : IPlatformCatalog
         }
     }
 
+    public CatalogSignerTrustStoreRecoveryResult BackupTrustStore()
+    {
+        lock (_gate)
+        {
+            var envelope = Load();
+            var source = StorePath();
+            var backup = BackupPath();
+            var content = Serialize(envelope);
+            var directory = Path.GetDirectoryName(backup);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(backup, content);
+            return RecoveryResult("backup", source, backup, envelope, Hash(content), string.Empty, Array.Empty<string>());
+        }
+    }
+
+    public CatalogSignerTrustStoreRecoveryResult VerifyTrustStoreBackup(string expectedTrustStoreHash)
+    {
+        lock (_gate)
+        {
+            var source = StorePath();
+            var backup = BackupPath();
+            if (!File.Exists(backup))
+            {
+                return RecoveryResult("verify_backup", source, backup, new CatalogSignerTrustStoreEnvelope(), string.Empty, expectedTrustStoreHash, new[] { "trust_store_backup_not_found" });
+            }
+
+            var content = File.ReadAllText(backup);
+            var envelope = Deserialize(content);
+            var hash = Hash(content);
+            var errors = new List<string>();
+            if (!string.IsNullOrWhiteSpace(expectedTrustStoreHash)
+                && !string.Equals(hash, expectedTrustStoreHash, StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add("trust_store_backup_hash_mismatch");
+            }
+
+            return RecoveryResult("verify_backup", source, backup, envelope, hash, expectedTrustStoreHash, errors);
+        }
+    }
+
+    public CatalogSignerTrustStoreRecoveryResult RestoreTrustStoreBackup(string expectedTrustStoreHash)
+    {
+        lock (_gate)
+        {
+            var verification = VerifyTrustStoreBackup(expectedTrustStoreHash);
+            if (!verification.IsVerified)
+            {
+                return verification with { Operation = "restore_backup" };
+            }
+
+            var source = StorePath();
+            var backup = BackupPath();
+            var directory = Path.GetDirectoryName(source);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.Copy(backup, source, overwrite: true);
+            var content = File.ReadAllText(source);
+            return RecoveryResult("restore_backup", source, backup, Deserialize(content), Hash(content), expectedTrustStoreHash, Array.Empty<string>());
+        }
+    }
+
     private List<string> ApplyToSigners(
         CatalogSignerTrustStoreEnvelope envelope,
         CatalogSignerTrustChangeRecord change,
@@ -360,9 +428,7 @@ public sealed class FileSystemPlatformCatalogSignerTrustStore : IPlatformCatalog
             return new CatalogSignerTrustStoreEnvelope();
         }
 
-        var json = File.ReadAllText(path);
-        return JsonSerializer.Deserialize<CatalogSignerTrustStoreEnvelope>(json, JsonOptions)
-            ?? new CatalogSignerTrustStoreEnvelope();
+        return Deserialize(File.ReadAllText(path));
     }
 
     private void Save(CatalogSignerTrustStoreEnvelope envelope)
@@ -374,10 +440,44 @@ public sealed class FileSystemPlatformCatalogSignerTrustStore : IPlatformCatalog
             Directory.CreateDirectory(directory);
         }
 
-        File.WriteAllText(path, JsonSerializer.Serialize(envelope, JsonOptions));
+        File.WriteAllText(path, Serialize(envelope));
     }
 
     private string StorePath() => Path.GetFullPath(_options.SignerTrustStorePath);
+
+    private string BackupPath() => Path.GetFullPath(_options.SignerTrustStoreBackupPath);
+
+    private static CatalogSignerTrustStoreEnvelope Deserialize(string json) =>
+        JsonSerializer.Deserialize<CatalogSignerTrustStoreEnvelope>(json, JsonOptions)
+        ?? new CatalogSignerTrustStoreEnvelope();
+
+    private static string Serialize(CatalogSignerTrustStoreEnvelope envelope) =>
+        JsonSerializer.Serialize(envelope, JsonOptions);
+
+    private static CatalogSignerTrustStoreRecoveryResult RecoveryResult(
+        string operation,
+        string source,
+        string backup,
+        CatalogSignerTrustStoreEnvelope envelope,
+        string hash,
+        string expectedHash,
+        IReadOnlyList<string> errors) => new()
+        {
+            IsVerified = errors.Count == 0,
+            Operation = operation,
+            SourcePath = source,
+            BackupPath = backup,
+            TrustStoreHash = hash,
+            ExpectedTrustStoreHash = expectedHash,
+            TrustStoreVersion = envelope.TrustStoreVersion,
+            SignerCount = envelope.Signers.Count,
+            ChangeCount = envelope.Changes.Count,
+            VerifiedAtUtc = DateTime.UtcNow,
+            Errors = errors
+        };
+
+    private static string Hash(string content) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
 
     private static CatalogTrustedSignerRecord ToRecord(CatalogTrustedSignerOptions options) => new()
     {

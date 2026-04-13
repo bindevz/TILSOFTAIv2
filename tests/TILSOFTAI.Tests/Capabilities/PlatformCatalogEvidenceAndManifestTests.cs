@@ -180,6 +180,40 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
     }
 
     [Fact]
+    public void SignerTrustStore_ShouldBackupVerifyAndRestoreGovernedState()
+    {
+        using var rsa = RSA.Create(2048);
+        var root = Path.Combine(Path.GetTempPath(), "tilsoftai-signer-recovery-tests", Guid.NewGuid().ToString("N"));
+        var options = CertificationOptions();
+        options.SignerTrustStorePath = Path.Combine(root, "trust-store.json");
+        options.SignerTrustStoreBackupPath = Path.Combine(root, "backup", "trust-store.backup.json");
+        options.RequireIndependentSignerTrustApproval = false;
+        var store = new FileSystemPlatformCatalogSignerTrustStore(Options.Create(options));
+        var proposed = store.ProposeChange(new CatalogSignerTrustMutationRequest
+        {
+            Operation = CatalogSignerTrustChangeOperations.AddSignerKey,
+            SignerId = "release-authority",
+            KeyId = "key-1",
+            PublicKeyPem = rsa.ExportSubjectPublicKeyInfoPem(),
+            Reason = "initial signer onboarding"
+        }, Context());
+        store.ApproveChange(proposed.Change!.ChangeId, Context()).IsAccepted.Should().BeTrue();
+        store.ApplyChange(proposed.Change.ChangeId, Context()).IsAccepted.Should().BeTrue();
+
+        var backup = store.BackupTrustStore();
+        File.WriteAllText(options.SignerTrustStorePath, "{}");
+        var mismatch = store.VerifyTrustStoreBackup("bad-hash");
+        var restored = store.RestoreTrustStoreBackup(backup.TrustStoreHash);
+
+        backup.IsVerified.Should().BeTrue();
+        backup.TrustStoreHash.Should().HaveLength(64);
+        mismatch.IsVerified.Should().BeFalse();
+        mismatch.Errors.Should().Contain("trust_store_backup_hash_mismatch");
+        restored.IsVerified.Should().BeTrue();
+        store.FindSigner("release-authority", "key-1")!.Status.Should().Be(CatalogSignerLifecycleStates.Active);
+    }
+
+    [Fact]
     public void Verify_ShouldRejectInvalidRsaSignature()
     {
         using var rsa = RSA.Create(2048);
@@ -357,7 +391,33 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
         File.Exists(archive.Archive.ArchivePath).Should().BeTrue();
         dossier!.Archive.Should().NotBeNull();
         dossier.ArchiveVerification!.IsVerified.Should().BeTrue();
+        dossier.ArchiveVerification.RecoveryState.Should().Be("primary_read_mirror_available");
         dossier.AuditWarnings.Should().NotContain("dossier_archive_required");
+    }
+
+    [Fact]
+    public async Task VerifyDossierArchiveAsync_ShouldRecoverFromMirror_WhenPrimaryArchiveIsLost()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tilsoftai-dossier-tests", Guid.NewGuid().ToString("N"));
+        var options = CertificationOptions();
+        options.DossierArchiveRootPath = Path.Combine(root, "primary");
+        options.DossierArchiveMirrorRootPath = Path.Combine(root, "mirror");
+        options.EnableDossierArchiveMirror = true;
+        var evidence = RequiredEvidence();
+        var service = CreateService(evidence, options: options);
+        var issue = await service.IssueManifestAsync(new CatalogPromotionManifestIssueRequest
+        {
+            EnvironmentName = "prod",
+            ChangeIds = new[] { "chg-1" },
+            EvidenceIds = evidence.Select(item => item.EvidenceId).ToArray()
+        }, Context(), CancellationToken.None);
+        var archive = await service.ArchiveDossierAsync(issue.Manifest!.ManifestId, Context(), CancellationToken.None);
+        File.Delete(archive.Archive!.ArchivePath);
+
+        var verification = await service.VerifyDossierArchiveAsync(issue.Manifest.ManifestId, Context(), CancellationToken.None);
+
+        verification.IsVerified.Should().BeTrue();
+        verification.RecoveryState.Should().Be("recovered_from_mirror");
     }
 
     [Fact]

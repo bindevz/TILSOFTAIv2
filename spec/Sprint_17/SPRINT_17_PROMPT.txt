@@ -1,0 +1,210 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 17.
+
+Baseline repository reality (after Sprint 16):
+- Sprint 9 already retired `LegacyChatPipelineBridge`, `ChatPipeline`, `ChatRequest`, and `ChatResult`.
+- Production capability and external connection records load from `catalog/platform-catalog.json`.
+- The catalog control plane already supports preview, submit, approve, reject, and apply.
+- Mutation safety already includes `ExpectedVersionTag`, `IdempotencyKey`, duplicate pending-change detection, idempotent apply replay, and `RollbackOfChangeId`.
+- Promotion gating already exists through `IPlatformCatalogPromotionGate`.
+- Certification evidence already supports:
+  - lifecycle states
+  - verification status
+  - artifact hash metadata
+  - trust tiers
+  - freshness policy
+  - retention policy snapshotting
+  - signed payload fields
+  - signer identity fields
+  - verification method
+  - verification policy version
+  - signer public key fingerprint
+  - signer lifecycle snapshot
+  - signer trust-store version
+  - signer validity window
+- Controlled provider verification already exists for `artifact://catalog-evidence/...`.
+- Real RSA signature verification already exists through `RsaPlatformCatalogSignatureVerifier`.
+- Signer lifecycle is now governed through `IPlatformCatalogSignerTrustStore` and related API endpoints.
+- Promotion manifests are immutable.
+- Rollout attestations are append-only.
+- Promotion dossiers include trust evaluations, retention snapshots, deterministic hashes, archive metadata, and archive verification results.
+- Dossier archives can already be materialized and replay-verified.
+- Production-like environments can already require `signature_verified` evidence and archived dossiers for completion.
+
+The platform is already enterprise-grade and has a real high-assurance posture.
+However, it still has survivability-oriented operational debt because:
+- signer trust still depends too much on a local file-backed trust-store assumption,
+- archive storage still depends too much on a filesystem-centric assumption,
+- backup/restore/migration verification is not yet a first-class operating flow,
+- trust-store and archive recovery posture is not yet strong enough for long-lived disaster-aware operations,
+- and reviewability after infrastructure migration or rebuild can still be made more durable.
+
+Sprint 17 mission:
+Turn the platform from “high-assurance and operationally governed” into “externally grounded and disaster-aware”.
+
+Primary objective:
+1. Add a stronger trust-store durability path.
+2. Add a stronger archive durability path.
+3. Add backup/restore/migration verification.
+4. Add recovery-oriented diagnostics and runbooks.
+5. Strengthen review surfaces for backend provenance and recovery state.
+6. Preserve historical interpretability across restore and migration scenarios.
+7. Keep Sprint 17 focused on survivability, not feature breadth.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the runtime orchestration owner.
+2. Platform catalog remains the production source-of-truth.
+3. Promotion gates, manifests, attestations, evidence trust, signer lifecycle, and archive verification remain mandatory release primitives.
+4. File-backed trust-store and filesystem-backed archive paths remain valid as current implementations and must not regress.
+5. The next maturity step is stronger durability and recovery, not a redesign of the trust model.
+6. Recovery verification must be deterministic and operator-usable.
+7. Historical signed releases must remain interpretable after migration, restore, signer rotation, or signer revocation.
+8. Sprint 17 success is measured by survivability and recovery confidence, not runtime novelty.
+9. Avoid broad plugin-marketplace design.
+10. Do not turn Sprint 17 into a feature sprint.
+
+Primary Sprint 17 goals:
+
+A. Add stronger signer trust-store durability
+- Preserve the current file-backed trust store.
+- Add a stronger trust-store durability path or a clearly bounded persistence contract that supports one.
+- Ensure governed signer lifecycle semantics survive backend changes.
+- Keep lifecycle parity across trust-store implementations.
+
+B. Add stronger archive durability
+- Preserve the current filesystem archive backend.
+- Add a stronger archive durability path or a clearly bounded storage contract that supports one.
+- Keep archive replay verification working consistently.
+- Surface backend provenance clearly.
+
+C. Add backup / restore / migration verification
+- Add operator-usable verification flows for:
+  - restored signer trust-store state
+  - restored archive state
+  - migrated archive backend state
+  - migrated trust-store backend state
+- Verify restored state against expected version/hash/provenance where applicable.
+- Make mismatch signals machine-readable.
+
+D. Add recovery-oriented diagnostics and readiness
+- Expose warnings or diagnostics for degraded trust-store and archive infrastructure.
+- Add readiness/reporting for missing or invalid backend configuration.
+- Improve startup/operator visibility around signer and archive durability assumptions.
+
+E. Strengthen review surfaces
+- Expose backend provenance, archive source, recovery/verification status, and restore/migration warnings in review surfaces where appropriate.
+- Preserve machine-readable warnings for audit consumers.
+- Make it easier to understand whether the reviewed proof depends on restored or migrated state.
+
+F. Preserve historical interpretability
+- Historical releases must remain explainable after backend migration, restore, signer rotation, or signer revocation.
+- Do not let backend migration erase signer or archive meaning.
+- Keep rollback/emergency history understandable after recovery events.
+
+G. Preserve enterprise-grade focus
+- Only add surface area that materially improves trust durability, archive durability, recovery verification, or review survivability.
+- Do not broaden product scope.
+- Keep abstractions concrete and bounded.
+
+Non-negotiable rules:
+1. Do not weaken signer lifecycle governance, signature verification, archive generation, or archive replay verification.
+2. Do not remove the current file-backed paths unless a real replacement is present.
+3. Do not make recovery validation a documentation-only concept.
+4. Do not tie reviewability to current host-local assumptions only.
+5. Do not break historical interpretation during restore or migration flows.
+6. Do not normalize emergency paths under weaker recovery guarantees.
+7. Do not create oversized abstractions without a concrete backend/recovery use case.
+8. Do not store secrets in review artifacts or archive bundles.
+9. Prefer deterministic restore/migration verification over operator belief.
+10. Do not turn Sprint 17 into a feature sprint.
+
+Explicitly in scope:
+- stronger trust-store durability path
+- stronger archive durability path
+- backup/restore/migration verification
+- recovery-oriented diagnostics and readiness
+- backend provenance in review surfaces
+- historical interpretability across migration/restore scenarios
+- tests, docs, and runbooks for the above
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- large adapter ecosystem growth
+- product workflow breadth
+
+Recommended implementation order:
+1. Add stronger trust-store durability path.
+2. Add stronger archive durability path.
+3. Add restore/migration verification flows.
+4. Add readiness/diagnostic improvements.
+5. Extend review surfaces with backend provenance and recovery state.
+6. Harden historical interpretability across restore/migration flows.
+7. Delete any dead code revealed by the work.
+
+Required architectural outcomes:
+1. Trust-store durability is less dependent on a single local file assumption.
+2. Archive durability is less dependent on a single local filesystem assumption.
+3. Restored and migrated proof can be meaningfully re-verified.
+4. Review surfaces remain useful after recovery operations.
+5. Historical releases remain interpretable under infrastructure evolution.
+6. Remaining debt is no longer trust-state or archive survivability immaturity.
+
+Definition of done:
+- A stronger trust-store durability path or fully bounded durability contract exists.
+- A stronger archive durability path or fully bounded storage contract exists.
+- Backup/restore/migration verification exists and is testable.
+- Diagnostics and runbooks reflect real recovery concerns.
+- Review surfaces expose backend provenance and recovery state more clearly.
+- Historical signed releases remain explainable after restore/migration.
+- The platform is more survivable after Sprint 17 than after Sprint 16.
+
+Must-fail conditions:
+- trust-store durability still depends entirely on a single local file assumption
+- archive durability still depends entirely on a single local filesystem assumption without recovery discipline
+- restored or migrated state cannot be re-verified meaningfully
+- reviewability becomes weaker after restore or migration
+- Sprint 17 drifts into feature work without materially improving survivability
+
+Preferred implementation style:
+- concrete durability
+- deterministic verification
+- bounded abstractions
+- disaster-aware operations
+- operator-usable diagnostics
+- preserved historical meaning
+- deletion over drift
+- no architecture theater
+
+Required deliverables:
+1. Trust-store durability changes
+2. Archive durability changes
+3. Recovery / restore / migration changes
+4. Diagnostics / readiness / runbook changes
+5. Historical review survivability changes
+6. Validation / test improvements
+
+Required reporting after implementation:
+1. Summary of Sprint 17 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Trust-store durability changes
+6. Archive durability changes
+7. Recovery / restore / migration changes
+8. Diagnostics / readiness / runbook changes
+9. Historical review survivability changes
+10. Validation / test improvements
+11. Remaining blockers
+12. Recommended Sprint 18 priorities
+
+Final instruction:
+Sprint 17 is about external trust durability, archive survivability, and recovery confidence.
+
+Do not spend Sprint 17 adding runtime novelty.
+Do not turn Sprint 17 into a feature sprint.
+
+Spend it making the enterprise-grade platform more resilient to loss, restore, and migration.

@@ -28,7 +28,7 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
             mutationStore,
             manifestStore,
             evidenceVerifier,
-            new FileSystemPlatformCatalogDossierArchiveService(options),
+            new FileSystemPlatformCatalogDossierArchiveService(options, new MirroredPlatformCatalogArchiveStorage(options)),
             options)
     {
     }

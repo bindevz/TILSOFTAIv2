@@ -28,7 +28,8 @@ public sealed partial class FileSystemPlatformCatalogArchiveStorage : IPlatformC
         {
             BackendName = BackendName,
             ArchivePath = path,
-            StorageUri = StorageUri(manifestId)
+            StorageUri = StorageUri(manifestId),
+            RecoveryState = "primary_written"
         };
     }
 
@@ -45,7 +46,8 @@ public sealed partial class FileSystemPlatformCatalogArchiveStorage : IPlatformC
                 Found = false,
                 BackendName = BackendName,
                 ArchivePath = path,
-                StorageUri = StorageUri(manifestId)
+                StorageUri = StorageUri(manifestId),
+                RecoveryState = "primary_missing"
             };
         }
 
@@ -55,6 +57,7 @@ public sealed partial class FileSystemPlatformCatalogArchiveStorage : IPlatformC
             BackendName = BackendName,
             ArchivePath = path,
             StorageUri = StorageUri(manifestId),
+            RecoveryState = "primary_read",
             Content = await File.ReadAllTextAsync(path, ct)
         };
     }

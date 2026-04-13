@@ -1,7 +1,8 @@
-# Catalog Signed Evidence and Archives - Sprint 16
+# Catalog Signed Evidence and Archives - Sprint 17
 
 Sprint 15 promotes catalog release proof from provider-verified artifacts to signed evidence bundles and tamper-evident dossier archives.
 Sprint 16 operationalizes signer lifecycle and archive replay verification.
+Sprint 17 adds trust-store backup/restore verification and mirrored archive survivability.
 
 ## Signed Evidence
 
@@ -40,6 +41,9 @@ Use:
 - `POST /api/platform-catalog/signer-trust/changes/{changeId}/approve`
 - `POST /api/platform-catalog/signer-trust/changes/{changeId}/reject`
 - `POST /api/platform-catalog/signer-trust/changes/{changeId}/apply`
+- `POST /api/platform-catalog/signer-trust/recovery/backup`
+- `POST /api/platform-catalog/signer-trust/recovery/verify-backup`
+- `POST /api/platform-catalog/signer-trust/recovery/restore-backup`
 
 Supported operations:
 
@@ -49,6 +53,23 @@ Supported operations:
 - `retire_signer_key`
 
 Production policy should keep `RequireIndependentSignerTrustApproval=true`, which prevents the requester from approving the same signer trust change.
+
+## Trust-Store Recovery
+
+`SignerTrustStorePath` remains the active governed trust store. `SignerTrustStoreBackupPath` is the recovery copy used by backup, verify, and restore endpoints.
+
+Recovery results include:
+
+- source path,
+- backup path,
+- trust-store hash,
+- expected hash,
+- trust-store version,
+- signer count,
+- change count,
+- deterministic errors.
+
+Use the hash returned by backup as the expected hash when verifying or restoring. A mismatch returns `trust_store_backup_hash_mismatch`.
 
 ## Policy Provenance
 
@@ -78,12 +99,15 @@ The archive service writes a JSON package under `CatalogCertification:DossierArc
 - archive hash,
 - archive path,
 - archive backend and storage URI,
+- recovery state,
 - policy version,
 - retention deadline,
 - creating user,
 - creation timestamp.
 
 The archive hash seals the manifest hash, dossier hash, policy version, signer metadata, signer trust-store version, and trusted evidence hashes. Verification returns deterministic errors such as `archive_not_found`, `archive_json_invalid`, `archive_envelope_invalid`, `archive_hash_mismatch`, and `archive_manifest_mismatch`.
+
+When `EnableDossierArchiveMirror=true`, archives are written to both `DossierArchiveRootPath` and `DossierArchiveMirrorRootPath`. Replay verification reads the primary archive first and falls back to the mirror with `RecoveryState=recovered_from_mirror`.
 
 ## Production Completion
 
@@ -96,6 +120,7 @@ When `RequireArchivedDossierForProductionLikeCompletion=true`, production-like r
 3. Issue the promotion manifest with trusted evidence ids.
 4. Archive the dossier.
 5. Verify the archived dossier package.
-6. Record rollout completion with completion evidence.
+6. Backup the signer trust store after signer lifecycle changes.
+7. Record rollout completion with completion evidence.
 
 Emergency paths do not bypass this proof chain. They must archive the review package before completion is accepted.

@@ -142,6 +142,21 @@ public sealed class CatalogSignerTrustMutationResult
     public IReadOnlyList<string> Blockers { get; init; } = Array.Empty<string>();
 }
 
+public sealed record CatalogSignerTrustStoreRecoveryResult
+{
+    public bool IsVerified { get; init; }
+    public string Operation { get; init; } = string.Empty;
+    public string SourcePath { get; init; } = string.Empty;
+    public string BackupPath { get; init; } = string.Empty;
+    public string TrustStoreHash { get; init; } = string.Empty;
+    public string ExpectedTrustStoreHash { get; init; } = string.Empty;
+    public string TrustStoreVersion { get; init; } = string.Empty;
+    public int SignerCount { get; init; }
+    public int ChangeCount { get; init; }
+    public DateTime VerifiedAtUtc { get; init; } = DateTime.UtcNow;
+    public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
+}
+
 public sealed record CatalogCertificationEvidenceRecord
 {
     public string EvidenceId { get; init; } = string.Empty;

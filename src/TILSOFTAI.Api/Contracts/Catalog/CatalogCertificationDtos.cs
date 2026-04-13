@@ -111,3 +111,8 @@ public sealed class CatalogSignerTrustRejectApiRequest
 {
     public string Reason { get; init; } = string.Empty;
 }
+
+public sealed class CatalogTrustStoreRecoveryApiRequest
+{
+    public string ExpectedTrustStoreHash { get; init; } = string.Empty;
+}

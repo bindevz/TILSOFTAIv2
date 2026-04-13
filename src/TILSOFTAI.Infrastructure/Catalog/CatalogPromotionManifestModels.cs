@@ -84,6 +84,8 @@ public sealed class CatalogDossierArchiveVerificationResult
     public string BackendName { get; init; } = string.Empty;
     public string StorageUri { get; init; } = string.Empty;
     public string PolicyVersion { get; init; } = string.Empty;
+    public string RecoveryState { get; init; } = string.Empty;
+    public DateTime VerifiedAtUtc { get; init; } = DateTime.UtcNow;
     public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
 }
 
@@ -124,6 +126,7 @@ public sealed record CatalogDossierArchiveRecord
     public string ArchivePath { get; init; } = string.Empty;
     public string BackendName { get; init; } = string.Empty;
     public string StorageUri { get; init; } = string.Empty;
+    public string RecoveryState { get; init; } = string.Empty;
     public string SealAlgorithm { get; init; } = "sha256";
     public string PolicyVersion { get; init; } = string.Empty;
     public string CreatedByUserId { get; init; } = string.Empty;

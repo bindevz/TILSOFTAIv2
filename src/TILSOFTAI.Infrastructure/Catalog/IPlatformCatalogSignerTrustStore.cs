@@ -24,4 +24,10 @@ public interface IPlatformCatalogSignerTrustStore
     CatalogSignerTrustMutationResult ApplyChange(
         string changeId,
         CatalogMutationContext context);
+
+    CatalogSignerTrustStoreRecoveryResult BackupTrustStore();
+
+    CatalogSignerTrustStoreRecoveryResult VerifyTrustStoreBackup(string expectedTrustStoreHash);
+
+    CatalogSignerTrustStoreRecoveryResult RestoreTrustStoreBackup(string expectedTrustStoreHash);
 }

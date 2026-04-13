@@ -15,6 +15,7 @@ Production fallback re-enable requires:
 - rollback or emergency promotion manifest when catalog state changes.
 - signed evidence and an archived dossier before production-like completion.
 - archive replay verification before emergency completion sign-off.
+- trust-store backup verification when emergency signer changes occur.
 
 Production-like `mixed` and `bootstrap_only` source modes block promotion by default.
 
@@ -30,6 +31,7 @@ Break-glass requires:
 - immutable promotion manifest and rollout attestation for any catalog change.
 - tamper-evident dossier archive for the emergency release package.
 - review of signer lifecycle state if any emergency evidence signer was rotated or revoked after verification.
+- archive mirror recovery check when the primary archive path was restored or rebuilt.
 
 Break-glass does not bypass audit. It increases audit requirements.
 

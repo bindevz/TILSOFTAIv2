@@ -19,9 +19,12 @@ public sealed class CatalogCertificationOptions
     public CatalogTrustedSignerOptions[] TrustedEvidenceSigners { get; set; } = Array.Empty<CatalogTrustedSignerOptions>();
     public string[] AllowedSignatureAlgorithms { get; set; } = { "RS256" };
     public string SignerTrustStorePath { get; set; } = "signer-trust-store.json";
+    public string SignerTrustStoreBackupPath { get; set; } = "signer-trust-store.backup.json";
     public bool RequireIndependentSignerTrustApproval { get; set; } = true;
     public string DossierArchiveRootPath { get; set; } = "dossier-archives";
     public string DossierArchiveBackend { get; set; } = "filesystem";
+    public bool EnableDossierArchiveMirror { get; set; } = true;
+    public string DossierArchiveMirrorRootPath { get; set; } = "dossier-archives-mirror";
     public bool RequireArchivedDossierForProductionLikeCompletion { get; set; } = true;
     public int EvidenceRetentionDays { get; set; } = 2555;
     public int ManifestRetentionDays { get; set; } = 2555;

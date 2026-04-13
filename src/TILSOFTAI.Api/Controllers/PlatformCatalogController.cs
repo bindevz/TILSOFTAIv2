@@ -365,6 +365,31 @@ public sealed class PlatformCatalogController : ControllerBase
         return result.IsAccepted ? Ok(result) : BadRequest(result);
     }
 
+    [HttpPost("signer-trust/recovery/backup")]
+    public ActionResult<CatalogSignerTrustStoreRecoveryResult> BackupSignerTrustStore()
+    {
+        RequireAnyCatalogRole(ToCatalogContext());
+        return Ok(_signerTrustStore.BackupTrustStore());
+    }
+
+    [HttpPost("signer-trust/recovery/verify-backup")]
+    public ActionResult<CatalogSignerTrustStoreRecoveryResult> VerifySignerTrustStoreBackup(
+        [FromBody] CatalogTrustStoreRecoveryApiRequest? request)
+    {
+        RequireAnyCatalogRole(ToCatalogContext());
+        var result = _signerTrustStore.VerifyTrustStoreBackup(request?.ExpectedTrustStoreHash ?? string.Empty);
+        return result.IsVerified ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpPost("signer-trust/recovery/restore-backup")]
+    public ActionResult<CatalogSignerTrustStoreRecoveryResult> RestoreSignerTrustStoreBackup(
+        [FromBody] CatalogTrustStoreRecoveryApiRequest? request)
+    {
+        RequireAnyCatalogRole(ToCatalogContext());
+        var result = _signerTrustStore.RestoreTrustStoreBackup(request?.ExpectedTrustStoreHash ?? string.Empty);
+        return result.IsVerified ? Ok(result) : BadRequest(result);
+    }
+
     [HttpPost("changes/{changeId}/approve")]
     public async Task<ActionResult<CatalogChangeRequestRecord>> Approve(string changeId, CancellationToken ct)
     {

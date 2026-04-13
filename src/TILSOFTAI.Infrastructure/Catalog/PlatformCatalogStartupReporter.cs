@@ -14,6 +14,7 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
     private readonly IPlatformCatalogArchiveStorage _archiveStorage;
     private readonly IConfiguration _configuration;
     private readonly PlatformCatalogOptions _options;
+    private readonly CatalogCertificationOptions _certificationOptions;
     private readonly IMetricsService _metrics;
     private readonly ILogger<PlatformCatalogStartupReporter> _logger;
 
@@ -23,6 +24,7 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
         IPlatformCatalogArchiveStorage archiveStorage,
         IConfiguration configuration,
         IOptions<PlatformCatalogOptions> options,
+        IOptions<CatalogCertificationOptions> certificationOptions,
         IMetricsService metrics,
         ILogger<PlatformCatalogStartupReporter> logger)
     {
@@ -31,6 +33,7 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
         _archiveStorage = archiveStorage ?? throw new ArgumentNullException(nameof(archiveStorage));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _certificationOptions = certificationOptions?.Value ?? throw new ArgumentNullException(nameof(certificationOptions));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -67,16 +70,26 @@ public sealed class PlatformCatalogStartupReporter : IHostedService
             _options.AllowBootstrapConfigurationFallback);
 
         _logger.LogInformation(
-            "PlatformCatalogTrustInfrastructureReport | SignerCount: {SignerCount} | ActiveSigners: {ActiveSigners} | ArchiveBackend: {ArchiveBackend}",
+            "PlatformCatalogTrustInfrastructureReport | SignerCount: {SignerCount} | ActiveSigners: {ActiveSigners} | ArchiveBackend: {ArchiveBackend} | SignerTrustStorePath: {SignerTrustStorePath} | SignerTrustStoreBackupPath: {SignerTrustStoreBackupPath} | ArchiveMirrorEnabled: {ArchiveMirrorEnabled}",
             signers.Count,
             activeSigners,
-            _archiveStorage.BackendName);
+            _archiveStorage.BackendName,
+            _certificationOptions.SignerTrustStorePath,
+            _certificationOptions.SignerTrustStoreBackupPath,
+            _certificationOptions.EnableDossierArchiveMirror);
 
         if (productionLike && activeSigners == 0)
         {
             _logger.LogWarning(
                 "PlatformCatalogSignerTrustMissing | Environment: {Environment} | Production-like signature policy requires active trusted signers before signed evidence can verify.",
                 EffectiveEnvironmentName());
+        }
+
+        if (_certificationOptions.EnableDossierArchiveMirror
+            && string.Equals(_certificationOptions.DossierArchiveRootPath, _certificationOptions.DossierArchiveMirrorRootPath, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "PlatformCatalogArchiveMirrorPathWeak | Primary and mirror archive roots are identical; archive survivability is degraded.");
         }
 
         if (mode is "bootstrap_only" or "mixed")
