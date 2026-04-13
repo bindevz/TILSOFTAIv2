@@ -12,6 +12,7 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
     private readonly IPlatformCatalogMutationStore _mutationStore;
     private readonly IPlatformCatalogPromotionManifestStore _manifestStore;
     private readonly IPlatformCatalogEvidenceVerifier _evidenceVerifier;
+    private readonly IPlatformCatalogDossierArchiveService _archiveService;
     private readonly CatalogCertificationOptions _options;
 
     public PlatformCatalogPromotionManifestService(
@@ -21,12 +22,32 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
         IPlatformCatalogPromotionManifestStore manifestStore,
         IPlatformCatalogEvidenceVerifier evidenceVerifier,
         IOptions<CatalogCertificationOptions> options)
+        : this(
+            promotionGate,
+            certificationStore,
+            mutationStore,
+            manifestStore,
+            evidenceVerifier,
+            new FileSystemPlatformCatalogDossierArchiveService(options),
+            options)
+    {
+    }
+
+    public PlatformCatalogPromotionManifestService(
+        IPlatformCatalogPromotionGate promotionGate,
+        IPlatformCatalogCertificationStore certificationStore,
+        IPlatformCatalogMutationStore mutationStore,
+        IPlatformCatalogPromotionManifestStore manifestStore,
+        IPlatformCatalogEvidenceVerifier evidenceVerifier,
+        IPlatformCatalogDossierArchiveService archiveService,
+        IOptions<CatalogCertificationOptions> options)
     {
         _promotionGate = promotionGate ?? throw new ArgumentNullException(nameof(promotionGate));
         _certificationStore = certificationStore ?? throw new ArgumentNullException(nameof(certificationStore));
         _mutationStore = mutationStore ?? throw new ArgumentNullException(nameof(mutationStore));
         _manifestStore = manifestStore ?? throw new ArgumentNullException(nameof(manifestStore));
         _evidenceVerifier = evidenceVerifier ?? throw new ArgumentNullException(nameof(evidenceVerifier));
+        _archiveService = archiveService ?? throw new ArgumentNullException(nameof(archiveService));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
     }
 
@@ -173,6 +194,14 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
             await LoadTrustedEvidenceAsync(evidenceIds, manifest.EnvironmentName, blockers, ct);
         }
 
+        if (productionLike
+            && string.Equals(state, CatalogRolloutAttestationStates.Completed, StringComparison.OrdinalIgnoreCase)
+            && _options.RequireArchivedDossierForProductionLikeCompletion
+            && await _archiveService.GetArchiveAsync(manifest.ManifestId, ct) is null)
+        {
+            blockers.Add("dossier_archive_required");
+        }
+
         if (blockers.Count > 0)
         {
             return new CatalogRolloutAttestationResult
@@ -264,6 +293,12 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
             warnings.Add("dossier_retention_window_expired");
         }
 
+        var archive = await _archiveService.GetArchiveAsync(manifest.ManifestId, ct);
+        if (retention.ArchiveRequired && archive is null)
+        {
+            warnings.Add("dossier_archive_required");
+        }
+
         var dossier = new CatalogPromotionDossier
         {
             Manifest = manifest,
@@ -272,10 +307,64 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
             EvidenceTrust = evidenceTrust,
             Attestations = attestations,
             Retention = retention,
+            Archive = archive,
             AuditWarnings = warnings,
             GeneratedAtUtc = DateTime.UtcNow
         };
-        return dossier with { DossierHash = PlatformCatalogPromotionManifestHasher.ComputeDossierHash(dossier) };
+        dossier = dossier with { DossierHash = PlatformCatalogPromotionManifestHasher.ComputeDossierHash(dossier) };
+        if (archive is not null && !string.Equals(archive.DossierHash, dossier.DossierHash, StringComparison.OrdinalIgnoreCase))
+        {
+            dossier = dossier with { AuditWarnings = dossier.AuditWarnings.Concat(new[] { "dossier_archive_hash_mismatch" }).ToArray() };
+        }
+
+        return dossier;
+    }
+
+    public async Task<CatalogDossierArchiveResult> ArchiveDossierAsync(
+        string manifestId,
+        CatalogMutationContext context,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var dossier = await GetDossierAsync(manifestId, context, ct);
+        if (dossier is null)
+        {
+            return new CatalogDossierArchiveResult
+            {
+                IsArchived = false,
+                Blockers = new[] { "manifest_not_found" }
+            };
+        }
+
+        var blockers = new List<string>();
+        if (!dossier.Retention.RetentionCurrent)
+        {
+            blockers.Add("dossier_retention_window_expired");
+        }
+
+        if (dossier.EvidenceTrust.Any(item => !item.IsTrusted))
+        {
+            blockers.AddRange(dossier.EvidenceTrust
+                .Where(item => !item.IsTrusted)
+                .Select(item => $"dossier_evidence_not_trusted:{item.EvidenceId}"));
+        }
+
+        if (blockers.Count > 0)
+        {
+            return new CatalogDossierArchiveResult
+            {
+                IsArchived = false,
+                Blockers = blockers.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+            };
+        }
+
+        var archive = await _archiveService.ArchiveAsync(dossier, context, ct);
+        return new CatalogDossierArchiveResult
+        {
+            IsArchived = true,
+            Archive = archive
+        };
     }
 
     private CatalogAuditRetentionSnapshot RetentionSnapshot(
@@ -296,6 +385,7 @@ public sealed class PlatformCatalogPromotionManifestService : IPlatformCatalogPr
 
         return new CatalogAuditRetentionSnapshot
         {
+            PolicyVersion = _options.PolicyVersion,
             ManifestRetainUntilUtc = manifestUntil,
             EvidenceRetainUntilUtc = evidenceUntil,
             AttestationRetainUntilUtc = attestationUntil,

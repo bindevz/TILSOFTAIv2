@@ -8,13 +8,23 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
 {
     private readonly CatalogCertificationOptions _options;
     private readonly IPlatformCatalogArtifactProvider _artifactProvider;
+    private readonly IPlatformCatalogSignatureVerifier _signatureVerifier;
 
     public PlatformCatalogEvidenceVerifier(
         IOptions<CatalogCertificationOptions> options,
         IPlatformCatalogArtifactProvider artifactProvider)
+        : this(options, artifactProvider, new RsaPlatformCatalogSignatureVerifier(options))
+    {
+    }
+
+    public PlatformCatalogEvidenceVerifier(
+        IOptions<CatalogCertificationOptions> options,
+        IPlatformCatalogArtifactProvider artifactProvider,
+        IPlatformCatalogSignatureVerifier signatureVerifier)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _artifactProvider = artifactProvider ?? throw new ArgumentNullException(nameof(artifactProvider));
+        _signatureVerifier = signatureVerifier ?? throw new ArgumentNullException(nameof(signatureVerifier));
     }
 
     public CatalogEvidenceVerificationResult Verify(
@@ -34,12 +44,19 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
             errors.AddRange(artifactVerification.Errors);
         }
 
+        var signatureVerification = _signatureVerifier.Verify(evidence, now);
+        if (signatureVerification.WasSignaturePresent && !signatureVerification.IsVerified)
+        {
+            errors.AddRange(signatureVerification.Errors);
+        }
+
         var verified = errors.Count == 0;
-        var trustTier = verified && artifactVerification.IsVerified
-            ? CatalogEvidenceTrustTiers.ProviderVerified
-            : verified
-                ? CatalogEvidenceTrustTiers.MetadataVerified
-                : string.Empty;
+        var trustTier = verified
+            ? TrustTier(artifactVerification, signatureVerification)
+            : string.Empty;
+        var verificationMethod = verified
+            ? VerificationMethod(artifactVerification, signatureVerification)
+            : string.Empty;
         var notes = string.Join("; ", errors);
         if (!string.IsNullOrWhiteSpace(verificationNotes))
         {
@@ -70,6 +87,11 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
             ArtifactProvider = artifactVerification.ProviderName,
             ProviderVerifiedAtUtc = artifactVerification.IsVerified ? now : null,
             ArtifactSizeBytes = artifactVerification.ArtifactSizeBytes,
+            SignerId = signatureVerification.SignerId,
+            SignerPublicKeyId = signatureVerification.SignerPublicKeyId,
+            SignatureVerifiedAtUtc = signatureVerification.SignatureVerifiedAtUtc,
+            VerificationMethod = verificationMethod,
+            VerificationPolicyVersion = _options.PolicyVersion,
             Errors = errors
         };
     }
@@ -131,6 +153,8 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
             RequiredTrustTier = requiredTrustTier,
             IsFresh = !freshUntil.HasValue || freshUntil.Value > utcNow,
             FreshUntilUtc = freshUntil,
+            VerificationMethod = evidence.VerificationMethod,
+            VerificationPolicyVersion = evidence.VerificationPolicyVersion,
             Failures = failures.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
         };
     }
@@ -214,6 +238,40 @@ public sealed partial class PlatformCatalogEvidenceVerifier : IPlatformCatalogEv
             : _options.ProductionLikeEnvironments.Any(item => string.Equals(item, environmentName, StringComparison.OrdinalIgnoreCase))
                 ? _options.MinimumEvidenceTrustTierForProductionLikePromotion
                 : CatalogEvidenceTrustTiers.MetadataVerified;
+
+    private static string TrustTier(
+        CatalogArtifactVerificationResult artifactVerification,
+        CatalogEvidenceSignatureVerificationResult signatureVerification)
+    {
+        if (signatureVerification.IsVerified)
+        {
+            return CatalogEvidenceTrustTiers.SignatureVerified;
+        }
+
+        if (artifactVerification.IsVerified)
+        {
+            return CatalogEvidenceTrustTiers.ProviderVerified;
+        }
+
+        return CatalogEvidenceTrustTiers.MetadataVerified;
+    }
+
+    private static string VerificationMethod(
+        CatalogArtifactVerificationResult artifactVerification,
+        CatalogEvidenceSignatureVerificationResult signatureVerification)
+    {
+        if (signatureVerification.IsVerified)
+        {
+            return CatalogEvidenceVerificationMethods.Signature;
+        }
+
+        if (artifactVerification.IsVerified)
+        {
+            return CatalogEvidenceVerificationMethods.Provider;
+        }
+
+        return CatalogEvidenceVerificationMethods.Metadata;
+    }
 
     [GeneratedRegex("^[a-fA-F0-9]{64}$")]
     private static partial Regex Sha256HexRegex();

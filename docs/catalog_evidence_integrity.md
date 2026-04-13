@@ -1,6 +1,7 @@
-# Catalog Evidence Integrity - Sprint 14
+# Catalog Evidence Integrity - Sprint 15
 
 Sprint 13 upgraded certification evidence from operator metadata to a policy-bearing trust object. Sprint 14 adds provider-backed artifact verification and trust tiers.
+Sprint 15 adds signed evidence bundles and policy-version provenance.
 
 ## Evidence Lifecycle
 
@@ -26,15 +27,18 @@ Evidence verification checks:
 - controlled artifact provider hash matches artifact bytes when the evidence URI is provider-backed,
 - artifact hash algorithm is `sha256`,
 - content type and source system are allowed when provided,
-- collected timestamp exists, is not in the future, and is not stale.
+- collected timestamp exists, is not in the future, and is not stale,
+- signed payload and base64 RSA signature are valid when signature fields are supplied,
+- signer id and public key id match a configured trusted signer.
 
 The verifier does not fetch arbitrary external links. It verifies policy metadata and allowed reference shape, and it can verify bytes only through controlled providers such as the filesystem-backed `artifact://catalog-evidence/` provider.
+Signed evidence uses local configured public keys. A valid `RS256` signature promotes trust to `signature_verified` and records the verification method and policy version.
 
 ## API Flow
 
 1. Record evidence with `POST /api/platform-catalog/certification-evidence`.
 2. Include artifact hash, content type, artifact type, source system, collection timestamp, and evidence URI.
 3. Verify evidence with `POST /api/platform-catalog/certification-evidence/{evidenceId}/verify`.
-4. Use `acceptAsTrusted=true` only when the verifier/release authority accepts the artifact for promotion.
+4. Use `acceptAsTrusted=true` only when the verifier/release authority accepts the artifact or signature for promotion.
 
 Recorded evidence is audit data. Accepted verified evidence is promotion evidence.

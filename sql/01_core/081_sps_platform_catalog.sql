@@ -471,7 +471,15 @@ BEGIN
         TrustTier,
         ArtifactProvider,
         ProviderVerifiedAtUtc,
-        ArtifactSizeBytes
+        ArtifactSizeBytes,
+        SignedPayload,
+        Signature,
+        SignatureAlgorithm,
+        SignerId,
+        SignerPublicKeyId,
+        SignatureVerifiedAtUtc,
+        VerificationMethod,
+        VerificationPolicyVersion
     FROM dbo.PlatformCatalogCertificationEvidence
     WHERE EnvironmentName = @EnvironmentName
     ORDER BY CapturedAtUtc DESC;
@@ -512,7 +520,15 @@ BEGIN
         TrustTier,
         ArtifactProvider,
         ProviderVerifiedAtUtc,
-        ArtifactSizeBytes
+        ArtifactSizeBytes,
+        SignedPayload,
+        Signature,
+        SignatureAlgorithm,
+        SignerId,
+        SignerPublicKeyId,
+        SignatureVerifiedAtUtc,
+        VerificationMethod,
+        VerificationPolicyVersion
     FROM dbo.PlatformCatalogCertificationEvidence
     WHERE EvidenceId = @EvidenceId;
 END;
@@ -545,7 +561,15 @@ CREATE OR ALTER PROCEDURE dbo.app_platform_catalogcertification_create
     @TrustTier NVARCHAR(80) = NULL,
     @ArtifactProvider NVARCHAR(100) = NULL,
     @ProviderVerifiedAtUtc DATETIME2(7) = NULL,
-    @ArtifactSizeBytes BIGINT = NULL
+    @ArtifactSizeBytes BIGINT = NULL,
+    @SignedPayload NVARCHAR(MAX) = NULL,
+    @Signature NVARCHAR(MAX) = NULL,
+    @SignatureAlgorithm NVARCHAR(80) = NULL,
+    @SignerId NVARCHAR(200) = NULL,
+    @SignerPublicKeyId NVARCHAR(200) = NULL,
+    @SignatureVerifiedAtUtc DATETIME2(7) = NULL,
+    @VerificationMethod NVARCHAR(80) = NULL,
+    @VerificationPolicyVersion NVARCHAR(80) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -578,7 +602,15 @@ BEGIN
         TrustTier,
         ArtifactProvider,
         ProviderVerifiedAtUtc,
-        ArtifactSizeBytes
+        ArtifactSizeBytes,
+        SignedPayload,
+        Signature,
+        SignatureAlgorithm,
+        SignerId,
+        SignerPublicKeyId,
+        SignatureVerifiedAtUtc,
+        VerificationMethod,
+        VerificationPolicyVersion
     )
     VALUES
     (
@@ -608,7 +640,15 @@ BEGIN
         NULLIF(LTRIM(RTRIM(@TrustTier)), ''),
         NULLIF(LTRIM(RTRIM(@ArtifactProvider)), ''),
         @ProviderVerifiedAtUtc,
-        @ArtifactSizeBytes
+        @ArtifactSizeBytes,
+        NULLIF(LTRIM(RTRIM(@SignedPayload)), ''),
+        NULLIF(LTRIM(RTRIM(@Signature)), ''),
+        NULLIF(LTRIM(RTRIM(@SignatureAlgorithm)), ''),
+        NULLIF(LTRIM(RTRIM(@SignerId)), ''),
+        NULLIF(LTRIM(RTRIM(@SignerPublicKeyId)), ''),
+        @SignatureVerifiedAtUtc,
+        NULLIF(LTRIM(RTRIM(@VerificationMethod)), ''),
+        NULLIF(LTRIM(RTRIM(@VerificationPolicyVersion)), '')
     );
 
     SELECT *
@@ -628,7 +668,12 @@ CREATE OR ALTER PROCEDURE dbo.app_platform_catalogcertification_verify
     @TrustTier NVARCHAR(80) = NULL,
     @ArtifactProvider NVARCHAR(100) = NULL,
     @ProviderVerifiedAtUtc DATETIME2(7) = NULL,
-    @ArtifactSizeBytes BIGINT = NULL
+    @ArtifactSizeBytes BIGINT = NULL,
+    @SignerId NVARCHAR(200) = NULL,
+    @SignerPublicKeyId NVARCHAR(200) = NULL,
+    @SignatureVerifiedAtUtc DATETIME2(7) = NULL,
+    @VerificationMethod NVARCHAR(80) = NULL,
+    @VerificationPolicyVersion NVARCHAR(80) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -644,7 +689,12 @@ BEGIN
         TrustTier = NULLIF(LTRIM(RTRIM(@TrustTier)), ''),
         ArtifactProvider = NULLIF(LTRIM(RTRIM(@ArtifactProvider)), ''),
         ProviderVerifiedAtUtc = @ProviderVerifiedAtUtc,
-        ArtifactSizeBytes = @ArtifactSizeBytes
+        ArtifactSizeBytes = @ArtifactSizeBytes,
+        SignerId = NULLIF(LTRIM(RTRIM(@SignerId)), ''),
+        SignerPublicKeyId = NULLIF(LTRIM(RTRIM(@SignerPublicKeyId)), ''),
+        SignatureVerifiedAtUtc = @SignatureVerifiedAtUtc,
+        VerificationMethod = NULLIF(LTRIM(RTRIM(@VerificationMethod)), ''),
+        VerificationPolicyVersion = NULLIF(LTRIM(RTRIM(@VerificationPolicyVersion)), '')
     WHERE EvidenceId = @EvidenceId;
 
     SELECT *

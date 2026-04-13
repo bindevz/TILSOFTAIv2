@@ -1,8 +1,9 @@
-# Catalog Promotion Audit Dossier - Sprint 14
+# Catalog Promotion Audit Dossier - Sprint 15
 
 The promotion dossier is the compliance review surface for catalog rollout history.
 
 Use `GET /api/platform-catalog/promotion-manifests/{manifestId}/dossier`.
+Use `POST /api/platform-catalog/promotion-manifests/{manifestId}/dossier/archive` to materialize the tamper-evident archive package.
 
 ## Dossier Contents
 
@@ -14,6 +15,7 @@ The dossier includes:
 - evidence trust evaluations,
 - rollout attestations,
 - retention and archive policy snapshot,
+- archive metadata when materialized,
 - deterministic dossier hash,
 - audit warnings,
 - generation timestamp.
@@ -41,5 +43,7 @@ The dossier emits deterministic warnings when:
 - a referenced evidence record is missing.
 - referenced evidence is no longer trusted.
 - retention windows have expired.
+- a production-like dossier requires an archive but none exists.
+- an existing archive no longer matches the current dossier hash.
 
 Warnings are machine-readable and should block compliance sign-off until resolved.

@@ -2,6 +2,7 @@ namespace TILSOFTAI.Domain.Configuration;
 
 public sealed class CatalogCertificationOptions
 {
+    public string PolicyVersion { get; set; } = "sprint-15";
     public string EnvironmentName { get; set; } = "development";
     public string[] ProductionLikeEnvironments { get; set; } = { "prod", "production", "staging" };
     public bool RequireCertificationEvidenceForProductionLikePromotion { get; set; } = true;
@@ -15,6 +16,10 @@ public sealed class CatalogCertificationOptions
     public Dictionary<string, int> EvidenceFreshnessDaysByKind { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string TrustedArtifactRootPath { get; set; } = "evidence-artifacts";
     public string[] ControlledArtifactUriPrefixes { get; set; } = { "artifact://catalog-evidence/" };
+    public CatalogTrustedSignerOptions[] TrustedEvidenceSigners { get; set; } = Array.Empty<CatalogTrustedSignerOptions>();
+    public string[] AllowedSignatureAlgorithms { get; set; } = { "RS256" };
+    public string DossierArchiveRootPath { get; set; } = "dossier-archives";
+    public bool RequireArchivedDossierForProductionLikeCompletion { get; set; } = true;
     public int EvidenceRetentionDays { get; set; } = 2555;
     public int ManifestRetentionDays { get; set; } = 2555;
     public int AttestationRetentionDays { get; set; } = 2555;
@@ -56,4 +61,11 @@ public sealed class CatalogCertificationOptions
     public int DuplicateSubmitAlertThresholdPerHour { get; set; } = 5;
     public int ApplyFailureAlertThresholdPerHour { get; set; } = 1;
     public int RollbackSurgeAlertThresholdPerHour { get; set; } = 2;
+}
+
+public sealed class CatalogTrustedSignerOptions
+{
+    public string SignerId { get; set; } = string.Empty;
+    public string KeyId { get; set; } = string.Empty;
+    public string PublicKeyPem { get; set; } = string.Empty;
 }

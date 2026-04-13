@@ -18,6 +18,11 @@ public sealed class CatalogCertificationEvidenceApiRequest
     public string ArtifactType { get; init; } = string.Empty;
     public string SourceSystem { get; init; } = string.Empty;
     public DateTime? CollectedAtUtc { get; init; }
+    public string SignedPayload { get; init; } = string.Empty;
+    public string Signature { get; init; } = string.Empty;
+    public string SignatureAlgorithm { get; init; } = string.Empty;
+    public string SignerId { get; init; } = string.Empty;
+    public string SignerPublicKeyId { get; init; } = string.Empty;
 }
 
 public sealed class CatalogCertificationEvidenceVerifyApiRequest

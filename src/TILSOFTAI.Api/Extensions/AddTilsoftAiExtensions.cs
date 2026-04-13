@@ -153,8 +153,10 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<IPlatformCatalogControlPlane, PlatformCatalogControlPlane>();
         services.AddSingleton<IPlatformCatalogCertificationStore, SqlPlatformCatalogCertificationStore>();
         services.AddSingleton<IPlatformCatalogArtifactProvider, FileSystemCatalogArtifactProvider>();
+        services.AddSingleton<IPlatformCatalogSignatureVerifier, RsaPlatformCatalogSignatureVerifier>();
         services.AddSingleton<IPlatformCatalogEvidenceVerifier, PlatformCatalogEvidenceVerifier>();
         services.AddSingleton<IPlatformCatalogPromotionManifestStore, SqlPlatformCatalogPromotionManifestStore>();
+        services.AddSingleton<IPlatformCatalogDossierArchiveService, FileSystemPlatformCatalogDossierArchiveService>();
         services.AddSingleton<IPlatformCatalogPromotionManifestService, PlatformCatalogPromotionManifestService>();
         services.AddSingleton<IPlatformCatalogPromotionGate, PlatformCatalogPromotionGate>();
         services.AddHostedService<PlatformCatalogStartupReporter>();
@@ -561,6 +563,7 @@ public static class AddTilsoftAiExtensions
 
         services.AddOptions<CatalogCertificationOptions>()
             .Bind(configuration.GetSection(ConfigurationSectionNames.CatalogCertification))
+            .Validate(options => !string.IsNullOrWhiteSpace(options.PolicyVersion), "CatalogCertification:PolicyVersion is required.")
             .Validate(options => options.RequiredEvidenceKinds.Length > 0, "CatalogCertification:RequiredEvidenceKinds must have at least one evidence kind.")
             .Validate(options => options.PreviewSuccessSloPercent is >= 0 and <= 100, "CatalogCertification:PreviewSuccessSloPercent must be between 0 and 100.")
             .Validate(options => options.SubmitSuccessSloPercent is >= 0 and <= 100, "CatalogCertification:SubmitSuccessSloPercent must be between 0 and 100.")
@@ -572,6 +575,12 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.AttestationRetentionDays >= 0, "CatalogCertification:AttestationRetentionDays must be >= 0.")
             .Validate(options => options.DossierArchiveRetentionDays >= 0, "CatalogCertification:DossierArchiveRetentionDays must be >= 0.")
             .Validate(options => options.TrustedEvidenceStatuses.Length > 0, "CatalogCertification:TrustedEvidenceStatuses must have at least one status.")
+            .Validate(options => options.AllowedSignatureAlgorithms.Length > 0, "CatalogCertification:AllowedSignatureAlgorithms must have at least one algorithm.")
+            .Validate(options => options.TrustedEvidenceSigners.All(signer =>
+                    !string.IsNullOrWhiteSpace(signer.SignerId)
+                    && !string.IsNullOrWhiteSpace(signer.KeyId)
+                    && !string.IsNullOrWhiteSpace(signer.PublicKeyPem)),
+                "CatalogCertification:TrustedEvidenceSigners entries must include SignerId, KeyId, and PublicKeyPem.")
             .ValidateOnStart();
         
         // Analytics options (PATCH 28)

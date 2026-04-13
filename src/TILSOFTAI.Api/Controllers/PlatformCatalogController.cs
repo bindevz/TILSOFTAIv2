@@ -159,6 +159,11 @@ public sealed class PlatformCatalogController : ControllerBase
             ArtifactType = request.ArtifactType?.Trim() ?? string.Empty,
             SourceSystem = request.SourceSystem?.Trim() ?? string.Empty,
             CollectedAtUtc = request.CollectedAtUtc,
+            SignedPayload = request.SignedPayload?.Trim() ?? string.Empty,
+            Signature = request.Signature?.Trim() ?? string.Empty,
+            SignatureAlgorithm = request.SignatureAlgorithm?.Trim() ?? string.Empty,
+            SignerId = request.SignerId?.Trim() ?? string.Empty,
+            SignerPublicKeyId = request.SignerPublicKeyId?.Trim() ?? string.Empty,
             VerificationStatus = CatalogEvidenceVerificationStatus.Unverified
         };
 
@@ -275,6 +280,17 @@ public sealed class PlatformCatalogController : ControllerBase
         RequireAnyCatalogRole(context);
         var dossier = await _manifestService.GetDossierAsync(manifestId, context, ct);
         return dossier is null ? NotFound() : Ok(dossier);
+    }
+
+    [HttpPost("promotion-manifests/{manifestId}/dossier/archive")]
+    public async Task<ActionResult<CatalogDossierArchiveResult>> ArchivePromotionDossier(
+        string manifestId,
+        CancellationToken ct)
+    {
+        var context = ToCatalogContext();
+        RequireAnyCatalogRole(context);
+        var result = await _manifestService.ArchiveDossierAsync(manifestId, context, ct);
+        return result.IsArchived ? Ok(result) : BadRequest(result);
     }
 
     [HttpPost("changes/{changeId}/approve")]

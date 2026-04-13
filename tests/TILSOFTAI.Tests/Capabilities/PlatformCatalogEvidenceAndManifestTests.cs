@@ -59,6 +59,79 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
     }
 
     [Fact]
+    public void Verify_ShouldPromoteTrustedRsaSignature()
+    {
+        using var rsa = RSA.Create(2048);
+        var payload = "{\"release\":\"sprint-15\"}";
+        var options = CertificationOptions();
+        options.TrustedEvidenceSigners = new[]
+        {
+            new CatalogTrustedSignerOptions
+            {
+                SignerId = "release-authority",
+                KeyId = "key-1",
+                PublicKeyPem = rsa.ExportSubjectPublicKeyInfoPem()
+            }
+        };
+        var evidence = TrustedEvidence("ev-signed") with
+        {
+            SignedPayload = payload,
+            Signature = Convert.ToBase64String(rsa.SignData(Encoding.UTF8.GetBytes(payload), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)),
+            SignatureAlgorithm = "RS256",
+            SignerId = "release-authority",
+            SignerPublicKeyId = "key-1",
+            TrustTier = string.Empty,
+            VerificationMethod = string.Empty,
+            VerificationPolicyVersion = string.Empty
+        };
+        var verifier = new PlatformCatalogEvidenceVerifier(
+            Options.Create(options),
+            new StubArtifactProvider(),
+            new RsaPlatformCatalogSignatureVerifier(Options.Create(options)));
+
+        var result = verifier.Verify(evidence, Context(), acceptAsTrusted: true, "signature verify");
+
+        result.IsVerified.Should().BeTrue();
+        result.TrustTier.Should().Be(CatalogEvidenceTrustTiers.SignatureVerified);
+        result.VerificationMethod.Should().Be(CatalogEvidenceVerificationMethods.Signature);
+        result.VerificationPolicyVersion.Should().Be("sprint-15");
+        result.SignatureVerifiedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Verify_ShouldRejectInvalidRsaSignature()
+    {
+        using var rsa = RSA.Create(2048);
+        var options = CertificationOptions();
+        options.TrustedEvidenceSigners = new[]
+        {
+            new CatalogTrustedSignerOptions
+            {
+                SignerId = "release-authority",
+                KeyId = "key-1",
+                PublicKeyPem = rsa.ExportSubjectPublicKeyInfoPem()
+            }
+        };
+        var evidence = TrustedEvidence("ev-signed") with
+        {
+            SignedPayload = "{\"release\":\"sprint-15\"}",
+            Signature = Convert.ToBase64String(rsa.SignData(Encoding.UTF8.GetBytes("{\"release\":\"tampered\"}"), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)),
+            SignatureAlgorithm = "RS256",
+            SignerId = "release-authority",
+            SignerPublicKeyId = "key-1"
+        };
+        var verifier = new PlatformCatalogEvidenceVerifier(
+            Options.Create(options),
+            new StubArtifactProvider(),
+            new RsaPlatformCatalogSignatureVerifier(Options.Create(options)));
+
+        var result = verifier.Verify(evidence, Context(), acceptAsTrusted: true, "signature verify");
+
+        result.IsVerified.Should().BeFalse();
+        result.Errors.Should().Contain("signature_invalid");
+    }
+
+    [Fact]
     public async Task IssueManifestAsync_ShouldBlock_WhenEvidenceIsNotTrusted()
     {
         var evidence = TrustedEvidence("ev-1") with { VerificationStatus = CatalogEvidenceVerificationStatus.Unverified };
@@ -82,6 +155,26 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
             .Select(item => item with { TrustTier = CatalogEvidenceTrustTiers.MetadataVerified })
             .ToArray();
         var service = CreateService(evidence);
+
+        var result = await service.IssueManifestAsync(new CatalogPromotionManifestIssueRequest
+        {
+            EnvironmentName = "prod",
+            ChangeIds = new[] { "chg-1" },
+            EvidenceIds = evidence.Select(item => item.EvidenceId).ToArray()
+        }, Context(), CancellationToken.None);
+
+        result.IsIssued.Should().BeFalse();
+        result.Blockers.Should().Contain(item => item.Contains("evidence_trust_tier_insufficient", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task IssueManifestAsync_ShouldBlock_WhenSignatureTierIsRequired()
+    {
+        var options = CertificationOptions();
+        options.MinimumEvidenceTrustTierForProductionLikePromotion = CatalogEvidenceTrustTiers.SignatureVerified;
+        options.EnvironmentMinimumEvidenceTrustTiers["prod"] = CatalogEvidenceTrustTiers.SignatureVerified;
+        var evidence = RequiredEvidence();
+        var service = CreateService(evidence, options: options);
 
         var result = await service.IssueManifestAsync(new CatalogPromotionManifestIssueRequest
         {
@@ -158,16 +251,48 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
         result.Blockers.Should().Contain("rollout_completion_evidence_required");
     }
 
+    [Fact]
+    public async Task ArchiveDossierAsync_ShouldMaterializeTamperEvidentArchive()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tilsoftai-dossier-tests", Guid.NewGuid().ToString("N"));
+        var options = CertificationOptions();
+        options.DossierArchiveRootPath = root;
+        var evidence = RequiredEvidence();
+        var store = new StubManifestStore();
+        var service = CreateService(evidence, store, options);
+        var issue = await service.IssueManifestAsync(new CatalogPromotionManifestIssueRequest
+        {
+            EnvironmentName = "prod",
+            ChangeIds = new[] { "chg-1" },
+            EvidenceIds = evidence.Select(item => item.EvidenceId).ToArray()
+        }, Context(), CancellationToken.None);
+
+        var archive = await service.ArchiveDossierAsync(issue.Manifest!.ManifestId, Context(), CancellationToken.None);
+        var dossier = await service.GetDossierAsync(issue.Manifest.ManifestId, Context(), CancellationToken.None);
+
+        archive.IsArchived.Should().BeTrue();
+        archive.Archive.Should().NotBeNull();
+        archive.Archive!.ArchiveHash.Should().HaveLength(64);
+        File.Exists(archive.Archive.ArchivePath).Should().BeTrue();
+        dossier!.Archive.Should().NotBeNull();
+        dossier.AuditWarnings.Should().NotContain("dossier_archive_required");
+    }
+
     private static PlatformCatalogPromotionManifestService CreateService(
         IReadOnlyList<CatalogCertificationEvidenceRecord> evidence,
-        StubManifestStore? manifestStore = null) =>
+        StubManifestStore? manifestStore = null,
+        CatalogCertificationOptions? options = null)
+    {
+        options ??= CertificationOptions();
+        return
         new(
             new StubPromotionGate(),
             new StubCertificationStore(evidence),
             new StubMutationStore(),
             manifestStore ?? new StubManifestStore(),
-            new PlatformCatalogEvidenceVerifier(Options.Create(CertificationOptions()), new StubArtifactProvider()),
-            Options.Create(CertificationOptions()));
+            new PlatformCatalogEvidenceVerifier(Options.Create(options), new StubArtifactProvider()),
+            Options.Create(options));
+    }
 
     private static CatalogCertificationOptions CertificationOptions() => new()
     {

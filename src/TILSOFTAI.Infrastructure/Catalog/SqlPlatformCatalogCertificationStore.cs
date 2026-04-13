@@ -77,6 +77,14 @@ public sealed class SqlPlatformCatalogCertificationStore : IPlatformCatalogCerti
         command.Parameters.Add(new SqlParameter("@ArtifactProvider", SqlDbType.NVarChar, 100) { Value = DbNullable(evidence.ArtifactProvider) });
         command.Parameters.Add(new SqlParameter("@ProviderVerifiedAtUtc", SqlDbType.DateTime2) { Value = DbNullable(evidence.ProviderVerifiedAtUtc) });
         command.Parameters.Add(new SqlParameter("@ArtifactSizeBytes", SqlDbType.BigInt) { Value = DbNullable(evidence.ArtifactSizeBytes) });
+        command.Parameters.Add(new SqlParameter("@SignedPayload", SqlDbType.NVarChar, -1) { Value = DbNullable(evidence.SignedPayload) });
+        command.Parameters.Add(new SqlParameter("@Signature", SqlDbType.NVarChar, -1) { Value = DbNullable(evidence.Signature) });
+        command.Parameters.Add(new SqlParameter("@SignatureAlgorithm", SqlDbType.NVarChar, 80) { Value = DbNullable(evidence.SignatureAlgorithm) });
+        command.Parameters.Add(new SqlParameter("@SignerId", SqlDbType.NVarChar, 200) { Value = DbNullable(evidence.SignerId) });
+        command.Parameters.Add(new SqlParameter("@SignerPublicKeyId", SqlDbType.NVarChar, 200) { Value = DbNullable(evidence.SignerPublicKeyId) });
+        command.Parameters.Add(new SqlParameter("@SignatureVerifiedAtUtc", SqlDbType.DateTime2) { Value = DbNullable(evidence.SignatureVerifiedAtUtc) });
+        command.Parameters.Add(new SqlParameter("@VerificationMethod", SqlDbType.NVarChar, 80) { Value = DbNullable(evidence.VerificationMethod) });
+        command.Parameters.Add(new SqlParameter("@VerificationPolicyVersion", SqlDbType.NVarChar, 80) { Value = DbNullable(evidence.VerificationPolicyVersion) });
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         return await reader.ReadAsync(ct)
@@ -102,6 +110,11 @@ public sealed class SqlPlatformCatalogCertificationStore : IPlatformCatalogCerti
         command.Parameters.Add(new SqlParameter("@ArtifactProvider", SqlDbType.NVarChar, 100) { Value = DbNullable(result.ArtifactProvider) });
         command.Parameters.Add(new SqlParameter("@ProviderVerifiedAtUtc", SqlDbType.DateTime2) { Value = DbNullable(result.ProviderVerifiedAtUtc) });
         command.Parameters.Add(new SqlParameter("@ArtifactSizeBytes", SqlDbType.BigInt) { Value = DbNullable(result.ArtifactSizeBytes) });
+        command.Parameters.Add(new SqlParameter("@SignerId", SqlDbType.NVarChar, 200) { Value = DbNullable(result.SignerId) });
+        command.Parameters.Add(new SqlParameter("@SignerPublicKeyId", SqlDbType.NVarChar, 200) { Value = DbNullable(result.SignerPublicKeyId) });
+        command.Parameters.Add(new SqlParameter("@SignatureVerifiedAtUtc", SqlDbType.DateTime2) { Value = DbNullable(result.SignatureVerifiedAtUtc) });
+        command.Parameters.Add(new SqlParameter("@VerificationMethod", SqlDbType.NVarChar, 80) { Value = DbNullable(result.VerificationMethod) });
+        command.Parameters.Add(new SqlParameter("@VerificationPolicyVersion", SqlDbType.NVarChar, 80) { Value = DbNullable(result.VerificationPolicyVersion) });
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         return await reader.ReadAsync(ct)
@@ -151,7 +164,15 @@ public sealed class SqlPlatformCatalogCertificationStore : IPlatformCatalogCerti
         TrustTier = ReaderString(reader, "TrustTier"),
         ArtifactProvider = ReaderString(reader, "ArtifactProvider"),
         ProviderVerifiedAtUtc = ReaderDateTime(reader, "ProviderVerifiedAtUtc"),
-        ArtifactSizeBytes = ReaderLong(reader, "ArtifactSizeBytes")
+        ArtifactSizeBytes = ReaderLong(reader, "ArtifactSizeBytes"),
+        SignedPayload = ReaderString(reader, "SignedPayload"),
+        Signature = ReaderString(reader, "Signature"),
+        SignatureAlgorithm = ReaderString(reader, "SignatureAlgorithm"),
+        SignerId = ReaderString(reader, "SignerId"),
+        SignerPublicKeyId = ReaderString(reader, "SignerPublicKeyId"),
+        SignatureVerifiedAtUtc = ReaderDateTime(reader, "SignatureVerifiedAtUtc"),
+        VerificationMethod = ReaderString(reader, "VerificationMethod"),
+        VerificationPolicyVersion = ReaderString(reader, "VerificationPolicyVersion")
     };
 
     private static object DbNullable(string? value) =>

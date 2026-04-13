@@ -49,6 +49,13 @@ public static class CatalogEvidenceTrustTiers
         };
 }
 
+public static class CatalogEvidenceVerificationMethods
+{
+    public const string Metadata = "metadata";
+    public const string Provider = "provider";
+    public const string Signature = "signature";
+}
+
 public sealed record CatalogCertificationEvidenceRecord
 {
     public string EvidenceId { get; init; } = string.Empty;
@@ -79,6 +86,14 @@ public sealed record CatalogCertificationEvidenceRecord
     public string ArtifactProvider { get; init; } = string.Empty;
     public DateTime? ProviderVerifiedAtUtc { get; init; }
     public long? ArtifactSizeBytes { get; init; }
+    public string SignedPayload { get; init; } = string.Empty;
+    public string Signature { get; init; } = string.Empty;
+    public string SignatureAlgorithm { get; init; } = string.Empty;
+    public string SignerId { get; init; } = string.Empty;
+    public string SignerPublicKeyId { get; init; } = string.Empty;
+    public DateTime? SignatureVerifiedAtUtc { get; init; }
+    public string VerificationMethod { get; init; } = string.Empty;
+    public string VerificationPolicyVersion { get; init; } = string.Empty;
 }
 
 public sealed class CatalogEvidenceVerificationResult
@@ -95,6 +110,22 @@ public sealed class CatalogEvidenceVerificationResult
     public string ArtifactProvider { get; init; } = string.Empty;
     public DateTime? ProviderVerifiedAtUtc { get; init; }
     public long? ArtifactSizeBytes { get; init; }
+    public string SignerId { get; init; } = string.Empty;
+    public string SignerPublicKeyId { get; init; } = string.Empty;
+    public DateTime? SignatureVerifiedAtUtc { get; init; }
+    public string VerificationMethod { get; init; } = string.Empty;
+    public string VerificationPolicyVersion { get; init; } = string.Empty;
+    public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
+}
+
+public sealed class CatalogEvidenceSignatureVerificationResult
+{
+    public bool WasSignaturePresent { get; init; }
+    public bool IsVerified { get; init; }
+    public string SignerId { get; init; } = string.Empty;
+    public string SignerPublicKeyId { get; init; } = string.Empty;
+    public string SignatureAlgorithm { get; init; } = string.Empty;
+    public DateTime? SignatureVerifiedAtUtc { get; init; }
     public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
 }
 
@@ -106,6 +137,8 @@ public sealed class CatalogEvidenceTrustEvaluation
     public string RequiredTrustTier { get; init; } = string.Empty;
     public bool IsFresh { get; init; }
     public DateTime? FreshUntilUtc { get; init; }
+    public string VerificationMethod { get; init; } = string.Empty;
+    public string VerificationPolicyVersion { get; init; } = string.Empty;
     public IReadOnlyList<string> Failures { get; init; } = Array.Empty<string>();
 }
 

@@ -1,0 +1,230 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 15.
+
+Baseline repository reality (after Sprint 14):
+- Sprint 9 already retired `LegacyChatPipelineBridge`, `ChatPipeline`, `ChatRequest`, and `ChatResult`.
+- Production capability and external connection records load from `catalog/platform-catalog.json`.
+- The catalog control plane already supports:
+  - preview
+  - submit
+  - approve
+  - reject
+  - apply
+- Mutation safety already includes:
+  - `ExpectedVersionTag`
+  - `IdempotencyKey`
+  - duplicate pending-change detection
+  - idempotent apply replay
+  - `RollbackOfChangeId`
+- Promotion gating already exists through `IPlatformCatalogPromotionGate`.
+- Certification evidence already supports:
+  - lifecycle states
+  - verification status
+  - artifact hash metadata
+  - evidence trust tiers
+  - freshness policy
+  - retention policy snapshotting
+- Controlled provider verification already exists for `artifact://catalog-evidence/...` references through `FileSystemCatalogArtifactProvider`.
+- Promotion manifests are immutable.
+- Rollout attestations are append-only.
+- Promotion dossiers include:
+  - evidence trust evaluations
+  - retention snapshots
+  - deterministic dossier hashes
+- Production-like environments can already require `provider_verified` evidence.
+- Production-like promotion can already be blocked for stale evidence and insufficient trust tier.
+
+The platform is already enterprise-grade in a meaningful internal-platform sense.
+However, it is still not at the strongest high-assurance level because:
+- `signature_verified` is still effectively reserved, not implemented as a real trust path,
+- audit proof is still mainly a live computed dossier instead of a materialized tamper-evident archive bundle,
+- policy-versioned verification provenance is still weaker than it should be,
+- stricter environments cannot yet fully require signed proof and archived dossier packages,
+- and emergency/rollback flows can still be hardened further under signature/archive-grade policy.
+
+Sprint 15 mission:
+Turn the platform from “artifact-verifiable” into “signed-proof and tamper-evident”.
+
+Primary objective:
+1. Implement real `signature_verified` support.
+2. Add signer-trust-aware evidence verification.
+3. Add tamper-evident dossier archive packaging.
+4. Add policy-versioned verification provenance.
+5. Allow stricter environments to require signed proof and archived review packages.
+6. Harden rollback/emergency lineage under stronger trust policy.
+7. Close the last high-assurance trust debt without drifting into feature work.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the runtime orchestration owner.
+2. Platform catalog remains the production source-of-truth.
+3. Promotion gates, manifests, attestations, and evidence trust rules remain mandatory release primitives.
+4. `provider_verified` remains valid and must not regress.
+5. `signature_verified` must become a real capability, not naming theater.
+6. Audit proof must become preservable as well as reviewable.
+7. Policy provenance must be explicit enough to reconstruct decisions later.
+8. Stricter environments must be able to demand stronger trust than lower environments.
+9. Emergency paths must remain attributable under the stronger archive/signature posture.
+10. Do not turn Sprint 15 into a feature sprint.
+
+Primary Sprint 15 goals:
+
+A. Implement real signature-grade trust
+- Add a real signed-evidence verification path.
+- Support at least one concrete signed artifact or signed bundle workflow.
+- Bind trust to configured signers or trusted signing policy.
+- Do not mark evidence `signature_verified` unless a real signature check passes.
+- Expose machine-readable signature failure reasons.
+
+B. Add signer-trust-aware verification policy
+- Extend evidence verification so trust can depend on:
+  - metadata policy
+  - provider byte verification
+  - signature verification
+- Preserve provider verification as a lower trust tier than signature verification when policy says so.
+- Allow stricter environments to require `signature_verified`.
+- Surface the exact required tier and the actual achieved tier clearly.
+
+C. Add tamper-evident dossier archive bundles
+- Materialize dossier review into a durable archive package.
+- Bind archive identity to:
+  - manifest identity
+  - dossier hash
+  - archive hash or seal
+- Include enough core assets for later review without relying only on live DB state.
+- Make archive generation deterministic enough for later verification.
+
+D. Add policy-versioned verification provenance
+- Capture the policy version used during evaluation.
+- Capture which verification path was used:
+  - metadata
+  - provider
+  - signature
+- Preserve enough provenance to later explain why a promotion passed or failed.
+- Expose this in dossiers and archive outputs.
+
+E. Add stricter environment assurance rules
+- Allow environments to require:
+  - provider verification
+  - signature verification
+  - archive generation
+  - combinations of the above
+- Keep staging/lower environments more flexible.
+- Make blockers deterministic and machine-readable.
+
+F. Harden emergency and rollback proof
+- Ensure rollback and break-glass paths still preserve:
+  - signature/archive expectations when required
+  - incident lineage
+  - after-action linkage
+  - compensating manifest linkage
+- Do not allow emergency paths to silently drop assurance requirements without explicit policy outcome.
+
+G. Preserve enterprise-grade focus
+- Only add runtime surface area if it materially improves signed trust, archive durability, or decision provenance.
+- Do not broaden product scope.
+- Avoid generic plugin sprawl.
+
+Non-negotiable rules:
+1. Do not weaken provider verification, trust tiers, freshness policy, manifests, or attestations.
+2. Do not implement fake signature support.
+3. Do not set `signature_verified` without a real verification path.
+4. Do not make archive packaging a doc-only concept.
+5. Do not leave decision provenance vague.
+6. Do not let stricter environments silently accept weaker proof.
+7. Do not normalize emergency paths under weaker archive/signature rules.
+8. Do not store secrets in evidence, dossiers, or archive bundles.
+9. Prefer deterministic policy and archive outputs over operator narratives.
+10. Do not turn Sprint 15 into a feature sprint.
+
+Explicitly in scope:
+- real signature verification
+- signer trust configuration
+- archive bundle generation
+- policy-versioned verification provenance
+- stricter environment assurance requirements
+- rollback/emergency trust hardening
+- tests, docs, and runbooks for the above
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- large adapter ecosystem growth
+- product workflow breadth
+
+Recommended implementation order:
+1. Add signature verification model and signer trust policy.
+2. Wire signature verification into evidence trust tiers.
+3. Add dossier archive package generation and linkage.
+4. Add policy-versioned verification provenance.
+5. Harden stricter environment requirements.
+6. Harden rollback/emergency archive and signature lineage.
+7. Delete any dead code revealed by the trust work.
+
+Required architectural outcomes:
+1. `signature_verified` is a real platform capability.
+2. Archive bundles are durable, tamper-evident, and linked to dossier/manifest identity.
+3. Policy and verification provenance are explicit enough to reconstruct release decisions later.
+4. Production-like environments can require signed proof and archived review packages.
+5. Emergency paths remain attributable under stronger assurance rules.
+6. Remaining platform debt is no longer trust-grade or archive-grade.
+
+Definition of done:
+- Real signature verification exists.
+- `signature_verified` is policy-enforced where required.
+- Dossiers can be materialized into archive packages.
+- Archive identity is linked to manifest and dossier identity.
+- Policy version and verification method are preserved and reviewable.
+- Production-like environments can require signed proof and archived review.
+- Emergency/rollback flows preserve stronger lineage.
+- The platform is more credible as a high-assurance enterprise platform after Sprint 15 than after Sprint 14.
+
+Must-fail conditions:
+- `signature_verified` remains conceptual
+- archive packaging is still only live-response based
+- policy provenance is too weak to reconstruct decisions
+- stricter environments cannot require signed proof and archived review
+- Sprint 15 drifts into feature work without materially improving high-assurance closure
+
+Preferred implementation style:
+- concrete verification
+- narrow trusted integrations
+- deterministic archive output
+- policy-explicit provenance
+- machine-readable blockers
+- operator-usable review surfaces
+- deletion over drift
+- no architecture theater
+
+Required deliverables:
+1. Signature verification changes
+2. Signer trust configuration changes
+3. Archive packaging changes
+4. Policy provenance changes
+5. Environment assurance policy changes
+6. Emergency-path hardening changes
+7. Validation / test / runbook updates
+
+Required reporting after implementation:
+1. Summary of Sprint 15 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Signature verification changes
+6. Archive packaging changes
+7. Policy provenance changes
+8. Environment assurance policy changes
+9. Emergency-path hardening changes
+10. Validation / test / runbook improvements
+11. Remaining blockers
+12. Recommended Sprint 16 priorities
+
+Final instruction:
+Sprint 15 is about signed proof and tamper-evident archival release evidence.
+
+Do not spend Sprint 15 adding runtime novelty.
+Do not turn Sprint 15 into a feature sprint.
+
+Spend it closing the last high-assurance trust gap.

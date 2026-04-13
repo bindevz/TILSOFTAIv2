@@ -228,6 +228,20 @@ BEGIN
 END;
 GO
 
+IF COL_LENGTH('dbo.PlatformCatalogCertificationEvidence', 'SignedPayload') IS NULL
+BEGIN
+    ALTER TABLE dbo.PlatformCatalogCertificationEvidence ADD
+        SignedPayload NVARCHAR(MAX) NULL,
+        Signature NVARCHAR(MAX) NULL,
+        SignatureAlgorithm NVARCHAR(80) NULL,
+        SignerId NVARCHAR(200) NULL,
+        SignerPublicKeyId NVARCHAR(200) NULL,
+        SignatureVerifiedAtUtc DATETIME2(7) NULL,
+        VerificationMethod NVARCHAR(80) NULL,
+        VerificationPolicyVersion NVARCHAR(80) NULL;
+END;
+GO
+
 IF OBJECT_ID('dbo.CK_PlatformCatalogCertificationEvidence_VerificationStatus', 'C') IS NULL
 BEGIN
     ALTER TABLE dbo.PlatformCatalogCertificationEvidence

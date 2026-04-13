@@ -17,4 +17,9 @@ public interface IPlatformCatalogPromotionManifestService
         string manifestId,
         CatalogMutationContext context,
         CancellationToken ct);
+
+    Task<CatalogDossierArchiveResult> ArchiveDossierAsync(
+        string manifestId,
+        CatalogMutationContext context,
+        CancellationToken ct);
 }

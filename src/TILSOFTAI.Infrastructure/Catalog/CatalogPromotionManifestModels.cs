@@ -67,6 +67,13 @@ public sealed class CatalogRolloutAttestationResult
     public IReadOnlyList<string> Blockers { get; init; } = Array.Empty<string>();
 }
 
+public sealed class CatalogDossierArchiveResult
+{
+    public bool IsArchived { get; init; }
+    public CatalogDossierArchiveRecord? Archive { get; init; }
+    public IReadOnlyList<string> Blockers { get; init; } = Array.Empty<string>();
+}
+
 public sealed class CatalogRolloutAttestationRecord
 {
     public string AttestationId { get; init; } = string.Empty;
@@ -89,14 +96,28 @@ public sealed record CatalogPromotionDossier
     public IReadOnlyList<CatalogEvidenceTrustEvaluation> EvidenceTrust { get; init; } = Array.Empty<CatalogEvidenceTrustEvaluation>();
     public IReadOnlyList<CatalogRolloutAttestationRecord> Attestations { get; init; } = Array.Empty<CatalogRolloutAttestationRecord>();
     public CatalogAuditRetentionSnapshot Retention { get; init; } = new();
+    public CatalogDossierArchiveRecord? Archive { get; init; }
     public string DossierHash { get; init; } = string.Empty;
     public IReadOnlyList<string> AuditWarnings { get; init; } = Array.Empty<string>();
     public DateTime GeneratedAtUtc { get; init; } = DateTime.UtcNow;
 }
 
+public sealed record CatalogDossierArchiveRecord
+{
+    public string ManifestId { get; init; } = string.Empty;
+    public string DossierHash { get; init; } = string.Empty;
+    public string ArchiveHash { get; init; } = string.Empty;
+    public string ArchivePath { get; init; } = string.Empty;
+    public string SealAlgorithm { get; init; } = "sha256";
+    public string PolicyVersion { get; init; } = string.Empty;
+    public string CreatedByUserId { get; init; } = string.Empty;
+    public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
+    public DateTime? RetainUntilUtc { get; init; }
+}
+
 public sealed class CatalogAuditRetentionSnapshot
 {
-    public string PolicyVersion { get; init; } = "sprint-14";
+    public string PolicyVersion { get; init; } = "sprint-15";
     public DateTime? ManifestRetainUntilUtc { get; init; }
     public DateTime? EvidenceRetainUntilUtc { get; init; }
     public DateTime? AttestationRetainUntilUtc { get; init; }
