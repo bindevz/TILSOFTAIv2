@@ -97,5 +97,7 @@ After each drill completes in staging or another prod-like target, record one ce
 - `status=accepted` only after operator review,
 - evidence URI or ticket link,
 - related change or incident id when available.
+- artifact hash, source system, content type, and collected timestamp.
+- verification result before evidence is used for a promotion manifest.
 
 Unit tests and local dry runs prove implementation behavior, but they do not satisfy live certification evidence.

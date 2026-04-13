@@ -1,4 +1,4 @@
-# Platform Catalog Governance - Sprint 12
+# Platform Catalog Governance - Sprint 13
 
 Production capability and external connection records are now platform catalog records.
 
@@ -37,6 +37,12 @@ Control-plane endpoints:
 - `GET /api/platform-catalog/slo-definitions`
 - `GET /api/platform-catalog/certification-evidence`
 - `POST /api/platform-catalog/certification-evidence`
+- `POST /api/platform-catalog/certification-evidence/{evidenceId}/verify`
+- `GET /api/platform-catalog/promotion-manifests`
+- `GET /api/platform-catalog/promotion-manifests/{manifestId}`
+- `POST /api/platform-catalog/promotion-manifests`
+- `POST /api/platform-catalog/promotion-manifests/{manifestId}/attestations`
+- `GET /api/platform-catalog/promotion-manifests/{manifestId}/dossier`
 
 Configuration:
 
@@ -91,7 +97,7 @@ Operators should preview every production change before submit, include a ticket
 
 ## Certification Evidence
 
-Sprint 12 adds durable certification evidence for staging and production-like catalog operations. Accepted evidence can satisfy promotion gate requirements only when it is recorded for the target environment.
+Sprint 12 added durable certification evidence for staging and production-like catalog operations. Sprint 13 requires trusted evidence, not simply accepted metadata, before production-like manifest issuance.
 
 Required evidence kinds are configured in `CatalogCertification:RequiredEvidenceKinds`. The default package requires:
 
@@ -103,7 +109,7 @@ Required evidence kinds are configured in `CatalogCertification:RequiredEvidence
 - `fallback_risk_drill`,
 - `operator_signoff`.
 
-Synthetic unit tests do not count as live certification evidence.
+Synthetic unit tests do not count as live certification evidence. Evidence must be verified and accepted before it can satisfy promotion policy.
 
 ## Durable SQL Shape
 

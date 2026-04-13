@@ -5,6 +5,27 @@ public sealed class CatalogCertificationOptions
     public string EnvironmentName { get; set; } = "development";
     public string[] ProductionLikeEnvironments { get; set; } = { "prod", "production", "staging" };
     public bool RequireCertificationEvidenceForProductionLikePromotion { get; set; } = true;
+    public bool RequireTrustedEvidenceForProductionLikePromotion { get; set; } = true;
+    public bool RequireArtifactHashForTrustedEvidence { get; set; } = true;
+    public bool RequireEvidenceUriForTrustedEvidence { get; set; } = true;
+    public bool RequireRolloutAttestationEvidenceForProductionLikeCompletion { get; set; } = true;
+    public int MaxTrustedEvidenceAgeDays { get; set; } = 90;
+    public string[] TrustedEvidenceStatuses { get; set; } = { "accepted" };
+    public string[] AllowedEvidenceUriPrefixes { get; set; } = { "https://evidence.example/" };
+    public string[] AllowedEvidenceContentTypes { get; set; } =
+    {
+        "application/json",
+        "application/pdf",
+        "text/plain",
+        "text/markdown"
+    };
+    public string[] AllowedEvidenceSourceSystems { get; set; } =
+    {
+        "ci",
+        "runbook",
+        "incident",
+        "release"
+    };
     public string[] RequiredEvidenceKinds { get; set; } =
     {
         "runbook_execution",

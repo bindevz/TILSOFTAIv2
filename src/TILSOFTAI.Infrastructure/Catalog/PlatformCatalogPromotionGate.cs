@@ -11,6 +11,7 @@ public sealed class PlatformCatalogPromotionGate : IPlatformCatalogPromotionGate
     private readonly IPlatformCatalogControlPlane _controlPlane;
     private readonly IPlatformCatalogMutationStore _mutationStore;
     private readonly IPlatformCatalogCertificationStore _certificationStore;
+    private readonly IPlatformCatalogEvidenceVerifier _evidenceVerifier;
     private readonly IConfiguration _configuration;
     private readonly PlatformCatalogOptions _catalogOptions;
     private readonly CatalogControlPlaneOptions _controlPlaneOptions;
@@ -22,6 +23,7 @@ public sealed class PlatformCatalogPromotionGate : IPlatformCatalogPromotionGate
         IPlatformCatalogControlPlane controlPlane,
         IPlatformCatalogMutationStore mutationStore,
         IPlatformCatalogCertificationStore certificationStore,
+        IPlatformCatalogEvidenceVerifier evidenceVerifier,
         IConfiguration configuration,
         IOptions<PlatformCatalogOptions> catalogOptions,
         IOptions<CatalogControlPlaneOptions> controlPlaneOptions,
@@ -32,6 +34,7 @@ public sealed class PlatformCatalogPromotionGate : IPlatformCatalogPromotionGate
         _controlPlane = controlPlane ?? throw new ArgumentNullException(nameof(controlPlane));
         _mutationStore = mutationStore ?? throw new ArgumentNullException(nameof(mutationStore));
         _certificationStore = certificationStore ?? throw new ArgumentNullException(nameof(certificationStore));
+        _evidenceVerifier = evidenceVerifier ?? throw new ArgumentNullException(nameof(evidenceVerifier));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _catalogOptions = catalogOptions?.Value ?? throw new ArgumentNullException(nameof(catalogOptions));
         _controlPlaneOptions = controlPlaneOptions?.Value ?? throw new ArgumentNullException(nameof(controlPlaneOptions));
@@ -52,6 +55,7 @@ public sealed class PlatformCatalogPromotionGate : IPlatformCatalogPromotionGate
         var blockers = new List<string>();
         var warnings = new List<string>();
         var missingEvidence = new List<string>();
+        var untrustedEvidence = new List<string>();
         var sourceMode = DetermineSourceMode();
         CatalogMutationPreviewResult? preview = null;
         CatalogChangeRequestRecord? change = null;
@@ -110,10 +114,16 @@ public sealed class PlatformCatalogPromotionGate : IPlatformCatalogPromotionGate
             && _certificationOptions.RequireCertificationEvidenceForProductionLikePromotion)
         {
             var evidence = await _certificationStore.ListEvidenceAsync(environment, ct);
-            var acceptedKinds = evidence
-                .Where(item => string.Equals(item.Status, CatalogCertificationEvidenceStatus.Accepted, StringComparison.OrdinalIgnoreCase))
+            var trustedEvidence = evidence
+                .Where(item => !_certificationOptions.RequireTrustedEvidenceForProductionLikePromotion || _evidenceVerifier.IsTrusted(item, DateTime.UtcNow))
+                .ToArray();
+            var acceptedKinds = trustedEvidence
                 .Select(item => item.EvidenceKind)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            untrustedEvidence.AddRange(evidence
+                .Where(item => _certificationOptions.RequiredEvidenceKinds.Contains(item.EvidenceKind, StringComparer.OrdinalIgnoreCase))
+                .Where(item => _certificationOptions.RequireTrustedEvidenceForProductionLikePromotion && !_evidenceVerifier.IsTrusted(item, DateTime.UtcNow))
+                .Select(item => item.EvidenceId));
 
             missingEvidence.AddRange(_certificationOptions.RequiredEvidenceKinds
                 .Where(required => !acceptedKinds.Contains(required)));
@@ -135,6 +145,7 @@ public sealed class PlatformCatalogPromotionGate : IPlatformCatalogPromotionGate
             Blockers = blockers,
             Warnings = warnings,
             EvidenceMissing = missingEvidence,
+            EvidenceUntrusted = untrustedEvidence,
             Preview = preview
         };
 

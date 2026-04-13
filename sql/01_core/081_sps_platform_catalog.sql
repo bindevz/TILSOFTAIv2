@@ -455,10 +455,58 @@ BEGIN
         OperatorUserId,
         ApprovedByUserId,
         CorrelationId,
-        CapturedAtUtc
+        CapturedAtUtc,
+        ArtifactHash,
+        ArtifactHashAlgorithm,
+        ArtifactContentType,
+        ArtifactType,
+        SourceSystem,
+        CollectedAtUtc,
+        VerificationStatus,
+        VerificationNotes,
+        VerifiedByUserId,
+        VerifiedAtUtc,
+        ExpiresAtUtc,
+        SupersededByEvidenceId
     FROM dbo.PlatformCatalogCertificationEvidence
     WHERE EnvironmentName = @EnvironmentName
     ORDER BY CapturedAtUtc DESC;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_catalogcertification_get
+    @EvidenceId NVARCHAR(64)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        EvidenceId,
+        EnvironmentName,
+        EvidenceKind,
+        Status,
+        Summary,
+        EvidenceUri,
+        RelatedChangeId,
+        RelatedIncidentId,
+        OperatorUserId,
+        ApprovedByUserId,
+        CorrelationId,
+        CapturedAtUtc,
+        ArtifactHash,
+        ArtifactHashAlgorithm,
+        ArtifactContentType,
+        ArtifactType,
+        SourceSystem,
+        CollectedAtUtc,
+        VerificationStatus,
+        VerificationNotes,
+        VerifiedByUserId,
+        VerifiedAtUtc,
+        ExpiresAtUtc,
+        SupersededByEvidenceId
+    FROM dbo.PlatformCatalogCertificationEvidence
+    WHERE EvidenceId = @EvidenceId;
 END;
 GO
 
@@ -473,7 +521,19 @@ CREATE OR ALTER PROCEDURE dbo.app_platform_catalogcertification_create
     @RelatedIncidentId NVARCHAR(100) = NULL,
     @OperatorUserId NVARCHAR(200),
     @ApprovedByUserId NVARCHAR(200) = NULL,
-    @CorrelationId NVARCHAR(100) = NULL
+    @CorrelationId NVARCHAR(100) = NULL,
+    @ArtifactHash NVARCHAR(128) = NULL,
+    @ArtifactHashAlgorithm NVARCHAR(40) = NULL,
+    @ArtifactContentType NVARCHAR(200) = NULL,
+    @ArtifactType NVARCHAR(100) = NULL,
+    @SourceSystem NVARCHAR(100) = NULL,
+    @CollectedAtUtc DATETIME2(7) = NULL,
+    @VerificationStatus NVARCHAR(50) = 'unverified',
+    @VerificationNotes NVARCHAR(1000) = NULL,
+    @VerifiedByUserId NVARCHAR(200) = NULL,
+    @VerifiedAtUtc DATETIME2(7) = NULL,
+    @ExpiresAtUtc DATETIME2(7) = NULL,
+    @SupersededByEvidenceId NVARCHAR(64) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -490,7 +550,19 @@ BEGIN
         RelatedIncidentId,
         OperatorUserId,
         ApprovedByUserId,
-        CorrelationId
+        CorrelationId,
+        ArtifactHash,
+        ArtifactHashAlgorithm,
+        ArtifactContentType,
+        ArtifactType,
+        SourceSystem,
+        CollectedAtUtc,
+        VerificationStatus,
+        VerificationNotes,
+        VerifiedByUserId,
+        VerifiedAtUtc,
+        ExpiresAtUtc,
+        SupersededByEvidenceId
     )
     VALUES
     (
@@ -504,11 +576,200 @@ BEGIN
         NULLIF(LTRIM(RTRIM(@RelatedIncidentId)), ''),
         LTRIM(RTRIM(@OperatorUserId)),
         NULLIF(LTRIM(RTRIM(@ApprovedByUserId)), ''),
-        NULLIF(LTRIM(RTRIM(@CorrelationId)), '')
+        NULLIF(LTRIM(RTRIM(@CorrelationId)), ''),
+        NULLIF(LTRIM(RTRIM(@ArtifactHash)), ''),
+        NULLIF(LTRIM(RTRIM(@ArtifactHashAlgorithm)), ''),
+        NULLIF(LTRIM(RTRIM(@ArtifactContentType)), ''),
+        NULLIF(LTRIM(RTRIM(@ArtifactType)), ''),
+        NULLIF(LTRIM(RTRIM(@SourceSystem)), ''),
+        @CollectedAtUtc,
+        LOWER(LTRIM(RTRIM(@VerificationStatus))),
+        NULLIF(LTRIM(RTRIM(@VerificationNotes)), ''),
+        NULLIF(LTRIM(RTRIM(@VerifiedByUserId)), ''),
+        @VerifiedAtUtc,
+        @ExpiresAtUtc,
+        NULLIF(LTRIM(RTRIM(@SupersededByEvidenceId)), '')
     );
 
     SELECT *
     FROM dbo.PlatformCatalogCertificationEvidence
     WHERE EvidenceId = @EvidenceId;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_catalogcertification_verify
+    @EvidenceId NVARCHAR(64),
+    @Status NVARCHAR(50),
+    @VerificationStatus NVARCHAR(50),
+    @VerificationNotes NVARCHAR(1000) = NULL,
+    @VerifiedByUserId NVARCHAR(200),
+    @VerifiedAtUtc DATETIME2(7),
+    @ExpiresAtUtc DATETIME2(7) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE dbo.PlatformCatalogCertificationEvidence
+    SET
+        Status = LOWER(LTRIM(RTRIM(@Status))),
+        VerificationStatus = LOWER(LTRIM(RTRIM(@VerificationStatus))),
+        VerificationNotes = NULLIF(LTRIM(RTRIM(@VerificationNotes)), ''),
+        VerifiedByUserId = LTRIM(RTRIM(@VerifiedByUserId)),
+        VerifiedAtUtc = @VerifiedAtUtc,
+        ExpiresAtUtc = @ExpiresAtUtc
+    WHERE EvidenceId = @EvidenceId;
+
+    SELECT *
+    FROM dbo.PlatformCatalogCertificationEvidence
+    WHERE EvidenceId = @EvidenceId;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_promotionmanifest_create
+    @ManifestId NVARCHAR(64),
+    @ManifestHash NVARCHAR(128),
+    @EnvironmentName NVARCHAR(100),
+    @Status NVARCHAR(50),
+    @ChangeIdsJson NVARCHAR(MAX),
+    @EvidenceIdsJson NVARCHAR(MAX),
+    @GateSummaryJson NVARCHAR(MAX),
+    @RollbackOfManifestId NVARCHAR(64) = NULL,
+    @RelatedIncidentId NVARCHAR(100) = NULL,
+    @Notes NVARCHAR(1000) = NULL,
+    @CreatedByUserId NVARCHAR(200),
+    @IssuedByUserId NVARCHAR(200),
+    @CorrelationId NVARCHAR(100) = NULL,
+    @CreatedAtUtc DATETIME2(7),
+    @IssuedAtUtc DATETIME2(7)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO dbo.PlatformCatalogPromotionManifest
+    (
+        ManifestId,
+        ManifestHash,
+        EnvironmentName,
+        Status,
+        ChangeIdsJson,
+        EvidenceIdsJson,
+        GateSummaryJson,
+        RollbackOfManifestId,
+        RelatedIncidentId,
+        Notes,
+        CreatedByUserId,
+        IssuedByUserId,
+        CorrelationId,
+        CreatedAtUtc,
+        IssuedAtUtc
+    )
+    VALUES
+    (
+        @ManifestId,
+        @ManifestHash,
+        LTRIM(RTRIM(@EnvironmentName)),
+        LOWER(LTRIM(RTRIM(@Status))),
+        @ChangeIdsJson,
+        @EvidenceIdsJson,
+        @GateSummaryJson,
+        NULLIF(LTRIM(RTRIM(@RollbackOfManifestId)), ''),
+        NULLIF(LTRIM(RTRIM(@RelatedIncidentId)), ''),
+        NULLIF(LTRIM(RTRIM(@Notes)), ''),
+        LTRIM(RTRIM(@CreatedByUserId)),
+        LTRIM(RTRIM(@IssuedByUserId)),
+        NULLIF(LTRIM(RTRIM(@CorrelationId)), ''),
+        @CreatedAtUtc,
+        @IssuedAtUtc
+    );
+
+    SELECT *
+    FROM dbo.PlatformCatalogPromotionManifest
+    WHERE ManifestId = @ManifestId;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_promotionmanifest_get
+    @ManifestId NVARCHAR(64)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT *
+    FROM dbo.PlatformCatalogPromotionManifest
+    WHERE ManifestId = @ManifestId;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_promotionmanifest_list
+    @EnvironmentName NVARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT *
+    FROM dbo.PlatformCatalogPromotionManifest
+    WHERE EnvironmentName = @EnvironmentName
+    ORDER BY IssuedAtUtc DESC;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_promotionattestation_create
+    @AttestationId NVARCHAR(64),
+    @ManifestId NVARCHAR(64),
+    @EnvironmentName NVARCHAR(100),
+    @State NVARCHAR(50),
+    @Notes NVARCHAR(1000) = NULL,
+    @EvidenceIdsJson NVARCHAR(MAX),
+    @ActorUserId NVARCHAR(200),
+    @AcceptedByUserId NVARCHAR(200) = NULL,
+    @CorrelationId NVARCHAR(100) = NULL,
+    @CreatedAtUtc DATETIME2(7)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO dbo.PlatformCatalogRolloutAttestation
+    (
+        AttestationId,
+        ManifestId,
+        EnvironmentName,
+        State,
+        Notes,
+        EvidenceIdsJson,
+        ActorUserId,
+        AcceptedByUserId,
+        CorrelationId,
+        CreatedAtUtc
+    )
+    VALUES
+    (
+        @AttestationId,
+        @ManifestId,
+        LTRIM(RTRIM(@EnvironmentName)),
+        LOWER(LTRIM(RTRIM(@State))),
+        NULLIF(LTRIM(RTRIM(@Notes)), ''),
+        @EvidenceIdsJson,
+        LTRIM(RTRIM(@ActorUserId)),
+        NULLIF(LTRIM(RTRIM(@AcceptedByUserId)), ''),
+        NULLIF(LTRIM(RTRIM(@CorrelationId)), ''),
+        @CreatedAtUtc
+    );
+
+    SELECT *
+    FROM dbo.PlatformCatalogRolloutAttestation
+    WHERE AttestationId = @AttestationId;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_platform_promotionattestation_list
+    @ManifestId NVARCHAR(64)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT *
+    FROM dbo.PlatformCatalogRolloutAttestation
+    WHERE ManifestId = @ManifestId
+    ORDER BY CreatedAtUtc ASC;
 END;
 GO

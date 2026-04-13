@@ -1,4 +1,4 @@
-# Operational Runtime Observability - Sprint 12
+# Operational Runtime Observability - Sprint 13
 
 Sprint 9 removes the legacy bridge/ChatPipeline execution path. Bridge metrics remain as historical instrumentation and to record explicit retired-legacy attempts, but there is no production bridge executor.
 
@@ -40,7 +40,9 @@ Catalog startup emits `PlatformCatalogSourceReport` with source mode, environmen
 
 Catalog mutation emits `PlatformCatalogMutationProposed` and governance/config-change audit events for submit, duplicate-submit replay, approve, reject, apply, and apply replay operations.
 
-Promotion gate results are deterministic API responses with `blockers`, `warnings`, `evidenceMissing`, source mode, environment, and production-like posture. Certification evidence capture stores operator, approver, correlation id, related change/incident ids, evidence kind, status, and evidence URI.
+Promotion gate results are deterministic API responses with `blockers`, `warnings`, `evidenceMissing`, `evidenceUntrusted`, source mode, environment, and production-like posture. Certification evidence capture stores operator, approver, correlation id, related change/incident ids, evidence kind, verification status, artifact metadata, status, and evidence URI.
+
+Promotion manifests and rollout attestations provide immutable provenance and append-only rollout state for audit review.
 
 Look for these fields:
 - `Path`: `supervisor`, `native`, `bridge`, or `approval`

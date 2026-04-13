@@ -1,4 +1,4 @@
-# Compatibility Debt Report - Sprint 12
+# Compatibility Debt Report - Sprint 13
 
 This document tracks transitional components that still exist after Sprint 9, plus the components removed or reduced during the sprint.
 
@@ -49,6 +49,15 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Certification evidence | Durable | Evidence capture/listing is SQL-backed through `PlatformCatalogCertificationEvidence`. |
 | Release observability | Extended | Promotion gate and certification evidence counters were added alongside SLO/alert/escalation definitions. |
 | Emergency fallback | More contained | Mixed/bootstrap-only source modes and break-glass changes are blocked by release gates for production-like promotion. |
+
+## Changed In Sprint 13
+
+| Component | Result | Notes |
+|-----------|--------|-------|
+| Evidence trust | Hardened | Evidence must be verified and accepted before it satisfies production-like promotion policy. |
+| Promotion history | Immutable manifest | Manifest identity and hash bind change ids, evidence ids, gate results, environment, and actors. |
+| Rollout history | Append-only | Rollout state is captured as attestation records instead of mutable notes. |
+| Audit review | Dossier-backed | Promotion dossiers make manifest/change/evidence/attestation lineage machine-readable. |
 
 ## Removed In Sprint 7
 
@@ -126,4 +135,4 @@ Current classifications:
 
 ## Sprint 12 Debt Priorities
 
-Completed in code. Remaining priorities are live staging/prod-like certification evidence, evidence artifact verification, operator training, and any future removal of non-runtime packages when packaging/diagnostic ownership no longer needs them.
+Completed in code. Remaining priorities are live staging/prod-like certification evidence, signed artifact-provider verification, operator training, and any future removal of non-runtime packages when packaging/diagnostic ownership no longer needs them.

@@ -39,6 +39,15 @@ Evidence statuses:
 
 ## Promotion Acceptance
 
-Production-like promotion is blocked until every configured evidence kind has at least one accepted record for that environment.
+Production-like promotion is blocked until every configured evidence kind has at least one trusted record for that environment.
+
+Sprint 13 trusted evidence requires:
+
+- lifecycle status accepted by a verifier or release authority,
+- `VerificationStatus=verified`,
+- allowed evidence URI prefix,
+- SHA-256 artifact hash,
+- source system and content metadata when supplied,
+- non-stale collection timestamp.
 
 Do not mark evidence as accepted unless it came from a real staging or prod-like execution. Synthetic unit test output is not live certification evidence.

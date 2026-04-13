@@ -1,6 +1,6 @@
 # Catalog Release Gates - Sprint 12
 
-Catalog changes must pass promotion gates before production-like rollout.
+Catalog changes must pass promotion gates and issue an immutable promotion manifest before production-like rollout.
 
 ## Gate Inputs
 
@@ -28,16 +28,19 @@ Promotion is blocked when any condition is true:
 - existing production-like change lacks expected version,
 - break-glass change lacks after-action evidence,
 - required certification evidence is missing.
+- required certification evidence is present but untrusted.
 
 ## CI/CD Usage
 
 1. Run preview gate with the proposed payload.
 2. Submit only if `isAllowed=true`.
 3. After approval, run change gate with `changeId`.
-4. Apply only if `isAllowed=true`.
-5. Record resulting evidence for staging/prod-like certification.
+4. Verify and accept required evidence.
+5. Issue a promotion manifest with the approved change ids and trusted evidence ids.
+6. Apply only with manifest-backed release approval.
+7. Record rollout attestations and completion evidence.
 
-The gate returns deterministic `blockers`, `warnings`, and `evidenceMissing` arrays for automation and operator review.
+The gate returns deterministic `blockers`, `warnings`, `evidenceMissing`, and `evidenceUntrusted` arrays for automation and operator review.
 
 ## Human Override
 

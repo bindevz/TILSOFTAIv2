@@ -43,6 +43,28 @@ public sealed class PlatformCatalogPromotionGateTests
     }
 
     [Fact]
+    public async Task EvaluateAsync_ShouldBlockProductionPromotion_WhenEvidenceIsAcceptedButUnverified()
+    {
+        var unverifiedEvidence = RequiredEvidence("prod")
+            .Select(item => item with
+            {
+                VerificationStatus = CatalogEvidenceVerificationStatus.Unverified,
+                ArtifactHash = string.Empty
+            })
+            .ToArray();
+        var gate = CreateGate(evidence: unverifiedEvidence);
+
+        var result = await gate.EvaluateAsync(
+            new CatalogPromotionGateRequest { EnvironmentName = "prod", IncludeCertificationEvidence = true },
+            Context(),
+            CancellationToken.None);
+
+        result.IsAllowed.Should().BeFalse();
+        result.Blockers.Should().Contain("catalog_certification_evidence_missing");
+        result.EvidenceUntrusted.Should().NotBeEmpty();
+    }
+
+    [Fact]
     public async Task EvaluateAsync_ShouldBlock_WhenPreviewFails()
     {
         var gate = CreateGate(
@@ -105,6 +127,7 @@ public sealed class PlatformCatalogPromotionGateTests
             controlPlane,
             mutationStore,
             certificationStore,
+            new PlatformCatalogEvidenceVerifier(Options.Create(new CatalogCertificationOptions { EnvironmentName = "prod" })),
             configuration,
             Options.Create(new PlatformCatalogOptions
             {
@@ -154,7 +177,18 @@ public sealed class PlatformCatalogPromotionGateTests
                 EvidenceKind = kind,
                 Status = CatalogCertificationEvidenceStatus.Accepted,
                 Summary = $"{kind} accepted",
-                OperatorUserId = "operator"
+                EvidenceUri = "https://evidence.example/CHG-123",
+                OperatorUserId = "operator",
+                ArtifactHash = new string('a', 64),
+                ArtifactHashAlgorithm = "sha256",
+                ArtifactContentType = "application/json",
+                ArtifactType = "runbook",
+                SourceSystem = "runbook",
+                CollectedAtUtc = DateTime.UtcNow,
+                VerificationStatus = CatalogEvidenceVerificationStatus.Verified,
+                VerifiedByUserId = "verifier",
+                VerifiedAtUtc = DateTime.UtcNow,
+                ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
             })
             .ToArray();
 
@@ -281,8 +315,14 @@ public sealed class PlatformCatalogPromotionGateTests
         public Task<IReadOnlyList<CatalogCertificationEvidenceRecord>> ListEvidenceAsync(string environmentName, CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<CatalogCertificationEvidenceRecord>>(_evidence);
 
+        public Task<CatalogCertificationEvidenceRecord?> GetEvidenceAsync(string evidenceId, CancellationToken ct) =>
+            Task.FromResult(_evidence.FirstOrDefault(item => string.Equals(item.EvidenceId, evidenceId, StringComparison.OrdinalIgnoreCase)));
+
         public Task<CatalogCertificationEvidenceRecord> CreateEvidenceAsync(CatalogCertificationEvidenceRecord evidence, CancellationToken ct) =>
             Task.FromResult(evidence);
+
+        public Task<CatalogCertificationEvidenceRecord> UpdateEvidenceVerificationAsync(string evidenceId, CatalogEvidenceVerificationResult result, CancellationToken ct) =>
+            throw new NotSupportedException();
     }
 
     private sealed class NoopMetricsService : IMetricsService

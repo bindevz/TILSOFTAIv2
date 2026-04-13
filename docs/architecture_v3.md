@@ -1,4 +1,4 @@
-# Architecture V3 - Sprint 12
+# Architecture V3 - Sprint 13
 
 ## Runtime Shape
 
@@ -26,6 +26,9 @@ Catalog control plane:
     -> IPlatformCatalogControlPlane
     -> IPlatformCatalogPromotionGate
     -> IPlatformCatalogCertificationStore
+    -> IPlatformCatalogEvidenceVerifier
+    -> IPlatformCatalogPromotionManifestService
+    -> IPlatformCatalogPromotionManifestStore
     -> IPlatformCatalogMutationStore
     -> PlatformCatalogChangeRequest
     -> PlatformCapabilityCatalog / PlatformExternalConnectionCatalog
@@ -112,6 +115,16 @@ Write path:
 | Release SLOs | Catalog control-plane SLO and escalation definitions are exposed through `GET /api/platform-catalog/slo-definitions`. |
 | Emergency path | Production fallback and break-glass are blocked by gate policy until real evidence and after-action review exist. |
 | Live certification | The code now stores and enforces evidence readiness; actual live drill execution remains an operational prerequisite before production promotion. |
+
+## Sprint 13 Ownership Changes
+
+| Area | Sprint 13 state |
+|------|-----------------|
+| Evidence trust | `IPlatformCatalogEvidenceVerifier` verifies evidence reference policy, SHA-256 hash metadata, source/content metadata, collection time, and expiry before evidence can become trusted. |
+| Promotion manifests | `IPlatformCatalogPromotionManifestService` issues immutable manifest records only after trusted evidence and successful promotion gate results. |
+| Rollout provenance | Rollout state is append-only attestation history, not mutable operator notes. |
+| Audit dossier | Promotion dossiers bind manifest, change records, evidence, attestations, hash verification, and audit warnings. |
+| Release path | Production-like rollout completion requires manifest-backed release proof and trusted attestation evidence. |
 
 ## Capabilities
 

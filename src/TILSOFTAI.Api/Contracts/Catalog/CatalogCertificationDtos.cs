@@ -6,12 +6,24 @@ public sealed class CatalogCertificationEvidenceApiRequest
 {
     public string EnvironmentName { get; init; } = string.Empty;
     public string EvidenceKind { get; init; } = string.Empty;
-    public string Status { get; init; } = CatalogCertificationEvidenceStatus.Pending;
+    public string Status { get; init; } = CatalogCertificationEvidenceStatus.Recorded;
     public string Summary { get; init; } = string.Empty;
     public string EvidenceUri { get; init; } = string.Empty;
     public string RelatedChangeId { get; init; } = string.Empty;
     public string RelatedIncidentId { get; init; } = string.Empty;
     public string ApprovedByUserId { get; init; } = string.Empty;
+    public string ArtifactHash { get; init; } = string.Empty;
+    public string ArtifactHashAlgorithm { get; init; } = "sha256";
+    public string ArtifactContentType { get; init; } = string.Empty;
+    public string ArtifactType { get; init; } = string.Empty;
+    public string SourceSystem { get; init; } = string.Empty;
+    public DateTime? CollectedAtUtc { get; init; }
+}
+
+public sealed class CatalogCertificationEvidenceVerifyApiRequest
+{
+    public bool AcceptAsTrusted { get; init; }
+    public string VerificationNotes { get; init; } = string.Empty;
 }
 
 public sealed class CatalogPromotionGateApiRequest
@@ -27,5 +39,41 @@ public sealed class CatalogPromotionGateApiRequest
         ChangeId = ChangeId,
         MutationPreview = MutationPreview?.ToMutationRequest(),
         IncludeCertificationEvidence = IncludeCertificationEvidence
+    };
+}
+
+public sealed class CatalogPromotionManifestIssueApiRequest
+{
+    public string EnvironmentName { get; init; } = string.Empty;
+    public string[] ChangeIds { get; init; } = Array.Empty<string>();
+    public string[] EvidenceIds { get; init; } = Array.Empty<string>();
+    public string RollbackOfManifestId { get; init; } = string.Empty;
+    public string RelatedIncidentId { get; init; } = string.Empty;
+    public string Notes { get; init; } = string.Empty;
+
+    public CatalogPromotionManifestIssueRequest ToIssueRequest() => new()
+    {
+        EnvironmentName = EnvironmentName,
+        ChangeIds = ChangeIds,
+        EvidenceIds = EvidenceIds,
+        RollbackOfManifestId = RollbackOfManifestId,
+        RelatedIncidentId = RelatedIncidentId,
+        Notes = Notes
+    };
+}
+
+public sealed class CatalogRolloutAttestationApiRequest
+{
+    public string State { get; init; } = string.Empty;
+    public string Notes { get; init; } = string.Empty;
+    public string[] EvidenceIds { get; init; } = Array.Empty<string>();
+    public string AcceptedByUserId { get; init; } = string.Empty;
+
+    public CatalogRolloutAttestationRequest ToAttestationRequest() => new()
+    {
+        State = State,
+        Notes = Notes,
+        EvidenceIds = EvidenceIds,
+        AcceptedByUserId = AcceptedByUserId
     };
 }

@@ -12,6 +12,7 @@ Production fallback re-enable requires:
 - clear rollback plan,
 - temporary configuration change with expiry,
 - accepted after-action evidence.
+- rollback or emergency promotion manifest when catalog state changes.
 
 Production-like `mixed` and `bootstrap_only` source modes block promotion by default.
 
@@ -24,6 +25,7 @@ Break-glass requires:
 - justification length meets policy,
 - incident id in the change note or evidence,
 - after-action evidence before subsequent promotion.
+- immutable promotion manifest and rollout attestation for any catalog change.
 
 Break-glass does not bypass audit. It increases audit requirements.
 

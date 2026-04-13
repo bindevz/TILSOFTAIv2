@@ -1,8 +1,8 @@
 # TILSOFTAI V3
 
-TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 12 adds promotion gates, certification evidence capture, control-plane SLO definitions, and emergency-path containment around the governed platform catalog.
+TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 13 adds verified evidence, immutable promotion manifests, rollout attestations, and audit dossiers around the governed platform catalog.
 
-## Current Runtime Shape (Sprint 12)
+## Current Runtime Shape (Sprint 13)
 
 ```text
 API / Hub / OpenAI surface
@@ -41,6 +41,8 @@ Catalog control plane:
     -> expected version + idempotency + risk policy
     -> IPlatformCatalogPromotionGate
     -> IPlatformCatalogCertificationStore
+    -> IPlatformCatalogPromotionManifestService
+    -> IPlatformCatalogPromotionManifestStore
     -> IPlatformCatalogMutationStore
     -> PlatformCatalogChangeRequest
     -> PlatformCapabilityCatalog / PlatformExternalConnectionCatalog
@@ -52,24 +54,23 @@ Write requests:
      -> SqlToolAdapter
 ```
 
-## Sprint 12 Changes
+## Sprint 13 Changes
 
-### Promotion gates and evidence
-- Added promotion gate evaluation for source mode, preview validity, approved-change safety, expected-version policy, and certification evidence.
-- Added certification evidence capture for runbook execution, failure drills, and operator sign-off.
-- Added SQL storage for certification evidence.
+### Evidence trust
+- Evidence lifecycle now distinguishes recorded, verified, accepted, expired, superseded, and rejected evidence.
+- Trusted evidence requires verification status, allowed evidence references, artifact hashes, source metadata, and collection timestamps.
 
-### SLOs and alerts
-- Added control-plane SLO definitions for preview, submit, approve, apply, and rollback readiness.
-- Added promotion gate and certification evidence metrics.
+### Promotion provenance
+- Added immutable promotion manifests with manifest hashes, change ids, evidence ids, gate summaries, actor identity, and environment.
+- Added append-only rollout attestations for issued, started, completed, failed, aborted, and superseded rollout states.
 
-### Emergency containment
-- Documented fallback re-enable and break-glass authorization policy.
-- Promotion gates block unsafe fallback posture and break-glass changes without after-action evidence.
+### Audit dossiers
+- Added deterministic dossier output for manifest, change, evidence, and attestation review.
+- Added docs for evidence integrity, manifest provenance, and audit bundle review.
 
 ### Release discipline
-- Catalog release gate docs define CI/CD blockers and deterministic operator-readable blocker codes.
-- Live certification docs define accepted evidence kinds without fabricating environment execution.
+- Production-like promotion now requires trusted evidence, not just accepted evidence metadata.
+- Production-like rollout completion requires trusted attestation evidence by default.
 
 ## Remaining Transitional Components
 
@@ -93,7 +94,10 @@ See `docs/compatibility_debt_report.md` and `docs/enterprise_readiness_gap_repor
 - `docs/catalog_failure_drills.md`
 - `docs/catalog_contract_schema_lifecycle.md`
 - `docs/catalog_live_certification_evidence.md`
+- `docs/catalog_evidence_integrity.md`
 - `docs/catalog_release_gates.md`
+- `docs/catalog_promotion_manifest_provenance.md`
+- `docs/catalog_promotion_audit_dossier.md`
 - `docs/catalog_control_plane_slos_alerts.md`
 - `docs/catalog_emergency_path_policy.md`
 - `docs/module_package_classification.md`

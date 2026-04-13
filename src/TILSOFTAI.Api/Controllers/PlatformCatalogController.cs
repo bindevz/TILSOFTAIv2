@@ -16,6 +16,9 @@ public sealed class PlatformCatalogController : ControllerBase
     private readonly IPlatformCatalogControlPlane _controlPlane;
     private readonly IPlatformCatalogPromotionGate _promotionGate;
     private readonly IPlatformCatalogCertificationStore _certificationStore;
+    private readonly IPlatformCatalogEvidenceVerifier _evidenceVerifier;
+    private readonly IPlatformCatalogPromotionManifestStore _manifestStore;
+    private readonly IPlatformCatalogPromotionManifestService _manifestService;
     private readonly IExecutionContextAccessor _contextAccessor;
     private readonly CatalogControlPlaneOptions _options;
     private readonly IMetricsService _metrics;
@@ -24,6 +27,9 @@ public sealed class PlatformCatalogController : ControllerBase
         IPlatformCatalogControlPlane controlPlane,
         IPlatformCatalogPromotionGate promotionGate,
         IPlatformCatalogCertificationStore certificationStore,
+        IPlatformCatalogEvidenceVerifier evidenceVerifier,
+        IPlatformCatalogPromotionManifestStore manifestStore,
+        IPlatformCatalogPromotionManifestService manifestService,
         IExecutionContextAccessor contextAccessor,
         IOptions<CatalogControlPlaneOptions> options,
         IMetricsService metrics)
@@ -31,6 +37,9 @@ public sealed class PlatformCatalogController : ControllerBase
         _controlPlane = controlPlane ?? throw new ArgumentNullException(nameof(controlPlane));
         _promotionGate = promotionGate ?? throw new ArgumentNullException(nameof(promotionGate));
         _certificationStore = certificationStore ?? throw new ArgumentNullException(nameof(certificationStore));
+        _evidenceVerifier = evidenceVerifier ?? throw new ArgumentNullException(nameof(evidenceVerifier));
+        _manifestStore = manifestStore ?? throw new ArgumentNullException(nameof(manifestStore));
+        _manifestService = manifestService ?? throw new ArgumentNullException(nameof(manifestService));
         _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(contextAccessor));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
@@ -143,7 +152,14 @@ public sealed class PlatformCatalogController : ControllerBase
             OperatorUserId = context.UserId,
             ApprovedByUserId = request.ApprovedByUserId?.Trim() ?? string.Empty,
             CorrelationId = context.CorrelationId,
-            CapturedAtUtc = DateTime.UtcNow
+            CapturedAtUtc = DateTime.UtcNow,
+            ArtifactHash = request.ArtifactHash?.Trim() ?? string.Empty,
+            ArtifactHashAlgorithm = request.ArtifactHashAlgorithm?.Trim() ?? "sha256",
+            ArtifactContentType = request.ArtifactContentType?.Trim() ?? string.Empty,
+            ArtifactType = request.ArtifactType?.Trim() ?? string.Empty,
+            SourceSystem = request.SourceSystem?.Trim() ?? string.Empty,
+            CollectedAtUtc = request.CollectedAtUtc,
+            VerificationStatus = CatalogEvidenceVerificationStatus.Unverified
         };
 
         var created = await _certificationStore.CreateEvidenceAsync(record, ct);
@@ -154,6 +170,111 @@ public sealed class PlatformCatalogController : ControllerBase
             ["status"] = created.Status
         });
         return CreatedAtAction(nameof(ListCertificationEvidence), new { environmentName = created.EnvironmentName }, created);
+    }
+
+    [HttpPost("certification-evidence/{evidenceId}/verify")]
+    public async Task<ActionResult<CatalogCertificationEvidenceRecord>> VerifyCertificationEvidence(
+        string evidenceId,
+        [FromBody] CatalogCertificationEvidenceVerifyApiRequest? request,
+        CancellationToken ct)
+    {
+        if (request is null)
+        {
+            return BadRequest("certification evidence verification request is required.");
+        }
+
+        var context = ToCatalogContext();
+        RequireAnyCatalogRole(context);
+        var evidence = await _certificationStore.GetEvidenceAsync(evidenceId, ct);
+        if (evidence is null)
+        {
+            return NotFound();
+        }
+
+        var result = _evidenceVerifier.Verify(evidence, context, request.AcceptAsTrusted, request.VerificationNotes);
+        var updated = await _certificationStore.UpdateEvidenceVerificationAsync(evidenceId, result, ct);
+        _metrics.IncrementCounter(MetricNames.PlatformCatalogCertificationEvidenceTotal, new Dictionary<string, string>
+        {
+            ["environment"] = updated.EnvironmentName,
+            ["evidence_kind"] = updated.EvidenceKind,
+            ["status"] = updated.Status
+        });
+
+        return Ok(updated);
+    }
+
+    [HttpGet("promotion-manifests")]
+    public async Task<ActionResult<IReadOnlyList<CatalogPromotionManifestRecord>>> ListPromotionManifests(
+        [FromQuery] string environmentName,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(environmentName))
+        {
+            return BadRequest("environmentName is required.");
+        }
+
+        RequireAnyCatalogRole(ToCatalogContext());
+        var records = await _manifestStore.ListManifestsAsync(environmentName.Trim(), ct);
+        return Ok(records);
+    }
+
+    [HttpGet("promotion-manifests/{manifestId}")]
+    public async Task<ActionResult<CatalogPromotionManifestRecord>> GetPromotionManifest(
+        string manifestId,
+        CancellationToken ct)
+    {
+        RequireAnyCatalogRole(ToCatalogContext());
+        var record = await _manifestStore.GetManifestAsync(manifestId, ct);
+        return record is null ? NotFound() : Ok(record);
+    }
+
+    [HttpPost("promotion-manifests")]
+    public async Task<ActionResult<CatalogPromotionManifestIssueResult>> IssuePromotionManifest(
+        [FromBody] CatalogPromotionManifestIssueApiRequest? request,
+        CancellationToken ct)
+    {
+        if (request is null)
+        {
+            return BadRequest("promotion manifest issue request is required.");
+        }
+
+        var context = ToCatalogContext();
+        RequireAnyCatalogRole(context);
+        var result = await _manifestService.IssueManifestAsync(request.ToIssueRequest(), context, ct);
+        if (!result.IsIssued || result.Manifest is null)
+        {
+            return BadRequest(result);
+        }
+
+        return CreatedAtAction(nameof(GetPromotionManifest), new { manifestId = result.Manifest.ManifestId }, result);
+    }
+
+    [HttpPost("promotion-manifests/{manifestId}/attestations")]
+    public async Task<ActionResult<CatalogRolloutAttestationResult>> RecordPromotionAttestation(
+        string manifestId,
+        [FromBody] CatalogRolloutAttestationApiRequest? request,
+        CancellationToken ct)
+    {
+        if (request is null)
+        {
+            return BadRequest("rollout attestation request is required.");
+        }
+
+        var context = ToCatalogContext();
+        RequireAnyCatalogRole(context);
+        var result = await _manifestService.RecordAttestationAsync(manifestId, request.ToAttestationRequest(), context, ct);
+        return result.IsRecorded ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpGet("promotion-manifests/{manifestId}/dossier")]
+    public async Task<ActionResult<CatalogPromotionDossier>> GetPromotionDossier(
+        string manifestId,
+        CancellationToken ct)
+    {
+        var context = ToCatalogContext();
+        RequireAnyCatalogRole(context);
+        var dossier = await _manifestService.GetDossierAsync(manifestId, context, ct);
+        return dossier is null ? NotFound() : Ok(dossier);
     }
 
     [HttpPost("changes/{changeId}/approve")]
@@ -231,7 +352,7 @@ public sealed class PlatformCatalogController : ControllerBase
 
         if (!IsKnownEvidenceStatus(request.Status))
         {
-            return BadRequest("status must be accepted, pending, or rejected.");
+            return BadRequest("status must be recorded, verified, accepted, expired, superseded, pending, or rejected.");
         }
 
         if (string.IsNullOrWhiteSpace(request.Summary))
@@ -244,6 +365,10 @@ public sealed class PlatformCatalogController : ControllerBase
 
     private static bool IsKnownEvidenceStatus(string status) =>
         string.Equals(status, CatalogCertificationEvidenceStatus.Accepted, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, CatalogCertificationEvidenceStatus.Recorded, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, CatalogCertificationEvidenceStatus.Verified, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, CatalogCertificationEvidenceStatus.Expired, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, CatalogCertificationEvidenceStatus.Superseded, StringComparison.OrdinalIgnoreCase)
         || string.Equals(status, CatalogCertificationEvidenceStatus.Pending, StringComparison.OrdinalIgnoreCase)
         || string.Equals(status, CatalogCertificationEvidenceStatus.Rejected, StringComparison.OrdinalIgnoreCase);
 }

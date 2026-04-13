@@ -1,4 +1,4 @@
-# Runtime Readiness - Sprint 12
+# Runtime Readiness - Sprint 13
 
 Readiness is split by runtime responsibility.
 
@@ -29,6 +29,8 @@ Catalog integrity failures are unhealthy and include validation error codes in h
 In production-like environments, `mixed` and `bootstrap_only` are unhealthy when strict posture is enabled. The default production configuration sets `AllowBootstrapConfigurationFallback=false` so durable catalog mode is the normal deployment expectation.
 
 Sprint 12 promotion gates use the same source-mode posture. A production-like deployment is blocked when the active catalog source mode is `mixed`, `bootstrap_only`, or `empty`.
+
+Sprint 13 release readiness adds manifest-backed rollout proof: production-like rollout completion should not be accepted unless a promotion manifest exists and completion attestation includes trusted evidence.
 
 ## Native Runtime Readiness
 

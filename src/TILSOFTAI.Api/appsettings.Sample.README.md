@@ -146,6 +146,15 @@ Production-like promotion requires accepted certification evidence before catalo
     "EnvironmentName": "prod",
     "ProductionLikeEnvironments": [ "prod", "production", "staging" ],
     "RequireCertificationEvidenceForProductionLikePromotion": true,
+    "RequireTrustedEvidenceForProductionLikePromotion": true,
+    "RequireArtifactHashForTrustedEvidence": true,
+    "RequireEvidenceUriForTrustedEvidence": true,
+    "RequireRolloutAttestationEvidenceForProductionLikeCompletion": true,
+    "MaxTrustedEvidenceAgeDays": 90,
+    "TrustedEvidenceStatuses": [ "accepted" ],
+    "AllowedEvidenceUriPrefixes": [ "https://evidence.example/" ],
+    "AllowedEvidenceContentTypes": [ "application/json", "application/pdf", "text/plain", "text/markdown" ],
+    "AllowedEvidenceSourceSystems": [ "ci", "runbook", "incident", "release" ],
     "RequiredEvidenceKinds": [
       "runbook_execution",
       "preview_failure_drill",
@@ -174,8 +183,14 @@ Promotion gate endpoints:
 - `GET /api/platform-catalog/slo-definitions`
 - `GET /api/platform-catalog/certification-evidence?environmentName=prod`
 - `POST /api/platform-catalog/certification-evidence`
+- `POST /api/platform-catalog/certification-evidence/{evidenceId}/verify`
+- `GET /api/platform-catalog/promotion-manifests?environmentName=prod`
+- `GET /api/platform-catalog/promotion-manifests/{manifestId}`
+- `POST /api/platform-catalog/promotion-manifests`
+- `POST /api/platform-catalog/promotion-manifests/{manifestId}/attestations`
+- `GET /api/platform-catalog/promotion-manifests/{manifestId}/dossier`
 
-The gate blocks unsafe source modes, failed previews, missing expected versions, unapproved changes, break-glass changes that lack after-action evidence, and missing certification evidence.
+The gate blocks unsafe source modes, failed previews, missing expected versions, unapproved changes, break-glass changes that lack after-action evidence, missing certification evidence, and untrusted certification evidence. Promotion manifests become the immutable release record after gate success and trusted evidence verification.
 
 The control plane stores pending changes in SQL before applying them to `PlatformCapabilityCatalog` or `PlatformExternalConnectionCatalog`. Each change must include an owner, change note, record type, operation, and record payload. Capability records must include an `ArgumentContract`; REST records must reference a configured external connection and secret references instead of raw secret values.
 

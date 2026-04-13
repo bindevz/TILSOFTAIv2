@@ -13,17 +13,30 @@ public static class CatalogCertificationEvidenceKinds
 
 public static class CatalogCertificationEvidenceStatus
 {
+    public const string Recorded = "recorded";
+    public const string Verified = "verified";
     public const string Accepted = "accepted";
+    public const string Expired = "expired";
+    public const string Superseded = "superseded";
     public const string Pending = "pending";
     public const string Rejected = "rejected";
 }
 
-public sealed class CatalogCertificationEvidenceRecord
+public static class CatalogEvidenceVerificationStatus
+{
+    public const string Unverified = "unverified";
+    public const string Verified = "verified";
+    public const string Failed = "failed";
+    public const string Expired = "expired";
+    public const string Superseded = "superseded";
+}
+
+public sealed record CatalogCertificationEvidenceRecord
 {
     public string EvidenceId { get; init; } = string.Empty;
     public string EnvironmentName { get; init; } = string.Empty;
     public string EvidenceKind { get; init; } = string.Empty;
-    public string Status { get; init; } = CatalogCertificationEvidenceStatus.Pending;
+    public string Status { get; init; } = CatalogCertificationEvidenceStatus.Recorded;
     public string Summary { get; init; } = string.Empty;
     public string EvidenceUri { get; init; } = string.Empty;
     public string RelatedChangeId { get; init; } = string.Empty;
@@ -32,6 +45,31 @@ public sealed class CatalogCertificationEvidenceRecord
     public string ApprovedByUserId { get; init; } = string.Empty;
     public string CorrelationId { get; init; } = string.Empty;
     public DateTime CapturedAtUtc { get; init; } = DateTime.UtcNow;
+    public string ArtifactHash { get; init; } = string.Empty;
+    public string ArtifactHashAlgorithm { get; init; } = "sha256";
+    public string ArtifactContentType { get; init; } = string.Empty;
+    public string ArtifactType { get; init; } = string.Empty;
+    public string SourceSystem { get; init; } = string.Empty;
+    public DateTime? CollectedAtUtc { get; init; }
+    public string VerificationStatus { get; init; } = CatalogEvidenceVerificationStatus.Unverified;
+    public string VerificationNotes { get; init; } = string.Empty;
+    public string VerifiedByUserId { get; init; } = string.Empty;
+    public DateTime? VerifiedAtUtc { get; init; }
+    public DateTime? ExpiresAtUtc { get; init; }
+    public string SupersededByEvidenceId { get; init; } = string.Empty;
+}
+
+public sealed class CatalogEvidenceVerificationResult
+{
+    public bool IsVerified { get; init; }
+    public string EvidenceId { get; init; } = string.Empty;
+    public string Status { get; init; } = CatalogCertificationEvidenceStatus.Recorded;
+    public string VerificationStatus { get; init; } = CatalogEvidenceVerificationStatus.Failed;
+    public string VerificationNotes { get; init; } = string.Empty;
+    public string VerifiedByUserId { get; init; } = string.Empty;
+    public DateTime VerifiedAtUtc { get; init; } = DateTime.UtcNow;
+    public DateTime? ExpiresAtUtc { get; init; }
+    public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
 }
 
 public sealed class CatalogPromotionGateRequest
@@ -53,6 +91,7 @@ public sealed class CatalogPromotionGateResult
     public IReadOnlyList<string> Blockers { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> EvidenceMissing { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> EvidenceUntrusted { get; init; } = Array.Empty<string>();
     public CatalogMutationPreviewResult? Preview { get; init; }
 }
 

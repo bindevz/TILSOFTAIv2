@@ -1,6 +1,6 @@
-# Enterprise Readiness Gap Report - Sprint 12
+# Enterprise Readiness Gap Report - Sprint 13
 
-Sprint 12 turns the governed catalog control plane into a certifiable production path. Promotion gates now block unsafe source modes, invalid previews, missing expected-version coverage, unsafe break-glass posture, and missing accepted evidence. The code can record and enforce certification readiness, but real staging/prod-like execution evidence is still required before claiming live certification.
+Sprint 13 turns the governed catalog control plane into a provenance-bearing production path. Evidence now has verification/trust semantics, promotion has immutable manifest identity, rollout state is append-only attestation history, and promotion dossiers provide a compliance review surface.
 
 ## Completed Through Sprint 7
 
@@ -48,6 +48,10 @@ Sprint 12 turns the governed catalog control plane into a certifiable production
 - Certification evidence has durable SQL storage and API capture/list endpoints.
 - Catalog control-plane SLO and alert/escalation definitions are exposed through API and documentation.
 - Release, live certification, fallback, and emergency-path runbooks now describe promotion-gate and evidence requirements.
+- Evidence verification requires allowed references, artifact hashes, source metadata, and non-stale collection timestamps before evidence becomes trusted.
+- Promotion manifests bind environment, change ids, evidence ids, gate results, actors, and manifest hash.
+- Rollout attestations preserve issued/started/completed/failed/aborted/superseded history.
+- Promotion dossiers expose manifest, changes, evidence, attestations, and machine-readable audit warnings.
 
 ## Remaining Enterprise Blockers
 
@@ -58,7 +62,7 @@ Sprint 12 turns the governed catalog control plane into a certifiable production
 | Module packages still physically exist | Their end-state is non-runtime, but physical removal is optional future cleanup. | Remove packages only when packaging/diagnostic ownership no longer needs them. |
 | SQL remains dominant | Most production capabilities are still SQL-backed even with two governed REST paths. | Continue adding governed non-SQL capabilities where production workflows require them. |
 | Contract richness still depends on capability shape | Schema lifecycle exists, but future records must keep using it consistently. | Enforce preview and contract review in catalog operations and evaluate JSON Schema artifacts when schemas become shared. |
-| Evidence acceptance still depends on operator discipline | The API records status and approver ids, but does not independently verify external evidence URLs. | Add evidence URI verification, artifact retention checks, or signed evidence bundles when compliance requires it. |
+| Evidence artifact content is not fetched or cryptographically compared to remote bytes | Sprint 13 verifies metadata, allowed references, and declared hashes, but does not download arbitrary evidence artifacts. | Add signed bundles or controlled artifact-provider integrations when compliance requires byte-level remote verification. |
 
 ## Verification Notes
 

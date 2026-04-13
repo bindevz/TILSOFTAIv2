@@ -21,6 +21,8 @@ The promotion gate exposes current SLO definitions at `GET /api/platform-catalog
 | Duplicate submit storm | 5 or more duplicate submits per hour | Platform on-call checks CI idempotency key reuse. |
 | Apply failure | 1 or more apply failures per hour | Platform/database on-call checks SQL availability and version drift. |
 | Rollback surge | 2 or more rollback-linked changes per hour | Incident commander opens after-action review. |
+| Untrusted evidence | Any production-like promotion has missing or untrusted required evidence | Release authority blocks manifest issuance. |
+| Rollout attestation gap | Production-like completion lacks trusted attestation evidence | Release manager blocks completion sign-off. |
 
 ## Metrics
 

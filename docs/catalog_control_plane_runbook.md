@@ -41,6 +41,10 @@ Production-like environments require two-person review and independent apply by 
 9. Operator applies with `POST /api/platform-catalog/changes/{changeId}/apply`.
 10. Verify `/health/ready` remains `platform` mode and the changed record resolves as expected.
 11. Record certification evidence with `POST /api/platform-catalog/certification-evidence` when the runbook or drill was actually executed in the target environment.
+12. Verify evidence with `POST /api/platform-catalog/certification-evidence/{evidenceId}/verify`.
+13. Issue a promotion manifest with `POST /api/platform-catalog/promotion-manifests`.
+14. Record rollout attestations with `POST /api/platform-catalog/promotion-manifests/{manifestId}/attestations`.
+15. Review `GET /api/platform-catalog/promotion-manifests/{manifestId}/dossier` before compliance sign-off.
 
 ## High-Risk Changes
 
@@ -70,6 +74,7 @@ Rollbacks are compensating catalog changes, not hidden rewrites.
 4. Include the current `ExpectedVersionTag`.
 5. Use the normal preview, submit, approve, and apply lifecycle.
 6. Run the promotion gate before applying the compensating change.
-7. Record rollback evidence and the original `RollbackOfChangeId`.
+7. Issue a rollback promotion manifest that references `rollbackOfManifestId`.
+8. Record rollback evidence and the original `RollbackOfChangeId`.
 
 This preserves auditability and avoids unreviewed metadata rewinds.

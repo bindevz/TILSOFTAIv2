@@ -1,0 +1,253 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 13.
+
+Baseline repository reality (after Sprint 12):
+- Sprint 9 already retired `LegacyChatPipelineBridge`, `ChatPipeline`, `ChatRequest`, and `ChatResult`.
+- Production capability and external connection records load from `catalog/platform-catalog.json`.
+- The catalog control plane already supports:
+  - preview
+  - submit
+  - approve
+  - reject
+  - apply
+- Mutation safety already includes:
+  - `ExpectedVersionTag`
+  - `IdempotencyKey`
+  - duplicate pending-change detection
+  - idempotent apply replay
+  - `RollbackOfChangeId`
+- Promotion gating already exists through `IPlatformCatalogPromotionGate`.
+- Certification evidence already exists through `IPlatformCatalogCertificationStore`.
+- The platform already exposes:
+  - promotion-gate evaluation
+  - certification evidence create/list
+  - SLO definitions
+- Production-like source posture is already strict:
+  - fallback disabled by default in production config
+  - `mixed` and `bootstrap_only` are blocked/unhealthy in production-like environments
+- Runbooks, failure drills, release gates, SLO docs, and emergency-path policy already exist.
+- Module packages are already constrained to non-runtime packaging/diagnostic residue.
+
+The platform is now extremely close to enterprise-grade.
+However, it is still not fully enterprise-grade because:
+- evidence can be captured, but not yet strongly verified,
+- evidence trust still depends too much on operator declaration,
+- release provenance is not yet represented as an immutable manifest,
+- rollout history is not yet strong enough for compliance-grade audit expectations,
+- promotion lineage from reviewed change to actual deployment is not yet explicit enough,
+- and audit/exportability of the promotion story is still weaker than a true enterprise operating platform should have.
+
+Sprint 13 mission:
+Turn the platform from “certifiable with evidence capture” into “trustworthy with verified evidence and immutable release provenance”.
+
+Primary objective:
+1. Add evidence integrity and verification semantics.
+2. Add immutable promotion manifests.
+3. Add rollout provenance and attestation.
+4. Upgrade evidence from metadata to a policy-bearing trust object.
+5. Add deterministic audit bundle / dossier capability.
+6. Harden release automation around manifests and trusted evidence.
+7. Tighten rollback and emergency provenance.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the runtime orchestration owner.
+2. Platform catalog remains the production source-of-truth.
+3. Promotion gate discipline must not weaken.
+4. Evidence presence is no longer enough; evidence trustworthiness now matters.
+5. Immutable records are preferred over mutable notes.
+6. Release provenance must be explicit and reconstructible.
+7. Emergency paths must remain rare, visible, and fully attributable.
+8. Compliance-grade trust is now the main differentiator for Sprint 13.
+9. Do not add new product breadth unless it directly improves trust, provenance, or operational evidence.
+10. Sprint 13 success is measured by immutable release proof, not runtime novelty.
+
+Primary Sprint 13 goals:
+
+A. Add evidence integrity and verification
+- Introduce an evidence lifecycle stronger than:
+  - accepted
+  - pending
+  - rejected
+- Consider explicit states such as:
+  - recorded
+  - verified
+  - accepted
+  - expired
+  - superseded
+  - rejected
+- Expand evidence metadata to include where appropriate:
+  - artifact hash
+  - artifact type
+  - source system
+  - collected timestamp
+  - verifier identity
+  - verification status
+- Add policy checks so production-like promotion requires trusted evidence, not merely present evidence.
+- Validate evidence references more strictly than plain free-form operator input.
+
+B. Add immutable promotion manifests
+- Create a durable promotion manifest model that binds together:
+  - environment
+  - change ids
+  - preview or approved-change posture
+  - expected versions
+  - evidence ids
+  - approvers
+  - operators
+  - timestamps
+  - manifest identity/hash
+  - rollout outcome
+- Promotion manifests must be immutable after issuance.
+- Promotion manifests must become first-class release records.
+
+C. Add rollout provenance and attestation
+- Track lineage from approved catalog change to actual environment rollout.
+- Add rollout state progression such as:
+  - planned
+  - issued
+  - started
+  - completed
+  - failed
+  - aborted
+  - superseded
+- Record who initiated, who executed, and who accepted rollout completion.
+- Tie rollout provenance back to evidence and manifest identity.
+
+D. Upgrade auditability to compliance-grade
+- Add deterministic audit bundle / dossier output for a promotion or rollback.
+- Bundle should be able to answer:
+  - what changed
+  - why it changed
+  - who approved it
+  - what evidence supported it
+  - what was promoted
+  - where it was promoted
+  - whether rollback occurred
+- Make the output stable enough for human review and machine processing.
+
+E. Harden release automation
+- Make manifest issuance part of the release path.
+- Require a successful promotion gate result before manifest issuance.
+- Require manifest presence before rollout completion in production-like environments.
+- Define CI/CD-friendly machine-readable blockers and outcomes.
+- Make bypass harder, not easier.
+
+F. Tighten rollback and emergency provenance
+- Rollback must reference:
+  - original change
+  - original promotion manifest
+  - compensating change
+  - after-action evidence if emergency-related
+- Emergency fallback and break-glass actions must produce attributable provenance records, not only narrative notes.
+
+G. Preserve enterprise-grade focus
+- Do not convert Sprint 13 into a feature sprint.
+- Do not spend the sprint on broad adapter or product expansion.
+- Only add runtime surface area if it materially improves release trust, evidence trust, or provenance.
+
+Non-negotiable rules:
+1. Do not weaken preview / submit / approve / apply / promotion-gate discipline.
+2. Do not trust external evidence links by default.
+3. Do not allow promotion manifests to be edited after issuance.
+4. Do not collapse reviewer / operator / verifier / approver responsibilities into vague status fields.
+5. Do not normalize emergency paths.
+6. Do not add compliance theater without real verification semantics.
+7. Do not let mutable comments become the primary source of rollout truth.
+8. Do not store secrets in manifests or evidence metadata.
+9. Prefer immutable identities, hashes, and explicit lineage over convenience.
+10. Keep remaining debt measurable and explicit.
+
+Explicitly in scope:
+- evidence integrity and verification
+- immutable promotion manifest model
+- rollout provenance and attestation
+- stronger evidence lifecycle states
+- deterministic audit bundle / dossier capability
+- release-path hardening with manifest requirements
+- rollback and emergency provenance
+- validation, tests, and runbook updates around the above
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- large adapter ecosystem expansion
+- product workflow expansion
+
+Recommended implementation order:
+1. Add evidence lifecycle and verification semantics.
+2. Add immutable promotion manifest storage and APIs.
+3. Add rollout provenance and completion states.
+4. Add audit bundle / dossier generation.
+5. Harden CI/CD and release-path enforcement around manifests.
+6. Strengthen rollback and emergency provenance.
+7. Delete any dead code revealed by the provenance work.
+
+Required architectural outcomes:
+1. Evidence is not only stored; it can be trusted at a policy level.
+2. Every production-like promotion has immutable manifest identity.
+3. Rollout lineage from approved change to deployed state is reconstructible.
+4. Audit review can consume a deterministic promotion dossier.
+5. Release automation is harder to bypass because trust-bearing artifacts are required.
+6. The remaining gap to true enterprise-grade is no longer trust/provenance/compliance structure.
+
+Definition of done:
+- Evidence lifecycle includes stronger trust semantics than simple accepted/pending/rejected.
+- Promotion manifests exist and are immutable.
+- Production-like rollout has explicit provenance and completion records.
+- A deterministic audit bundle or dossier can be generated or retrieved.
+- Promotion path requires manifest-based release proof.
+- Rollback and emergency actions preserve durable provenance.
+- The platform is more credible under compliance-style scrutiny after Sprint 13 than after Sprint 12.
+
+Must-fail conditions:
+- evidence is still effectively trusted on operator declaration alone
+- promotion history still lacks immutable manifest identity
+- rollout provenance is still reconstructible only through narrative reasoning
+- rollback lineage still lacks durable release records
+- release automation can still bypass trust-bearing artifacts too easily
+- Sprint 13 drifts into feature work without materially improving trust and provenance
+
+Preferred implementation style:
+- immutable records
+- explicit lineage
+- verified evidence
+- machine-readable policy
+- operator-usable audit outputs
+- strict governance
+- deletion over drift
+- no architecture theater
+
+Required deliverables:
+1. Evidence integrity and verification changes
+2. Immutable promotion manifest changes
+3. Rollout provenance and attestation changes
+4. Audit bundle / dossier changes
+5. CI/CD and release-path hardening changes
+6. Rollback and emergency provenance changes
+7. Validation / test / runbook updates
+
+Required reporting after implementation:
+1. Summary of Sprint 13 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Evidence integrity and verification changes
+6. Promotion manifest changes
+7. Rollout provenance and attestation changes
+8. Audit bundle / dossier changes
+9. CI/CD and release-path hardening changes
+10. Rollback and emergency provenance changes
+11. Validation / test / runbook improvements
+12. Remaining enterprise-grade blockers
+13. Recommended Sprint 14 priorities
+
+Final instruction:
+Sprint 13 is about evidence trust, immutable release records, and rollout provenance.
+
+Do not spend Sprint 13 adding runtime novelty.
+Do not turn Sprint 13 into a feature sprint.
+
+Spend it making release proof immutable, evidence trustworthy, rollout lineage explicit, and the platform credible under compliance-style scrutiny.

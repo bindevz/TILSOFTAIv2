@@ -120,6 +120,14 @@ BEGIN
 END;
 GO
 
+IF OBJECT_ID('dbo.CK_PlatformCatalogPromotionManifest_Status', 'C') IS NULL
+BEGIN
+    ALTER TABLE dbo.PlatformCatalogPromotionManifest
+        ADD CONSTRAINT CK_PlatformCatalogPromotionManifest_Status
+            CHECK (Status IN ('issued'));
+END;
+GO
+
 IF OBJECT_ID('dbo.PlatformCatalogCertificationEvidence', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.PlatformCatalogCertificationEvidence
@@ -152,11 +160,26 @@ BEGIN
 END;
 GO
 
+IF OBJECT_ID('dbo.CK_PlatformCatalogRolloutAttestation_State', 'C') IS NULL
+BEGIN
+    ALTER TABLE dbo.PlatformCatalogRolloutAttestation
+        ADD CONSTRAINT CK_PlatformCatalogRolloutAttestation_State
+            CHECK (State IN ('issued', 'started', 'completed', 'failed', 'aborted', 'superseded'));
+END;
+GO
+
+IF OBJECT_ID('dbo.CK_PlatformCatalogCertificationEvidence_Status', 'C') IS NOT NULL
+BEGIN
+    ALTER TABLE dbo.PlatformCatalogCertificationEvidence
+        DROP CONSTRAINT CK_PlatformCatalogCertificationEvidence_Status;
+END;
+GO
+
 IF OBJECT_ID('dbo.CK_PlatformCatalogCertificationEvidence_Status', 'C') IS NULL
 BEGIN
     ALTER TABLE dbo.PlatformCatalogCertificationEvidence
         ADD CONSTRAINT CK_PlatformCatalogCertificationEvidence_Status
-            CHECK (Status IN ('accepted', 'pending', 'rejected'));
+            CHECK (Status IN ('recorded', 'verified', 'accepted', 'expired', 'superseded', 'pending', 'rejected'));
 END;
 GO
 
@@ -170,5 +193,98 @@ BEGIN
                 AND LEN(LTRIM(RTRIM(Summary))) > 0
                 AND LEN(LTRIM(RTRIM(OperatorUserId))) > 0
             );
+END;
+GO
+
+IF COL_LENGTH('dbo.PlatformCatalogCertificationEvidence', 'ArtifactHash') IS NULL
+BEGIN
+    ALTER TABLE dbo.PlatformCatalogCertificationEvidence ADD
+        ArtifactHash NVARCHAR(128) NULL,
+        ArtifactHashAlgorithm NVARCHAR(40) NULL,
+        ArtifactContentType NVARCHAR(200) NULL,
+        ArtifactType NVARCHAR(100) NULL,
+        SourceSystem NVARCHAR(100) NULL,
+        CollectedAtUtc DATETIME2(7) NULL,
+        VerificationStatus NVARCHAR(50) NOT NULL CONSTRAINT DF_PlatformCatalogCertificationEvidence_VerificationStatus DEFAULT ('unverified'),
+        VerificationNotes NVARCHAR(1000) NULL,
+        VerifiedByUserId NVARCHAR(200) NULL,
+        VerifiedAtUtc DATETIME2(7) NULL,
+        ExpiresAtUtc DATETIME2(7) NULL,
+        SupersededByEvidenceId NVARCHAR(64) NULL;
+END;
+GO
+
+IF OBJECT_ID('dbo.CK_PlatformCatalogCertificationEvidence_VerificationStatus', 'C') IS NULL
+BEGIN
+    ALTER TABLE dbo.PlatformCatalogCertificationEvidence
+        ADD CONSTRAINT CK_PlatformCatalogCertificationEvidence_VerificationStatus
+            CHECK (VerificationStatus IN ('unverified', 'verified', 'failed', 'expired', 'superseded'));
+END;
+GO
+
+IF OBJECT_ID('dbo.PlatformCatalogPromotionManifest', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PlatformCatalogPromotionManifest
+    (
+        ManifestId NVARCHAR(64) NOT NULL CONSTRAINT PK_PlatformCatalogPromotionManifest PRIMARY KEY,
+        ManifestHash NVARCHAR(128) NOT NULL,
+        EnvironmentName NVARCHAR(100) NOT NULL,
+        Status NVARCHAR(50) NOT NULL,
+        ChangeIdsJson NVARCHAR(MAX) NOT NULL,
+        EvidenceIdsJson NVARCHAR(MAX) NOT NULL,
+        GateSummaryJson NVARCHAR(MAX) NOT NULL,
+        RollbackOfManifestId NVARCHAR(64) NULL,
+        RelatedIncidentId NVARCHAR(100) NULL,
+        Notes NVARCHAR(1000) NULL,
+        CreatedByUserId NVARCHAR(200) NOT NULL,
+        IssuedByUserId NVARCHAR(200) NOT NULL,
+        CorrelationId NVARCHAR(100) NULL,
+        CreatedAtUtc DATETIME2(7) NOT NULL CONSTRAINT DF_PlatformCatalogPromotionManifest_CreatedAtUtc DEFAULT (SYSUTCDATETIME()),
+        IssuedAtUtc DATETIME2(7) NOT NULL CONSTRAINT DF_PlatformCatalogPromotionManifest_IssuedAtUtc DEFAULT (SYSUTCDATETIME())
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'UX_PlatformCatalogPromotionManifest_ManifestHash'
+      AND object_id = OBJECT_ID('dbo.PlatformCatalogPromotionManifest')
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_PlatformCatalogPromotionManifest_ManifestHash
+        ON dbo.PlatformCatalogPromotionManifest (ManifestHash);
+END;
+GO
+
+IF OBJECT_ID('dbo.PlatformCatalogRolloutAttestation', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PlatformCatalogRolloutAttestation
+    (
+        AttestationId NVARCHAR(64) NOT NULL CONSTRAINT PK_PlatformCatalogRolloutAttestation PRIMARY KEY,
+        ManifestId NVARCHAR(64) NOT NULL,
+        EnvironmentName NVARCHAR(100) NOT NULL,
+        State NVARCHAR(50) NOT NULL,
+        Notes NVARCHAR(1000) NULL,
+        EvidenceIdsJson NVARCHAR(MAX) NOT NULL,
+        ActorUserId NVARCHAR(200) NOT NULL,
+        AcceptedByUserId NVARCHAR(200) NULL,
+        CorrelationId NVARCHAR(100) NULL,
+        CreatedAtUtc DATETIME2(7) NOT NULL CONSTRAINT DF_PlatformCatalogRolloutAttestation_CreatedAtUtc DEFAULT (SYSUTCDATETIME()),
+        CONSTRAINT FK_PlatformCatalogRolloutAttestation_Manifest
+            FOREIGN KEY (ManifestId) REFERENCES dbo.PlatformCatalogPromotionManifest (ManifestId)
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IX_PlatformCatalogRolloutAttestation_ManifestState'
+      AND object_id = OBJECT_ID('dbo.PlatformCatalogRolloutAttestation')
+)
+BEGIN
+    CREATE INDEX IX_PlatformCatalogRolloutAttestation_ManifestState
+        ON dbo.PlatformCatalogRolloutAttestation (ManifestId, State, CreatedAtUtc DESC);
 END;
 GO
