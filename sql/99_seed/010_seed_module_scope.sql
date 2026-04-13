@@ -14,8 +14,8 @@ INSERT INTO dbo.ModuleCatalog (ModuleKey, AppKey, Instruction, Priority, Languag
 VALUES
     ('model', '', 'Product models: dimensions, weight, CBM, pieces, materials, packaging, logistics metrics. Use for queries about specific model details, comparison, configuration, total model count, season model count, how many models. Examples: tổng số models, bao nhiêu model, model count by season.', 10, 'en'),
     ('model', '', N'Sản phẩm model: kích thước, trọng lượng, CBM, pieces, vật liệu, đóng gói, chỉ số logistics. Dùng cho câu hỏi về chi tiết model, so sánh, cấu hình, tổng số model, đếm model theo season, bao nhiêu model. Ví dụ: tổng số models, bao nhiêu model, model count by season.', 10, 'vi'),
-    ('analytics', '', 'Aggregate analytics: statistical queries across datasets like counts, sums, averages, grouping, filtering, time-series. Use for cross-domain aggregations and trend analysis. Prefer domain module if a dedicated tool exists (e.g., model_count belongs to model module).', 20, 'en'),
-    ('analytics', '', N'Phân tích tổng hợp: truy vấn thống kê trên datasets như đếm, tổng, trung bình, nhóm, lọc, thời gian. Dùng cho phân tích liên domain và xu hướng. Ưu tiên module chuyên biệt nếu có tool riêng (vd: model_count thuộc module model).', 20, 'vi'),
+    ('analytics', '', 'Aggregate analytics: statistical queries across datasets like counts, sums, averages, grouping, filtering, time-series. Use for cross-domain aggregations and trend analysis. Prefer a dedicated product-model tool when one exists, such as model_count.', 20, 'en'),
+    ('analytics', '', N'Phân tích tổng hợp: truy vấn thống kê trên datasets như đếm, tổng, trung bình, nhóm, lọc, thời gian. Dùng cho phân tích liên domain và xu hướng. Ưu tiên tool product-model chuyên biệt nếu có, ví dụ model_count.', 20, 'vi'),
     ('platform', '', 'System operations: diagnostics, action requests, tool listing, write actions requiring human approval.', 0, 'en'),
     ('platform', '', N'Thao tác hệ thống: chẩn đoán, yêu cầu hành động, danh sách công cụ, ghi dữ liệu cần phê duyệt.', 0, 'vi');
 GO
@@ -35,7 +35,7 @@ GO
 DELETE FROM dbo.ToolCatalogScope;
 GO
 
--- Model tools
+-- Product-model tools
 INSERT INTO dbo.ToolCatalogScope (ToolName, ModuleKey, AppKey)
 VALUES
     ('model_get_overview', 'model', ''),
@@ -75,7 +75,7 @@ GO
 DELETE FROM dbo.MetadataDictionaryScope;
 GO
 
--- Model metadata keys (from 004_seed_metadata_model.sql)
+-- Product-model metadata keys (from 004_seed_metadata_model.sql)
 INSERT INTO dbo.MetadataDictionaryScope (MetadataKey, ModuleKey, AppKey)
 VALUES
     ('Model.PieceCount', 'model', ''),

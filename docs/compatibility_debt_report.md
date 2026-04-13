@@ -1,4 +1,4 @@
-# Compatibility Debt Report - Sprint 14
+# Compatibility Debt Report - Sprint 19
 
 This document tracks transitional components that still exist after Sprint 9, plus the components removed or reduced during the sprint.
 
@@ -68,6 +68,14 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Live certification | Freshness-aware | Required evidence kinds can expire by freshness window. |
 | Audit retention | Policy-backed | Dossiers include retention snapshots and deterministic dossier hash. |
 
+## Changed In Sprint 19
+
+| Component | Result | Notes |
+|-----------|--------|-------|
+| Model module residue | Deleted | The obsolete Model module project and solution/API references were removed. |
+| Multi-Agent ownership language | Clarified | Runtime ownership is Supervisor + Domain Agents + Tool Adapters; technical model/provider concerns are not domain ownership. |
+| Module package classifications | Narrowed | Remaining package residue is limited to Platform packaging-only and Analytics diagnostic-only. |
+
 ## Removed In Sprint 7
 
 | Component | Result | Notes |
@@ -109,10 +117,10 @@ This document tracks transitional components that still exist after Sprint 9, pl
 
 | Field | Value |
 |-------|-------|
-| Status | Permanently non-runtime packaging/diagnostic residue; autoload disabled by default; package classifications are reported in health data |
+| Status | Permanently non-runtime diagnostic and narrow packaging residue; autoload disabled by default; package classifications are reported in health data |
 | Location | `src/TILSOFTAI.Infrastructure/Modules/*`, `src/TILSOFTAI.Orchestration/Modules/*` |
-| Why it exists | Diagnostic module health and existing module packages still use module loading when legacy autoload is explicitly enabled. |
-| What depends on it | `ModuleHealthCheck`, `ModuleLoaderHostedService`, module packages |
+| Why it exists | Diagnostic module health and the two remaining bounded module packages still use module loading only when legacy autoload is explicitly enabled. |
+| What depends on it | `ModuleHealthCheck`, `ModuleLoaderHostedService`, bounded Platform/Analytics package residue |
 | Removal condition | Optional future cleanup only; production capability ownership must remain in platform catalog/tool records. |
 
 Current classifications:
@@ -120,7 +128,6 @@ Current classifications:
 | Package | Classification |
 |---------|----------------|
 | `TILSOFTAI.Modules.Platform` | packaging-only |
-| `TILSOFTAI.Modules.Model` | packaging-only |
 | `TILSOFTAI.Modules.Analytics` | diagnostic-only |
 
 ### 2. Bootstrap Configuration Sources
@@ -142,6 +149,6 @@ Current classifications:
 | Why it exists | Unit and integration tests use constructor-driven capability sets. Production uses `CompositeCapabilityRegistry`. |
 | Removal condition | None required; may become internal test support in a later cleanup. |
 
-## Sprint 12 Debt Priorities
+## Current Debt Priorities
 
-Completed in code. Remaining priorities are live staging/prod-like certification evidence, signed bundle verification where required, operator training, and any future removal of non-runtime packages when packaging/diagnostic ownership no longer needs them.
+Completed in code. Remaining priorities are live staging/prod-like certification evidence, optional signed bundle verification where required, operator training, and future cleanup of Platform/Analytics residue when packaging or diagnostic ownership no longer needs it. The removed Model module must not be reintroduced as a technical module or pseudo-agent.

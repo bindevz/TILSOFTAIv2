@@ -59,7 +59,6 @@ BEGIN
     INSERT INTO dbo.ModuleRuntimeCatalog (ModuleKey, AssemblyName, IsEnabled, Environment, TenantId, Priority)
     VALUES
         ('platform', 'TILSOFTAI.Modules.Platform', 1, NULL, NULL, 0),
-        ('model',    'TILSOFTAI.Modules.Model',    1, NULL, NULL, 10),
         ('analytics','TILSOFTAI.Modules.Analytics', 1, NULL, NULL, 20);
 END
 GO

@@ -1,0 +1,172 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 19.
+
+Baseline repository reality (after Sprint 18):
+- The platform is already enterprise-grade and high-assurance.
+- The runtime is supervisor-native and capability-native.
+- The README describes the runtime around `ISupervisorRuntime`, `IAgentRegistry`, `WarehouseAgent`, `AccountingAgent`, `GeneralChatAgent`, capability registries, and tool adapters.
+- The README also still says the runtime shape is “Sprint 14” and still lists transitional components such as module loader infrastructure and remaining module packages.
+- `docs/module_package_classification.md` explicitly classifies:
+  - `TILSOFTAI.Modules.Platform` as packaging-only
+  - `TILSOFTAI.Modules.Model` as packaging-only
+  - `TILSOFTAI.Modules.Analytics` as diagnostic-only
+- `docs/compatibility_debt_report.md` explicitly says module packages are permanently non-runtime packaging/diagnostic residue and repeats that `TILSOFTAI.Modules.Model` is packaging-only.
+- The trust / manifest / evidence / archive / durability story is already mature enough that the primary remaining debt is no longer release-governance maturity.
+- The primary remaining debt is architectural residue and semantic drift from the old module era.
+
+Sprint 19 mission:
+Remove `TILSOFTAI.Modules.Model` from the project and make the repository structurally consistent with the Multi-Agent architecture.
+
+Primary objective:
+1. Delete the Model module from the solution and repository.
+2. Remove all references, classifications, and assumptions tied to it.
+3. Tighten Multi-Agent ownership semantics so that Supervisor + Domain Agents + Tool Adapters are the only clear runtime ownership story.
+4. Update README and key architecture/debt docs to reflect the real current platform shape.
+5. Add lightweight regression protection against reintroducing the removed module identity.
+6. Keep Sprint 19 focused on architecture cleanup, not feature breadth.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the runtime orchestration owner.
+2. Domain Agents own business-domain routing and domain policy.
+3. Tool Adapters / infrastructure own execution boundaries and provider integration.
+4. Technical provider/model concerns are not a business-domain ownership boundary.
+5. A technical `Model` module is not aligned with the intended Multi-Agent architecture.
+6. Deleting obsolete structure is better than keeping misleading residue.
+7. Remaining residue, if any, must be intentionally justified and narrowly bounded.
+8. Sprint 19 success is measured by architectural honesty and clarity, not runtime novelty.
+9. Do not replace one technical module with another disguised as an agent.
+10. Do not turn Sprint 19 into a feature sprint.
+
+Primary Sprint 19 goals:
+
+A. Remove `TILSOFTAI.Modules.Model`
+- Delete the `TILSOFTAI.Modules.Model` project if it still exists.
+- Remove it from the solution file.
+- Remove project references, build references, config references, startup assumptions, health/reporting assumptions, packaging classifications, and docs references tied to it.
+- Ensure the repository builds and tests cleanly after removal.
+
+B. Enforce Multi-Agent ownership semantics
+- Make runtime ownership explicit:
+  - Supervisor = orchestration
+  - Domain Agents = business-domain control
+  - Tool Adapters / infrastructure = execution boundary
+- Do not replace the removed module with a `ModelAgent`, `ProviderAgent`, or similar technical pseudo-domain.
+- Keep model/provider integration in the correct layer unless there is a true business-domain reason otherwise.
+
+C. Remove documentation drift
+- Update `README.md` so it reflects the current platform state, not a Sprint 14 transition snapshot.
+- Update `docs/module_package_classification.md`.
+- Update `docs/compatibility_debt_report.md`.
+- Update any architecture or cleanup doc that still normalizes `TILSOFTAI.Modules.Model` as retained residue.
+
+D. Tighten repository assumptions
+- Ensure no health checks, diagnostics, tests, config, or startup messaging still assume the Model module exists.
+- Remove stale classification maps or compatibility wording where no longer justified.
+- Add a lightweight guardrail that helps prevent accidental reintroduction.
+
+E. Reclassify remaining residue honestly
+- After removing the Model module, explicitly decide what remains:
+  - whether `Platform` residue still has a justified packaging role,
+  - whether `Analytics` residue still has a justified diagnostic role.
+- Do not broaden those residue paths into future production ownership.
+
+F. Preserve enterprise-grade quality
+- Do not weaken trust, governance, manifests, archives, evidence verification, or runtime safety.
+- This sprint is structural cleanup, not control-plane regression.
+
+Non-negotiable rules:
+1. Do not replace `TILSOFTAI.Modules.Model` with a new technical module or technical pseudo-agent.
+2. Do not introduce `ModelAgent` as a shortcut to avoid real cleanup.
+3. Do not weaken Supervisor + Domain Agent + Tool Adapter boundaries.
+4. Do not leave stale documentation describing obsolete module-era ownership.
+5. Do not keep dead references “for convenience”.
+6. Do not break build, tests, or runtime startup while removing the module.
+7. Do not remove enterprise-grade safety controls during cleanup.
+8. Prefer deletion over reclassification when no future ownership role exists.
+9. Prefer explicit remaining-residue decisions over vague temporary wording.
+10. Do not turn Sprint 19 into a feature sprint.
+
+Explicitly in scope:
+- delete `TILSOFTAI.Modules.Model`
+- remove repository-wide references to it
+- update README and key architecture/debt docs
+- tighten build/test/config/health assumptions
+- clarify remaining residue boundaries
+- add lightweight regression protection
+
+Explicitly out of scope:
+- broad new platform features
+- major UI work
+- planner runtime
+- graph orchestration
+- large agent expansion
+- product workflow breadth
+
+Recommended implementation order:
+1. Inventory all `TILSOFTAI.Modules.Model` references.
+2. Remove project and solution references.
+3. Remove config / startup / health / classification references.
+4. Update README and architecture/debt docs.
+5. Add a lightweight regression guard.
+6. Remove small dead code revealed by the deletion.
+7. Validate build/test/docs consistency.
+
+Required architectural outcomes:
+1. `TILSOFTAI.Modules.Model` no longer exists as a supported project or structural concept.
+2. Multi-Agent ownership is clearer after the sprint than before it.
+3. No document suggests the Model module is a runtime ownership path.
+4. Remaining residue, if any, is smaller, explicit, and honestly justified.
+5. Enterprise-grade trust/governance/runtime quality is preserved.
+
+Definition of done:
+- The Model module is deleted.
+- No project/build/runtime/docs reference still depends on it.
+- README and key architecture docs reflect the actual current platform.
+- No new technical pseudo-agent replaces the old module.
+- A lightweight regression guard prevents casual reintroduction.
+- The repository is architecturally cleaner after Sprint 19 than after Sprint 18.
+
+Must-fail conditions:
+- `TILSOFTAI.Modules.Model` still exists in the solution or docs as a supported concept
+- docs still describe obsolete module-era routing/ownership
+- cleanup weakens runtime or governance behavior
+- the sprint replaces one technical-module confusion with another
+- Sprint 19 drifts into feature work without materially improving architectural clarity
+
+Preferred implementation style:
+- deletion over drift
+- explicit ownership semantics
+- narrow and justified residue
+- documentation honesty
+- build-safe cleanup
+- lightweight regression protection
+- no architecture theater
+
+Required deliverables:
+1. Model-module removal changes
+2. Multi-Agent semantic cleanup changes
+3. README / architecture / debt doc updates
+4. Regression guard changes
+5. Validation / build / test updates
+
+Required reporting after implementation:
+1. Summary of Sprint 19 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Model-module removal changes
+6. Multi-Agent semantic cleanup changes
+7. Documentation cleanup changes
+8. Regression guard changes
+9. Validation / build / test results
+10. Remaining residue or blockers
+11. Recommended Sprint 20 priorities
+
+Final instruction:
+Sprint 19 is about deleting obsolete structure and aligning the repository with the real Multi-Agent architecture.
+
+Do not spend Sprint 19 adding runtime novelty.
+Do not turn Sprint 19 into a feature sprint.
+
+Spend it removing `TILSOFTAI.Modules.Model`, cleaning repository semantics, and making Supervisor + Domain Agents + Tool Adapters the only clear ownership story.

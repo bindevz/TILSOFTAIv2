@@ -1,4 +1,4 @@
-# Enterprise Readiness Gap Report - Sprint 14
+# Enterprise Readiness Gap Report - Sprint 19
 
 Sprint 14 turns the governed catalog control plane into an artifact-verifiable production path. Evidence now has trust tiers, controlled-provider byte verification, freshness enforcement, retention snapshots, and hardened dossier hashes.
 
@@ -33,6 +33,7 @@ Sprint 14 turns the governed catalog control plane into an artifact-verifiable p
 - `/health/ready` reports platform catalog source mode and degrades on bootstrap fallback.
 - Startup emits catalog source mode metrics/logs; mutation emits catalog mutation metrics and governance/config-change audit events.
 - Remaining module packages are classified as packaging-only or diagnostic-only.
+- The obsolete Model module has been removed so technical model/provider concerns no longer appear as module ownership.
 - Production catalog records include explicit argument contracts, including no-argument contracts for summary/list capabilities.
 - Catalog preview validates mutation payloads before submit.
 - Existing-record mutation can require `ExpectedVersionTag` in production-like environments.
@@ -63,7 +64,7 @@ Sprint 14 turns the governed catalog control plane into an artifact-verifiable p
 |---------|----------------|-------------------------|
 | Catalog admin write path needs live certification | The platform now stores and enforces evidence, but the local implementation run did not execute real staging/prod-like drills. | Run the runbook and failure drills against staging/prod-like SQL with signed-off accepted evidence. |
 | Bootstrap fallback still exists as an emergency mechanism | Production config is stricter, but fallback code remains available for lower environments and emergencies. | Keep production fallback disabled by default and alert on any fallback source mode. |
-| Module packages still physically exist | Their end-state is non-runtime, but physical removal is optional future cleanup. | Remove packages only when packaging/diagnostic ownership no longer needs them. |
+| Bounded Platform/Analytics package residue still physically exists | Their end-state is non-runtime packaging/diagnostic support. | Remove remaining packages only when packaging/diagnostic ownership no longer needs them. |
 | SQL remains dominant | Most production capabilities are still SQL-backed even with two governed REST paths. | Continue adding governed non-SQL capabilities where production workflows require them. |
 | Contract richness still depends on capability shape | Schema lifecycle exists, but future records must keep using it consistently. | Enforce preview and contract review in catalog operations and evaluate JSON Schema artifacts when schemas become shared. |
 | Signed bundle verification is still reserved | Sprint 14 adds controlled provider byte verification, but not signed publisher validation. | Add `signature_verified` support when compliance requires publisher-signature proof. |

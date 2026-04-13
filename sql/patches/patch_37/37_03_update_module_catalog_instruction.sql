@@ -1,6 +1,6 @@
 -- ============================================================
 -- PATCH 37.03: Fix routing data (ModuleCatalog instruction) for 'model totals' use-case
--- Ensures ModuleScopeResolver includes 'model' for count/total prompts.
+-- Ensures legacy scope resolution includes product-model count/total prompts.
 -- ============================================================
 
 UPDATE dbo.ModuleCatalog

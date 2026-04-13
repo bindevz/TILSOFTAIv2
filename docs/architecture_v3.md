@@ -1,4 +1,4 @@
-# Architecture V3 - Sprint 14
+# Architecture V3 - Sprint 19
 
 ## Runtime Shape
 
@@ -8,8 +8,8 @@ API / Hub / OpenAI surface
      -> IIntentClassifier
      -> CapabilityRequestHint
      -> IAgentRegistry
-        -> WarehouseAgent          (native capability path: sql, rest-json)
-        -> AccountingAgent         (native capability path: sql, rest-json)
+        -> WarehouseAgent          (business-domain capability path: sql, rest-json)
+        -> AccountingAgent         (business-domain capability path: sql, rest-json)
         -> GeneralChatAgent        (native general response, unsupported/retired legacy responses)
 
 Native capability path:
@@ -136,6 +136,15 @@ Write path:
 | Retention | Promotion dossiers include retention snapshots for evidence, manifests, attestations, and dossier archives. |
 | Audit export | Dossiers include deterministic dossier hashes, evidence trust evaluations, and retention warnings. |
 
+## Sprint 19 Ownership Changes
+
+| Area | Sprint 19 state |
+|------|-----------------|
+| Model module residue | The Model module project is deleted and no longer appears in solution, API references, config, SQL seed, or live architecture docs. |
+| Runtime ownership | Supervisor owns orchestration; Domain Agents own business-domain routing and policy; Tool Adapters and infrastructure own execution/provider boundaries. |
+| Provider/model semantics | Technical provider/model concerns remain in infrastructure or tool-adapter code. They are not represented as a module, domain agent, or production ownership boundary. |
+| Remaining package residue | Platform remains packaging-only and Analytics remains diagnostic-only. Neither is a default runtime routing owner. |
+
 ## Capabilities
 
 | Key | Domain | Adapter | Binding |
@@ -187,6 +196,6 @@ Capabilities may specify `ArgumentContract`:
 
 Validation failure returns `CAPABILITY_ARGUMENT_VALIDATION_FAILED` before adapter resolution.
 
-## Transition State
+## Current State
 
-The native path is supervisor-driven, policy-gated, contract-validated, and adapter-backed. The bridge and ChatPipeline are retired. Remaining compatibility debt is limited to opt-in module diagnostics, bootstrap catalog fallback, and continued hardening of admin catalog operations.
+The native path is supervisor-driven, policy-gated, contract-validated, and adapter-backed. The bridge, ChatPipeline, and Model module are retired or deleted. Remaining compatibility debt is limited to opt-in module diagnostics, bootstrap catalog fallback, bounded Platform/Analytics package residue, and continued live operational certification.

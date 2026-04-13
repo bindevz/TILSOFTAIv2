@@ -1,8 +1,14 @@
 # TILSOFTAI V3
 
-TILSOFTAI is an internal AI platform powered by a supervisor-driven orchestration runtime. Sprint 14 adds provider-backed artifact verification, evidence trust tiers, freshness policy, retention snapshots, and hardened audit dossiers around the governed platform catalog.
+TILSOFTAI is an enterprise-grade internal AI platform with a supervisor-native, agent-native runtime. Runtime ownership is intentionally simple:
 
-## Current Runtime Shape (Sprint 14)
+- Supervisor orchestration owns request classification and agent dispatch.
+- Domain Agents own business-domain routing and policy.
+- Tool Adapters and infrastructure own execution boundaries, provider integration, persistence, and external connections.
+
+Technical provider/model concerns are not a business-domain ownership boundary. Production capability ownership lives in the platform catalog and adapter layer, not in module packages.
+
+## Current Runtime Shape
 
 ```text
 API / Hub / OpenAI surface
@@ -10,9 +16,9 @@ API / Hub / OpenAI surface
      -> IIntentClassifier
      -> CapabilityRequestHint
      -> IAgentRegistry
-        -> WarehouseAgent          (native capability path, SQL + REST/JSON)
-        -> AccountingAgent         (native capability path, SQL + REST/JSON)
-        -> GeneralChatAgent        (native general response, deterministic unsupported/retired legacy responses)
+        -> WarehouseAgent          (business-domain routing, SQL + REST/JSON capabilities)
+        -> AccountingAgent         (business-domain routing, SQL + REST/JSON capabilities)
+        -> GeneralChatAgent        (native general response and retired legacy notices)
 
 Native capability path:
   DomainAgent
@@ -46,6 +52,8 @@ Catalog control plane:
     -> IPlatformCatalogMutationStore
     -> PlatformCatalogChangeRequest
     -> PlatformCapabilityCatalog / PlatformExternalConnectionCatalog
+    -> signed evidence, promotion manifests, rollout attestations
+    -> managed durable dossier archive and signer trust recovery
 
 Write requests:
   -> IApprovalEngine (create -> approve -> execute lifecycle)
@@ -54,29 +62,25 @@ Write requests:
      -> SqlToolAdapter
 ```
 
-## Sprint 14 Changes
+## Current Assurance Posture
 
-### Artifact trust
-- Evidence now has trust tiers including metadata-verified and provider-verified.
-- The controlled artifact provider verifies `artifact://catalog-evidence/` bytes under a configured trusted root and compares SHA-256 hashes.
+- Platform catalog records are the production source of truth for capabilities and external connections.
+- Catalog mutations use preview, submit, independent review, approve/reject, and apply.
+- Promotion gates bind source mode, preview validity, approved change state, expected version posture, break-glass posture, and certification evidence.
+- Evidence verification supports provider-controlled artifact checks, RSA signatures, signer lifecycle snapshots, trust tiers, freshness policy, and retention policy.
+- Promotion manifests are immutable, rollout attestations are append-only, and audit dossiers are hash-bound.
+- Dossier archives and signer trust-store recovery support managed SQL durability with explicit backend class, retention posture, immutability posture, and custody metadata.
 
-### Freshness and policy
-- Production-like environments require provider-verified evidence by default.
-- Required certification evidence has per-kind freshness windows that block stale promotion.
+## Remaining Bounded Residue
 
-### Audit dossiers
-- Dossiers now include evidence trust evaluations, retention snapshots, and deterministic dossier hashes.
+These components remain intentionally narrow:
 
-### Release discipline
-- Release policy can require stronger trust tiers per environment.
-- Retention policy is executable review data, not only documentation.
-
-## Remaining Transitional Components
-
-These components remain intentionally bounded:
-- Module loader infrastructure: legacy diagnostic only and no longer autoloaded by default.
-- Module packages: still present for packaging/diagnostics with explicit classifications, but default request routing is supervisor-native and capability-native.
+- Module loader infrastructure: opt-in legacy diagnostic path only; it is not production routing ownership.
+- `TILSOFTAI.Modules.Platform`: packaging-only residue for bounded package metadata, not a runtime owner.
+- `TILSOFTAI.Modules.Analytics`: diagnostic-only residue for external/deep analytics validation boundaries, not `/health/ready`.
 - `InMemoryCapabilityRegistry`: test fixture only.
+
+The obsolete Model module was removed in Sprint 19. Do not reintroduce a technical model/provider module or pseudo-domain to own production behavior.
 
 See `docs/compatibility_debt_report.md` and `docs/enterprise_readiness_gap_report.md` for removal conditions and blockers.
 

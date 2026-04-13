@@ -21,6 +21,12 @@
 - `src/TILSOFTAI.Orchestration/Pipeline/ChatResult.cs`
 - `src/TILSOFTAI.Orchestration/Observability/ChatPipelineInstrumentation.cs`
 
+## Deleted In Sprint 19
+
+- obsolete Model module project file
+- obsolete Model module registration source
+- obsolete Model module tool handlers
+
 ## Remaining Deprecated Runtime Paths
 
 - `src/TILSOFTAI.Orchestration/Modules/IModuleScopeResolver.cs`
@@ -32,8 +38,12 @@
 ## Why These Are Not Deleted Yet
 
 - Bridge fallback and `ChatPipeline` were deleted in Sprint 9.
-- Module loader and module scope resolver remain for opt-in diagnostics and module package support.
+- Module loader and module scope resolver remain for opt-in diagnostics and bounded Platform/Analytics package support.
 - SQL-backed action request persistence remains the production approval persistence boundary.
+
+## Sprint 19 Cleanup Outcome
+
+The obsolete Model module is no longer a project or supported structural concept. Runtime ownership is now documented as Supervisor + Domain Agents + Tool Adapters, with provider/model execution concerns kept out of technical module ownership.
 
 ## Sprint 6 Cleanup Outcome
 

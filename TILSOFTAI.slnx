@@ -5,7 +5,6 @@
     <Project Path="src/TILSOFTAI.Infrastructure/TILSOFTAI.Infrastructure.csproj" />
     <Project Path="src/TILSOFTAI.Modules.Analytics/TILSOFTAI.Modules.Analytics.csproj" />
     <Project Path="src/TILSOFTAI.Modules.Core/TILSOFTAI.Modules.Core.csproj" />
-    <Project Path="src/TILSOFTAI.Modules.Model/TILSOFTAI.Modules.Model.csproj" />
     <Project Path="src/TILSOFTAI.Modules.Platform/TILSOFTAI.Modules.Platform.csproj" />
     <Project Path="src/TILSOFTAI.Orchestration/TILSOFTAI.Orchestration.csproj" />
   </Folder>

@@ -245,7 +245,6 @@ Module packages are no longer default runtime owners. Keep their status explicit
     "EnableLegacyAutoload": false,
     "Classifications": {
       "TILSOFTAI.Modules.Platform": "packaging-only",
-      "TILSOFTAI.Modules.Model": "packaging-only",
       "TILSOFTAI.Modules.Analytics": "diagnostic-only"
     }
   }

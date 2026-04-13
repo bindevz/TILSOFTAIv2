@@ -3,7 +3,7 @@ SET QUOTED_IDENTIFIER ON;
 GO
 
 -- =============================================
--- Patch 34.10: Seed Atomic Catalogs for Model module
+-- Patch 34.10: Seed atomic catalogs for product-model datasets
 -- Idempotent: Uses MERGE pattern
 -- =============================================
 
@@ -189,5 +189,5 @@ WHEN NOT MATCHED BY TARGET THEN
     VALUES (src.GraphKey, src.FromDatasetKey, src.ToDatasetKey, src.JoinType, src.JoinConditionTemplate, src.IsEnabled);
 GO
 
-PRINT 'Atomic catalog seed for Model module completed.';
+PRINT 'Atomic catalog seed for product-model datasets completed.';
 GO
