@@ -8,7 +8,6 @@ public static class ConfigurationSectionNames
     public const string Chat = "Chat";
     public const string Localization = "Localization";
     public const string Governance = "Governance";
-    public const string Modules = "Modules";
     public const string Observability = "Observability";
     public const string SensitiveData = "SensitiveData";
     public const string OpenTelemetry = "OpenTelemetry";

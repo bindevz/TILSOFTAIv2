@@ -33,7 +33,6 @@ using TILSOFTAI.Infrastructure.ExecutionContext;
 using TILSOFTAI.Infrastructure.Errors;
 using TILSOFTAI.Infrastructure.Http;
 using TILSOFTAI.Infrastructure.Normalization;
-using TILSOFTAI.Infrastructure.Modules;
 using TILSOFTAI.Infrastructure.Conversations;
 using TILSOFTAI.Infrastructure.Atomic;
 using TILSOFTAI.Infrastructure.Llm;
@@ -50,7 +49,6 @@ using TILSOFTAI.Orchestration.Caching;
 using TILSOFTAI.Orchestration.Compaction;
 using TILSOFTAI.Orchestration.Conversations;
 using TILSOFTAI.Orchestration.Llm;
-using TILSOFTAI.Orchestration.Modules;
 using TILSOFTAI.Orchestration.Normalization;
 using TILSOFTAI.Orchestration.Policies;
 using TILSOFTAI.Orchestration.Prompting;
@@ -269,14 +267,6 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<PlanOptimizer>();
         services.AddSingleton<AtomicDataEngine>();
 
-        services.AddSingleton<IModuleActivationProvider, SqlModuleActivationProvider>();
-#pragma warning disable CS0618 // Legacy diagnostic module loader; readiness uses NativeRuntimeHealthCheck.
-        services.AddSingleton<IModuleLoader, ModuleLoader>();
-        if (configuration.GetValue<bool>("Modules:EnableLegacyAutoload"))
-        {
-            services.AddHostedService<ModuleLoaderHostedService>();
-        }
-#pragma warning restore CS0618
         services.AddHostedService<ObservabilityPurgeHostedService>();
         services.AddHostedService<ErrorCatalogCoverageGuard>();
 
@@ -334,8 +324,7 @@ public static class AddTilsoftAiExtensions
             .AddCheck<CircuitBreakerHealthCheck>("circuits", tags: new[] { "ready", "resilience" })
             .AddCheck<ToolCatalogHealthCheck>("toolcatalog", tags: new[] { "ready", "runtime" })
             .AddCheck<PlatformCatalogHealthCheck>("platform-catalog", tags: new[] { "ready", "catalog" })
-            .AddCheck<NativeRuntimeHealthCheck>("native-runtime", tags: new[] { "ready", "runtime", "native" })
-            .AddCheck<ModuleHealthCheck>("modules", tags: new[] { "legacy", "diagnostic" });
+            .AddCheck<NativeRuntimeHealthCheck>("native-runtime", tags: new[] { "ready", "runtime", "native" });
         
         if (redisEnabled)
         {
@@ -466,10 +455,6 @@ public static class AddTilsoftAiExtensions
                 "Governance:ModelCallableSpPrefix must be 'ai_'.")
             .Validate(options => options.InternalSpPrefix == "app_",
                 "Governance:InternalSpPrefix must be 'app_'.")
-            .ValidateOnStart();
-
-        services.AddOptions<ModulesOptions>()
-            .Bind(configuration.GetSection(ConfigurationSectionNames.Modules))
             .ValidateOnStart();
 
         services.AddOptions<ObservabilityOptions>()

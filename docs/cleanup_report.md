@@ -27,23 +27,37 @@
 - obsolete Model module registration source
 - obsolete Model module tool handlers
 
-## Remaining Deprecated Runtime Paths
+## Deleted In Sprint 20
 
-- `src/TILSOFTAI.Orchestration/Modules/IModuleScopeResolver.cs`
-- `src/TILSOFTAI.Orchestration/Modules/ModuleScopeResolver.cs`
+- `src/TILSOFTAI.Api/Health/ModuleHealthCheck.cs`
+- `src/TILSOFTAI.Domain/Configuration/ModulesOptions.cs`
 - `src/TILSOFTAI.Infrastructure/Modules/IModuleLoader.cs`
 - `src/TILSOFTAI.Infrastructure/Modules/ModuleLoader.cs`
 - `src/TILSOFTAI.Infrastructure/Modules/ModuleLoaderHostedService.cs`
+- `src/TILSOFTAI.Infrastructure/Modules/SqlModuleActivationProvider.cs`
+- `src/TILSOFTAI.Orchestration/Modules/IModuleActivationProvider.cs`
+- `src/TILSOFTAI.Orchestration/Modules/IModuleScopeResolver.cs`
+- `src/TILSOFTAI.Orchestration/Modules/ModuleScopeResolver.cs`
+- `src/TILSOFTAI.Orchestration/Modules/ModuleScopeResult.cs`
+- `tests/TILSOFTAI.Tests/Modules/ModuleActivationTests.cs`
+
+## Remaining Deprecated Runtime Paths
+
+- Legacy SQL objects with `ModuleKey` naming are compatibility-only capability-scope storage.
 
 ## Why These Are Not Deleted Yet
 
 - Bridge fallback and `ChatPipeline` were deleted in Sprint 9.
-- Module loader and module scope resolver remain for opt-in diagnostics and bounded Platform/Analytics package support.
+- Module loader and module scope resolver were deleted in Sprint 20.
 - SQL-backed action request persistence remains the production approval persistence boundary.
 
 ## Sprint 19 Cleanup Outcome
 
 The obsolete Model module is no longer a project or supported structural concept. Runtime ownership is now documented as Supervisor + Domain Agents + Tool Adapters, with provider/model execution concerns kept out of technical module ownership.
+
+## Sprint 20 Cleanup Outcome
+
+API runtime no longer has a `Modules` configuration section, module autoload hosted service, module health check, module activation provider, or API references to Platform/Analytics package projects. SQL `ModuleKey` names remain only as compatibility names for capability-scope filtering.
 
 ## Sprint 6 Cleanup Outcome
 
@@ -54,4 +68,4 @@ Native runtime execution no longer depends on module scope resolution or the old
 - Native general/chat agent or equivalent fallback replacement.
 - Capability-pack loader for legacy tool catalog replacement.
 - Expanded non-SQL capability configuration and production endpoint policy.
-- Decision on whether module health remains a legacy diagnostic or is removed with module loading.
+- Future DB rename plan for legacy `ModuleKey` capability-scope columns and `@ModuleKeysJson` parameters.

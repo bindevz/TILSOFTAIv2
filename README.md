@@ -75,9 +75,9 @@ Write requests:
 
 These components remain intentionally narrow:
 
-- Module loader infrastructure: opt-in legacy diagnostic path only; it is not production routing ownership.
-- `TILSOFTAI.Modules.Platform`: packaging-only residue for bounded package metadata, not a runtime owner.
-- `TILSOFTAI.Modules.Analytics`: diagnostic-only residue for external/deep analytics validation boundaries, not `/health/ready`.
+- Legacy capability-scope SQL tables: compatibility-only; `ModuleKey` column names are not runtime ownership.
+- `TILSOFTAI.Modules.Platform`: solution-local package residue only; the API project no longer references or loads it.
+- `TILSOFTAI.Modules.Analytics`: solution-local diagnostic package residue only; the API project no longer references or loads it.
 - `InMemoryCapabilityRegistry`: test fixture only.
 
 The obsolete Model module was removed in Sprint 19. Do not reintroduce a technical model/provider module or pseudo-domain to own production behavior.

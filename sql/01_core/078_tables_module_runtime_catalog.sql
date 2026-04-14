@@ -1,6 +1,7 @@
--- ============================================================
--- PATCH 37.01: ModuleRuntimeCatalog — DB-driven module activation
--- Supports tenant/env enablement with priority-based resolution.
+﻿-- ============================================================
+-- PATCH 37.01 / SPRINT 20: ModuleRuntimeCatalog legacy compatibility surface
+-- SPRINT 20: LEGACY COMPATIBILITY ONLY.
+-- Production API startup no longer registers a module loader or consumes this catalog.
 -- ============================================================
 
 -- Table
@@ -23,7 +24,7 @@ BEGIN
 END
 GO
 
--- SP: resolve enabled modules for tenant/env
+-- Legacy SP: resolve enabled modules for tenant/env for historical tooling.
 CREATE OR ALTER PROCEDURE dbo.app_module_runtime_list
     @TenantId    nvarchar(50) = NULL,
     @Environment nvarchar(50) = NULL
@@ -53,12 +54,6 @@ BEGIN
 END
 GO
 
--- Seed baseline modules
-IF NOT EXISTS (SELECT 1 FROM dbo.ModuleRuntimeCatalog WHERE ModuleKey = 'platform' AND TenantId IS NULL AND Environment IS NULL)
-BEGIN
-    INSERT INTO dbo.ModuleRuntimeCatalog (ModuleKey, AssemblyName, IsEnabled, Environment, TenantId, Priority)
-    VALUES
-        ('platform', 'TILSOFTAI.Modules.Platform', 1, NULL, NULL, 0),
-        ('analytics','TILSOFTAI.Modules.Analytics', 1, NULL, NULL, 20);
-END
-GO
+-- No baseline rows are seeded. Legacy rows may exist in upgraded databases,
+-- but new deployments must not activate package projects as runtime modules.
+

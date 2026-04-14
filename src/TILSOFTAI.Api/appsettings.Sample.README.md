@@ -235,18 +235,6 @@ Optional safety fields:
 - `bootstrap_only`: bootstrap fallback is serving records.
 - `empty`: no catalog records are available.
 
-## Module Package Classification
+## Legacy Package Classification
 
-Module packages are no longer default runtime owners. Keep their status explicit in configuration:
-
-```json
-{
-  "Modules": {
-    "EnableLegacyAutoload": false,
-    "Classifications": {
-      "TILSOFTAI.Modules.Platform": "packaging-only",
-      "TILSOFTAI.Modules.Analytics": "diagnostic-only"
-    }
-  }
-}
-```
+Default runtime configuration does not include a module activation section. Platform and Analytics package projects remain solution-local compatibility packages only; production API startup resolves tools from native registries and the platform catalog.

@@ -204,12 +204,12 @@ public sealed class ToolCatalogSyncService : IScopedToolCatalogResolver
     }
 
     public async Task<IReadOnlyList<ToolDefinition>> GetScopedToolsAsync(
-        IReadOnlyList<string> moduleKeys,
+        IReadOnlyList<string> capabilityScopes,
         CancellationToken cancellationToken = default)
     {
-        if (moduleKeys is null || moduleKeys.Count == 0)
+        if (capabilityScopes is null || capabilityScopes.Count == 0)
         {
-            _logger.LogWarning("GetScopedToolsAsync called with empty moduleKeys. Falling back to global.");
+            _logger.LogWarning("GetScopedToolsAsync called with empty capability scopes. Falling back to global.");
             return await GetResolvedToolsAsync(cancellationToken);
         }
 
@@ -223,9 +223,9 @@ public sealed class ToolCatalogSyncService : IScopedToolCatalogResolver
             ? _localizationOptions.DefaultLanguage
             : _contextAccessor.Current.Language;
 
-        var modulesJson = System.Text.Json.JsonSerializer.Serialize(moduleKeys);
+        var capabilityScopesJson = System.Text.Json.JsonSerializer.Serialize(capabilityScopes);
 
-        var sqlTools = await LoadScopedSqlToolsAsync(tenantId, language, _localizationOptions.DefaultLanguage, modulesJson, cancellationToken);
+        var sqlTools = await LoadScopedSqlToolsAsync(tenantId, language, _localizationOptions.DefaultLanguage, capabilityScopesJson, cancellationToken);
         var registryTools = _toolRegistry.ListEnabled();
 
         var resolved = new List<ToolDefinition>();
@@ -244,8 +244,8 @@ public sealed class ToolCatalogSyncService : IScopedToolCatalogResolver
         }
 
         _logger.LogInformation(
-            "ScopedToolsResolved | Modules: [{Modules}] | ToolCount: {ToolCount}",
-            string.Join(", ", moduleKeys), resolved.Count);
+            "ScopedToolsResolved | CapabilityScopes: [{CapabilityScopes}] | ToolCount: {ToolCount}",
+            string.Join(", ", capabilityScopes), resolved.Count);
 
         return resolved;
     }
@@ -254,7 +254,7 @@ public sealed class ToolCatalogSyncService : IScopedToolCatalogResolver
         string tenantId,
         string language,
         string defaultLanguage,
-        string modulesJson,
+        string capabilityScopesJson,
         CancellationToken cancellationToken)
     {
         var results = new Dictionary<string, ToolCatalogEntry>(StringComparer.OrdinalIgnoreCase);
@@ -271,7 +271,7 @@ public sealed class ToolCatalogSyncService : IScopedToolCatalogResolver
         command.Parameters.Add(new SqlParameter("@TenantId", SqlDbType.NVarChar, 50) { Value = tenantId });
         command.Parameters.Add(new SqlParameter("@Language", SqlDbType.NVarChar, 10) { Value = language });
         command.Parameters.Add(new SqlParameter("@DefaultLanguage", SqlDbType.NVarChar, 10) { Value = string.IsNullOrWhiteSpace(defaultLanguage) ? "en" : defaultLanguage });
-        command.Parameters.Add(new SqlParameter("@ModulesJson", SqlDbType.NVarChar, -1) { Value = modulesJson });
+        command.Parameters.Add(new SqlParameter("@ModulesJson", SqlDbType.NVarChar, -1) { Value = capabilityScopesJson });
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))

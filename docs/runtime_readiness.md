@@ -45,13 +45,11 @@ The native check is domain-agnostic. It validates:
 
 It does not require warehouse/accounting-specific hardcoding.
 
-## Legacy Diagnostics
+## Retired Legacy Diagnostics
 
-`modules` health is tagged `legacy` and `diagnostic`, not `ready`.
+Module health and module autoload are no longer registered by API runtime. There is no default `Modules` configuration section.
 
-`Modules:EnableLegacyAutoload` controls whether the old module loader hosted service starts. When disabled, module health reports that legacy autoload is off and native readiness should be used for platform readiness.
-
-`ChatPipeline` and `LegacyChatPipelineBridge` are no longer part of readiness because they are deleted.
+`ChatPipeline`, `LegacyChatPipelineBridge`, module loader, and module scope resolver are no longer part of readiness because they are deleted.
 
 ## External Readiness
 

@@ -8,7 +8,7 @@ public interface IReActFollowUpRuleProvider
 {
     Task<IReadOnlyList<ReActFollowUpRule>> GetScopedRulesAsync(
         string tenantId,
-        IReadOnlyList<string> moduleKeys,
+        IReadOnlyList<string> capabilityScopes,
         string? appKey = null,
         CancellationToken ct = default);
 }

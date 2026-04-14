@@ -3,7 +3,7 @@ SET QUOTED_IDENTIFIER ON;
 GO
 
 -- =============================================
--- Seed: Module Catalog
+-- Seed: Legacy capability scope catalog
 -- =============================================
 
 -- Clear and re-seed (idempotent)
@@ -22,7 +22,7 @@ GO
 
 -- =============================================
 -- Seed: ToolCatalogScope
--- Maps each tool to its owning module
+-- Maps each tool to its capability scope. ModuleKey is a legacy column name.
 -- Tool names verified from seed files:
 --   002_seed_toolcatalog_core.sql: tool.list, atomic_execute_plan
 --   003_seed_toolcatalog_model.sql: model_get_overview, model_get_pieces,
@@ -66,7 +66,7 @@ GO
 
 -- =============================================
 -- Seed: MetadataDictionaryScope
--- Maps metadata keys to modules
+-- Maps metadata keys to capability scopes. ModuleKey is a legacy column name.
 -- Keys verified from seed files:
 --   004_seed_metadata_model.sql: Model.*, Material.*
 --   analytics/002_seed_metadata_dictionary_analytics.sql: analytics.*

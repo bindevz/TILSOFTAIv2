@@ -3,13 +3,14 @@ SET QUOTED_IDENTIFIER ON;
 GO
 
 -- =============================================
--- PACK 4: Module Scope Infrastructure
+-- SPRINT 20: Legacy compatibility capability-scope tables
 -- Creates: ModuleCatalog, ToolCatalogScope, MetadataDictionaryScope
--- Purpose: Enable per-module tool and metadata scoping
+-- Purpose: Preserve SQL compatibility for capability-scoped tool and metadata lookup.
+-- These tables are not runtime module ownership or activation catalogs.
 -- Idempotent: Safe to re-run
 -- =============================================
 
--- 1. ModuleCatalog: Registry of available modules with LLM-readable instructions
+-- 1. ModuleCatalog: Legacy capability-scope prompts.
 IF OBJECT_ID('dbo.ModuleCatalog', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.ModuleCatalog
@@ -28,7 +29,7 @@ BEGIN
 END;
 GO
 
--- 2. ToolCatalogScope: Maps tools to modules (many-to-many)
+-- 2. ToolCatalogScope: Maps tools to capability scopes (legacy ModuleKey column).
 IF OBJECT_ID('dbo.ToolCatalogScope', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.ToolCatalogScope
@@ -47,7 +48,7 @@ BEGIN
 END;
 GO
 
--- 3. MetadataDictionaryScope: Maps metadata keys to modules
+-- 3. MetadataDictionaryScope: Maps metadata keys to capability scopes (legacy ModuleKey column).
 IF OBJECT_ID('dbo.MetadataDictionaryScope', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.MetadataDictionaryScope

@@ -12,54 +12,54 @@ public sealed class ScopeWideningTests
     // ===== 37.02A: Entity-hint scope widening =====
 
     [Fact]
-    public void EntityHint_Model_ShouldNotAlreadyBeInModules()
+    public void EntityHint_Model_ShouldNotAlreadyBeInCapabilityScopes()
     {
-        // Simulates the condition where scope resolver didn't include 'model' but intent detector found it
-        var resolvedModules = new List<string> { "platform", "analytics" };
+        // Simulates the condition where capability scope detection did not include 'model' but intent detection found it.
+        var capabilityScopes = new List<string> { "platform", "analytics" };
         var entityHint = "model";
 
-        var needsWidening = !resolvedModules.Any(m =>
+        var needsWidening = !capabilityScopes.Any(m =>
             m.Equals(entityHint, StringComparison.OrdinalIgnoreCase));
 
         Assert.True(needsWidening);
     }
 
     [Fact]
-    public void EntityHint_Model_ShouldUnionIntoModules()
+    public void EntityHint_Model_ShouldUnionIntoCapabilityScopes()
     {
-        var resolvedModules = new List<string> { "platform", "analytics" };
+        var capabilityScopes = new List<string> { "platform", "analytics" };
         var entityHint = "model";
 
-        if (!resolvedModules.Any(m => m.Equals(entityHint, StringComparison.OrdinalIgnoreCase)))
+        if (!capabilityScopes.Any(m => m.Equals(entityHint, StringComparison.OrdinalIgnoreCase)))
         {
-            resolvedModules.Add(entityHint.ToLowerInvariant());
+            capabilityScopes.Add(entityHint.ToLowerInvariant());
         }
 
-        Assert.Contains("model", resolvedModules);
-        Assert.Equal(3, resolvedModules.Count);
+        Assert.Contains("model", capabilityScopes);
+        Assert.Equal(3, capabilityScopes.Count);
     }
 
     [Fact]
     public void EntityHint_AlreadyPresent_ShouldNotDuplicate()
     {
-        var resolvedModules = new List<string> { "platform", "model" };
+        var capabilityScopes = new List<string> { "platform", "model" };
         var entityHint = "model";
 
-        if (!resolvedModules.Any(m => m.Equals(entityHint, StringComparison.OrdinalIgnoreCase)))
+        if (!capabilityScopes.Any(m => m.Equals(entityHint, StringComparison.OrdinalIgnoreCase)))
         {
-            resolvedModules.Add(entityHint.ToLowerInvariant());
+            capabilityScopes.Add(entityHint.ToLowerInvariant());
         }
 
-        Assert.Equal(2, resolvedModules.Count);
+        Assert.Equal(2, capabilityScopes.Count);
     }
 
     [Fact]
     public void EntityHint_CaseInsensitive_ShouldMatch()
     {
-        var resolvedModules = new List<string> { "platform", "Model" };
+        var capabilityScopes = new List<string> { "platform", "Model" };
         var entityHint = "model";
 
-        var alreadyPresent = resolvedModules.Any(m =>
+        var alreadyPresent = capabilityScopes.Any(m =>
             m.Equals(entityHint, StringComparison.OrdinalIgnoreCase));
 
         Assert.True(alreadyPresent);

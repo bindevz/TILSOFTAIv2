@@ -1,0 +1,196 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 20.
+
+Baseline repository reality (after Sprint 19):
+- The platform is already enterprise-grade and high-assurance.
+- The runtime is described as supervisor-native, agent-native, and capability-native.
+- The README now states that:
+  - Supervisor owns orchestration,
+  - Domain Agents own business-domain routing and policy,
+  - Tool Adapters and infrastructure own execution boundaries and provider integration,
+  - provider/model concerns are not a business-domain ownership boundary.
+- The obsolete `TILSOFTAI.Modules.Model` project has been deleted from the repository and solution.
+- Remaining bounded residue is described as:
+  - `TILSOFTAI.Modules.Platform` = packaging-only
+  - `TILSOFTAI.Modules.Analytics` = diagnostic-only
+- A new architecture residue guard prevents reintroduction of the exact `TILSOFTAI.Modules.Model` identity.
+- However, the repository still carries legacy module substrate semantics in multiple places, including:
+  - `sql/99_seed/010_seed_module_scope.sql`
+  - `ModuleCatalog`
+  - `ToolCatalogScope`
+  - `MetadataDictionaryScope`
+  - `ModuleKey='model'`
+  - `Modules` configuration in appsettings
+  - module loader infrastructure that still exists as a legacy diagnostic path.
+
+Sprint 20 mission:
+Retire the remaining legacy module substrate and make the repository structurally consistent with Multi-Agent ownership all the way down.
+
+Primary objective:
+1. Remove active runtime dependence on module ownership semantics.
+2. Reduce or legacy-scope the `Modules` configuration surface.
+3. Quarantine or delete module loader infrastructure that is no longer justified.
+4. Re-home or narrow remaining Platform/Analytics residue.
+5. Strengthen architecture guardrails beyond a single exact forbidden module name.
+6. Update docs and migration notes so the post-module-substrate architecture is explicit.
+7. Keep Sprint 20 focused on substrate cleanup, not feature breadth.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the orchestration owner.
+2. Domain Agents own business-domain routing and policy.
+3. Tool Adapters / infrastructure own execution boundaries, providers, persistence, and external connections.
+4. Production runtime meaning should not be modeled through module ownership tables or module keys.
+5. Technical provider/model concerns are not a domain boundary and must not return through new pseudo-modules or pseudo-agents.
+6. Legacy compatibility surfaces may exist only when explicitly quarantined and clearly labeled.
+7. Remaining residue must be narrow, honest, and future-non-owning.
+8. Sprint 20 success is measured by substrate-level Multi-Agent consistency, not runtime novelty.
+9. Prefer runtime-accurate vocabulary such as domain, capability, dataset, adapter, or diagnostic residue over module.
+10. Do not turn Sprint 20 into a feature sprint.
+
+Primary Sprint 20 goals:
+
+A. Retire active module ownership semantics
+- Inventory and review every active dependency on:
+  - `ModuleCatalog`
+  - `ToolCatalogScope`
+  - `MetadataDictionaryScope`
+  - `ModuleKey`
+- Replace active ownership semantics with clearer non-module concepts where appropriate.
+- Preserve compatibility only where strictly necessary and explicitly legacy-scoped.
+- Ensure production behavior is no longer explained through module ownership.
+
+B. Reduce `Modules` configuration posture
+- Remove `Modules` from default production-facing runtime posture where feasible.
+- If some config must survive, move it under an explicitly legacy/diagnostic scope rather than a first-class normal runtime section.
+- Do not keep module configuration as a normal onboarding concept for future contributors.
+
+C. Quarantine or retire module loader infrastructure
+- Review module loader hosted service, module health, module scope resolution, and related infrastructure.
+- Delete what is no longer justified.
+- Any surviving parts must be clearly legacy diagnostic only and not production routing owners.
+
+D. Re-home remaining Platform/Analytics residue
+- Decide whether `TILSOFTAI.Modules.Platform` and `TILSOFTAI.Modules.Analytics` should remain, be re-homed, or be further narrowed.
+- Avoid preserving them as future-facing ownership structures.
+- Keep only what has a concrete, bounded reason to exist.
+
+E. Strengthen architecture anti-regression
+- Extend guardrails beyond the exact `TILSOFTAI.Modules.Model` string.
+- Detect reintroduction of:
+  - module ownership language in production docs,
+  - runtime dependencies on module identity,
+  - technical pseudo-domain agents for providers/models,
+  - or new module-era ownership patterns.
+- Keep checks practical and maintainable.
+
+F. Update documentation and migration notes
+- Update README, architecture, compatibility debt, cleanup docs, and any runbook impacted by the substrate cleanup.
+- Document what changed in SQL/config/runtime semantics.
+- Make the post-module-substrate architecture obvious.
+
+G. Preserve enterprise-grade behavior
+- Do not weaken evidence verification, promotion gates, manifests, attestation, archives, retention, recovery, or governed control plane behavior.
+- This sprint is semantic/runtime substrate cleanup, not governance regression.
+
+Non-negotiable rules:
+1. Do not reintroduce any technical provider/model module or pseudo-agent.
+2. Do not keep active module ownership semantics merely because they already exist.
+3. Do not let production config continue to teach obsolete module-era architecture.
+4. Do not remove compatibility paths silently; migrate or quarantine them explicitly.
+5. Do not weaken Supervisor + Domain Agent + Tool Adapter boundaries.
+6. Do not weaken enterprise-grade trust/governance/runtime controls during cleanup.
+7. Prefer runtime-accurate vocabulary over module-era terminology.
+8. Prefer explicit quarantine or deletion over vague temporary residue.
+9. Keep changes deterministic, migration-aware, and reviewable.
+10. Do not turn Sprint 20 into a feature sprint.
+
+Explicitly in scope:
+- retire active module ownership semantics
+- reduce or legacy-scope `Modules` config
+- quarantine or delete module loader infrastructure
+- re-home or narrow Platform/Analytics residue
+- broaden architecture guardrails
+- update docs and migration notes
+- validate build/test/runtime posture
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- large domain-agent expansion
+- workflow/product breadth expansion
+
+Recommended implementation order:
+1. Inventory active module-substrate dependencies.
+2. Replace or quarantine ownership semantics in SQL/config/runtime.
+3. Reduce `Modules` config posture.
+4. Re-home or narrow Platform/Analytics residue.
+5. Strengthen architecture anti-regression checks.
+6. Update docs and migration notes.
+7. Remove dead code revealed by the work.
+8. Validate build/tests/runtime posture.
+
+Required architectural outcomes:
+1. Active runtime semantics no longer depend on module ownership vocabulary.
+2. Default production config no longer normalizes modules as a first-class runtime structure.
+3. Remaining residue is smaller, more isolated, and more honestly named.
+4. Architecture guardrails are broader than the current exact-name-only check.
+5. Multi-Agent ownership is true in code, config, SQL semantics, and docs.
+6. Enterprise-grade controls remain intact.
+
+Definition of done:
+- Active runtime/module-substrate ownership semantics are retired or explicitly quarantined.
+- `Modules` runtime posture is reduced or legacy-scoped.
+- Module loader infrastructure is materially reduced or clearly isolated.
+- Remaining Platform/Analytics residue is narrower or better re-homed.
+- Guardrails are broader and more useful than the Sprint 19 version.
+- Docs and migration notes reflect the post-module-substrate reality.
+- The platform is cleaner after Sprint 20 than after Sprint 19 without losing enterprise-grade behavior.
+
+Must-fail conditions:
+- active runtime ownership still depends on module-key semantics without explicit quarantine
+- default config still presents modules as a normal runtime structure
+- remaining residue is still ambiguously future-facing
+- guardrails remain too narrow to catch obvious module-era drift
+- Sprint 20 drifts into feature work instead of substrate cleanup
+
+Preferred implementation style:
+- deletion or explicit quarantine
+- runtime-accurate naming
+- bounded compatibility
+- migration-safe cleanup
+- broader but practical guardrails
+- documentation honesty
+- no architecture theater
+
+Required deliverables:
+1. Runtime semantics cleanup changes
+2. Config/module-substrate cleanup changes
+3. Platform/Analytics residue changes
+4. Guardrail changes
+5. Documentation / migration note changes
+6. Validation / build / test updates
+
+Required reporting after implementation:
+1. Summary of Sprint 20 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Runtime semantics cleanup changes
+6. Config/module-substrate cleanup changes
+7. Platform/Analytics residue changes
+8. Guardrail changes
+9. Documentation / migration note changes
+10. Validation / build / test results
+11. Remaining blockers
+12. Recommended Sprint 21 priorities
+
+Final instruction:
+Sprint 20 is about retiring the remaining module substrate and making Multi-Agent true all the way down.
+
+Do not spend Sprint 20 adding runtime novelty.
+Do not turn Sprint 20 into a feature sprint.
+
+Spend it aligning code, config, SQL semantics, and diagnostics with the architecture the platform now claims to use.

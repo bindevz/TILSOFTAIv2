@@ -9,7 +9,7 @@ namespace TILSOFTAI.Infrastructure.Metadata;
 
 /// <summary>
 /// PATCH 36.03: Implements IScopedContextPackProvider — no mutable singleton state.
-/// Module scope is received via PromptBuildContext.ResolvedModules.
+/// Capability scope is received via PromptBuildContext.ResolvedCapabilityScopes.
 /// </summary>
 public sealed class MetadataDictionaryContextPackProvider : IScopedContextPackProvider
 {
@@ -32,26 +32,26 @@ public sealed class MetadataDictionaryContextPackProvider : IScopedContextPackPr
         TilsoftExecutionContext context,
         CancellationToken cancellationToken)
     {
-        return await GetContextPacksInternalAsync(context, modules: null, cancellationToken);
+        return await GetContextPacksInternalAsync(context, capabilityScopes: null, cancellationToken);
     }
 
     /// <summary>
-    /// PATCH 36.03: Scoped provider — uses buildContext.ResolvedModules (no mutable state).
+    /// PATCH 36.03: Scoped provider uses buildContext.ResolvedCapabilityScopes.
     /// </summary>
     public async Task<IReadOnlyDictionary<string, string>> GetContextPacksAsync(
         TilsoftExecutionContext context,
         PromptBuildContext buildContext,
         CancellationToken cancellationToken)
     {
-        var modules = buildContext.ResolvedModules is { Count: > 0 }
-            ? buildContext.ResolvedModules
+        var capabilityScopes = buildContext.ResolvedCapabilityScopes is { Count: > 0 }
+            ? buildContext.ResolvedCapabilityScopes
             : null;
-        return await GetContextPacksInternalAsync(context, modules, cancellationToken);
+        return await GetContextPacksInternalAsync(context, capabilityScopes, cancellationToken);
     }
 
     private async Task<IReadOnlyDictionary<string, string>> GetContextPacksInternalAsync(
         TilsoftExecutionContext context,
-        IReadOnlyList<string>? modules,
+        IReadOnlyList<string>? capabilityScopes,
         CancellationToken cancellationToken)
     {
         if (context is null)
@@ -65,15 +65,15 @@ public sealed class MetadataDictionaryContextPackProvider : IScopedContextPackPr
 
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;
 
-        if (modules is { Count: > 0 })
+        if (capabilityScopes is { Count: > 0 })
         {
-            // Scoped: use module-filtered SP
+            // Scoped: use the legacy SQL parameter name while callers use capability scope vocabulary.
             var scopedParams = new Dictionary<string, object?>
             {
                 ["@TenantId"] = string.IsNullOrWhiteSpace(context.TenantId) ? null : context.TenantId,
                 ["@Language"] = resolvedLanguage,
                 ["@DefaultLanguage"] = _localizationOptions.DefaultLanguage,
-                ["@ModulesJson"] = System.Text.Json.JsonSerializer.Serialize(modules)
+                ["@ModulesJson"] = System.Text.Json.JsonSerializer.Serialize(capabilityScopes)
             };
             rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_metadatadictionary_list_scoped", scopedParams, cancellationToken);
 

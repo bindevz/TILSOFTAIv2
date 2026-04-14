@@ -29,7 +29,7 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Bootstrap fallback | Visible operational state | Startup logs, metrics, and `/health/ready` now report `platform`, `mixed`, `bootstrap_only`, or `empty`. |
 | Catalog integrity | Enforced on load and mutation | Duplicate keys, unresolved REST connections, raw secrets, and missing contracts are reported as validation errors. |
 | No-argument capabilities | Explicit contracts | Summary/list capabilities now reject unexpected arguments through no-argument contracts. |
-| Module packages | Classified | Remaining module packages are marked `packaging-only` or `diagnostic-only` in `Modules:Classifications`. |
+| Module packages | Runtime-detached | Remaining package projects are solution-local compatibility artifacts and are not configured through API runtime. |
 
 ## Changed In Sprint 11
 
@@ -76,6 +76,15 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Multi-Agent ownership language | Clarified | Runtime ownership is Supervisor + Domain Agents + Tool Adapters; technical model/provider concerns are not domain ownership. |
 | Module package classifications | Narrowed | Remaining package residue is limited to Platform packaging-only and Analytics diagnostic-only. |
 
+## Removed In Sprint 20
+
+| Component | Result | Notes |
+|-----------|--------|-------|
+| Module loader runtime | Deleted from API runtime | API startup no longer registers the loader, hosted service, activation provider, module options, or module health check. |
+| API package references | Removed | The API project no longer references Platform or Analytics package projects. |
+| Module runtime seed | Removed | `ModuleRuntimeCatalog` remains compatibility-only and no longer seeds enabled package rows. |
+| Module scope resolver | Deleted | Prompt/tool/policy code now uses capability scope vocabulary; SQL keeps legacy parameter names only for compatibility. |
+
 ## Removed In Sprint 7
 
 | Component | Result | Notes |
@@ -87,7 +96,7 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Component | Result | Notes |
 |-----------|--------|-------|
 | `DomainAgentRegistry` | General fallback only | Unmatched agent resolution now returns `general-chat` instead of `legacy-chat`. |
-| `ModuleHealthCheck` | Legacy diagnostic only | Removed from `/health/ready`; still available on detailed/default health endpoints for diagnostics. |
+| Module health | Removed | Module health is not part of API runtime; use `native-runtime` and `platform-catalog`. |
 | `RestJsonToolAdapter` | Production adapter path | Binding validation, retry, timeout, auth metadata, and classified failures are implemented. |
 | Capability descriptors | Policy-aware | `RequiredRoles` and `AllowedTenants` gate native execution before adapter resolution. |
 
@@ -96,7 +105,7 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Component | Result | Notes |
 |-----------|--------|-------|
 | `LegacyChatPipelineBridge` | Explicit legacy only for normal production routing | Unmatched warehouse/accounting requests now return `DOMAIN_CAPABILITY_NOT_FOUND` instead of invoking the bridge. |
-| `ModuleLoaderHostedService` | Disabled by default | Starts only when `Modules:EnableLegacyAutoload=true`. |
+| Module loader hosted service | Removed | The API no longer has an autoload path or `Modules` config section. |
 | `NativeRuntimeHealthCheck` | Domain-agnostic | Uses all loaded capabilities and registered adapters rather than hardcoded warehouse/accounting checks. |
 | `RestJsonToolAdapter` | Secret-governed | Uses external connection catalog and `ISecretProvider`; rejects raw secret metadata. |
 | Capability descriptors | Contract-aware | Representative capabilities validate arguments before adapter resolution. |
@@ -113,22 +122,22 @@ This document tracks transitional components that still exist after Sprint 9, pl
 
 ## Remaining Compatibility Components
 
-### 1. Module Loader And Module Packages
+### 1. Legacy Capability-Scope SQL
 
 | Field | Value |
 |-------|-------|
-| Status | Permanently non-runtime diagnostic and narrow packaging residue; autoload disabled by default; package classifications are reported in health data |
-| Location | `src/TILSOFTAI.Infrastructure/Modules/*`, `src/TILSOFTAI.Orchestration/Modules/*` |
-| Why it exists | Diagnostic module health and the two remaining bounded module packages still use module loading only when legacy autoload is explicitly enabled. |
-| What depends on it | `ModuleHealthCheck`, `ModuleLoaderHostedService`, bounded Platform/Analytics package residue |
-| Removal condition | Optional future cleanup only; production capability ownership must remain in platform catalog/tool records. |
+| Status | Compatibility-only |
+| Location | `sql/01_core/070_tables_module_scope.sql`, `sql/01_core/073_tables_runtime_policy.sql`, `sql/01_core/074_tables_react_followup_rule.sql` |
+| Why it exists | Existing stored procedures and upgraded databases still use `ModuleKey` and `@ModuleKeysJson` names for capability-scope filtering. |
+| What depends on it | Tool catalog, metadata dictionary, runtime policy, and ReAct follow-up compatibility procedures. |
+| Removal condition | A future DB migration can rename columns/parameters after all deployed databases and clients stop depending on the legacy names. |
 
 Current classifications:
 
 | Package | Classification |
 |---------|----------------|
-| `TILSOFTAI.Modules.Platform` | packaging-only |
-| `TILSOFTAI.Modules.Analytics` | diagnostic-only |
+| `TILSOFTAI.Modules.Platform` | solution-local compatibility package, not referenced by API |
+| `TILSOFTAI.Modules.Analytics` | solution-local diagnostic package, not referenced by API |
 
 ### 2. Bootstrap Configuration Sources
 

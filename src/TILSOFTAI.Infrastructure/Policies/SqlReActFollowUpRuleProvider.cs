@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -33,13 +33,13 @@ public sealed class SqlReActFollowUpRuleProvider : IReActFollowUpRuleProvider
 
     public async Task<IReadOnlyList<ReActFollowUpRule>> GetScopedRulesAsync(
         string tenantId,
-        IReadOnlyList<string> moduleKeys,
+        IReadOnlyList<string> capabilityScopes,
         string? appKey = null,
         CancellationToken ct = default)
     {
-        // PATCH 36.05: Canonical cache key — sort module keys for determinism
-        var sortedModules = moduleKeys.OrderBy(m => m, StringComparer.OrdinalIgnoreCase).ToList();
-        var cacheKey = $"followup_rules:{tenantId}:{string.Join(",", sortedModules)}:{appKey}";
+        // PATCH 36.05: Canonical cache key - sort capability scopes for determinism
+        var sortedCapabilityScopes = capabilityScopes.OrderBy(scope => scope, StringComparer.OrdinalIgnoreCase).ToList();
+        var cacheKey = $"followup_rules:{tenantId}:{string.Join(",", sortedCapabilityScopes)}:{appKey}";
 
         if (_cache.TryGetValue<IReadOnlyList<ReActFollowUpRule>>(cacheKey, out var cached) && cached is not null)
         {
@@ -48,11 +48,11 @@ public sealed class SqlReActFollowUpRuleProvider : IReActFollowUpRuleProvider
 
         try
         {
-            var moduleKeysJson = JsonSerializer.Serialize(sortedModules);
+            var capabilityScopesJson = JsonSerializer.Serialize(sortedCapabilityScopes);
             var parameters = new Dictionary<string, object?>
             {
                 ["@TenantId"] = tenantId,
-                ["@ModuleKeysJson"] = moduleKeysJson,
+                ["@ModuleKeysJson"] = capabilityScopesJson,
                 ["@AppKey"] = appKey
             };
 
@@ -82,8 +82,8 @@ public sealed class SqlReActFollowUpRuleProvider : IReActFollowUpRuleProvider
                 TimeSpan.FromSeconds(_options.CacheTtlSeconds));
 
             _logger.LogDebug(
-                "FollowUpRulesLoaded | TenantId: {TenantId} | Modules: [{Modules}] | RuleCount: {Count}",
-                tenantId, string.Join(", ", moduleKeys), rules.Count);
+                "FollowUpRulesLoaded | TenantId: {TenantId} | CapabilityScopes: [{CapabilityScopes}] | RuleCount: {Count}",
+                tenantId, string.Join(", ", capabilityScopes), rules.Count);
 
             return rules;
         }
@@ -94,3 +94,4 @@ public sealed class SqlReActFollowUpRuleProvider : IReActFollowUpRuleProvider
         }
     }
 }
+

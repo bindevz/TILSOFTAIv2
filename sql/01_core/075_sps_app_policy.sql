@@ -2,6 +2,7 @@
 -- PATCH 36.04: app_policy_resolve — deterministic precedence
 -- ORDER BY: SpecificityScore DESC, Priority ASC, UpdatedAtUtc DESC, PolicyId DESC
 -- Specificity: TenantId=16, ModuleKey=8, AppKey=4, Environment=2, Language=1
+-- @ModuleKeysJson is retained as the legacy SQL parameter for capability scopes.
 -- ============================================================
 IF OBJECT_ID('dbo.app_policy_resolve', 'P') IS NOT NULL
     DROP PROCEDURE dbo.app_policy_resolve;

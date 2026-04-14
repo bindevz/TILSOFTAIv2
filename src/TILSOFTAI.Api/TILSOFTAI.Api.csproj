@@ -24,8 +24,6 @@
     <ProjectReference Include="..\TILSOFTAI.Orchestration\TILSOFTAI.Orchestration.csproj" />
     <ProjectReference Include="..\TILSOFTAI.Infrastructure\TILSOFTAI.Infrastructure.csproj" />
     <ProjectReference Include="..\TILSOFTAI.Modules.Core\TILSOFTAI.Modules.Core.csproj" />
-    <ProjectReference Include="..\TILSOFTAI.Modules.Platform\TILSOFTAI.Modules.Platform.csproj" />
-    <ProjectReference Include="..\TILSOFTAI.Modules.Analytics\TILSOFTAI.Modules.Analytics.csproj" />
   </ItemGroup>
 
 </Project>

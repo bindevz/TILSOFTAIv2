@@ -83,4 +83,4 @@ REST adapter failure codes:
 
 ## Readiness
 
-`/health/ready` includes `platform-catalog` and `native-runtime`, not `modules`. The catalog check reports platform/bootstrap source mode and integrity. The native check verifies supervisor runtime resolution, all loaded native capabilities, and registered adapters generically. Module health remains available as a legacy diagnostic check outside the ready tag. See `runtime_readiness.md`.
+`/health/ready` includes `platform-catalog` and `native-runtime`. The catalog check reports platform/bootstrap source mode and integrity. The native check verifies supervisor runtime resolution, all loaded native capabilities, and registered adapters generically. Module health was retired with the module loader in Sprint 20. See `runtime_readiness.md`.

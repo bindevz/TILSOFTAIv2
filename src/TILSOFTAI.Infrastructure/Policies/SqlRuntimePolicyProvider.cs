@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -34,16 +34,16 @@ public sealed class SqlRuntimePolicyProvider : IRuntimePolicyProvider
 
     public async Task<RuntimePolicySnapshot> ResolveAsync(
         string tenantId,
-        IReadOnlyList<string> moduleKeys,
+        IReadOnlyList<string> capabilityScopes,
         string? appKey = null,
         string? environment = null,
         string? language = null,
         CancellationToken ct = default)
     {
         var env = environment ?? _options.Environment;
-        // PATCH 36.05: Canonical cache key — sort module keys for determinism
-        var sortedModules = moduleKeys.OrderBy(m => m, StringComparer.OrdinalIgnoreCase).ToList();
-        var cacheKey = $"policy:{tenantId}:{string.Join(",", sortedModules)}:{appKey}:{env}:{language}";
+        // PATCH 36.05: Canonical cache key - sort capability scopes for determinism
+        var sortedCapabilityScopes = capabilityScopes.OrderBy(scope => scope, StringComparer.OrdinalIgnoreCase).ToList();
+        var cacheKey = $"policy:{tenantId}:{string.Join(",", sortedCapabilityScopes)}:{appKey}:{env}:{language}";
 
         if (_cache.TryGetValue<RuntimePolicySnapshot>(cacheKey, out var cached) && cached is not null)
         {
@@ -52,11 +52,11 @@ public sealed class SqlRuntimePolicyProvider : IRuntimePolicyProvider
 
         try
         {
-            var moduleKeysJson = JsonSerializer.Serialize(sortedModules);
+            var capabilityScopesJson = JsonSerializer.Serialize(sortedCapabilityScopes);
             var parameters = new Dictionary<string, object?>
             {
                 ["@TenantId"] = tenantId,
-                ["@ModuleKeysJson"] = moduleKeysJson,
+                ["@ModuleKeysJson"] = capabilityScopesJson,
                 ["@AppKey"] = appKey,
                 ["@Environment"] = env,
                 ["@Language"] = language
@@ -88,8 +88,8 @@ public sealed class SqlRuntimePolicyProvider : IRuntimePolicyProvider
             _cache.Set(cacheKey, snapshot, TimeSpan.FromSeconds(_options.CacheTtlSeconds));
 
             _logger.LogDebug(
-                "PolicyResolved | TenantId: {TenantId} | Modules: [{Modules}] | PolicyCount: {Count}",
-                tenantId, string.Join(", ", moduleKeys), policies.Count);
+                "PolicyResolved | TenantId: {TenantId} | CapabilityScopes: [{CapabilityScopes}] | PolicyCount: {Count}",
+                tenantId, string.Join(", ", capabilityScopes), policies.Count);
 
             return snapshot;
         }
@@ -100,3 +100,4 @@ public sealed class SqlRuntimePolicyProvider : IRuntimePolicyProvider
         }
     }
 }
+

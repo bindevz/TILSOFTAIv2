@@ -39,7 +39,7 @@ public class ToolCatalogPackScopedTests
 
         var buildContext = new PromptBuildContext(
             scopedTools: scopedTools,
-            resolvedModules: new[] { "model" },
+            resolvedCapabilityScopes: new[] { "model" },
             policies: RuntimePolicySnapshot.Empty);
 
         // Assert: scoped tools only contain what we passed in
@@ -58,34 +58,34 @@ public class ToolCatalogPackScopedTests
     {
         var buildContext = new PromptBuildContext(
             scopedTools: Array.Empty<ToolDefinition>(),
-            resolvedModules: Array.Empty<string>(),
+            resolvedCapabilityScopes: Array.Empty<string>(),
             policies: RuntimePolicySnapshot.Empty);
 
         Assert.Empty(buildContext.ScopedTools);
     }
 
     [Fact]
-    public void PromptBuildContext_ResolvedModules_Available()
+    public void PromptBuildContext_ResolvedCapabilityScopes_Available()
     {
         var buildContext = new PromptBuildContext(
             scopedTools: Array.Empty<ToolDefinition>(),
-            resolvedModules: new[] { "model", "shipment" },
+            resolvedCapabilityScopes: new[] { "model", "shipment" },
             policies: RuntimePolicySnapshot.Empty);
 
-        Assert.Equal(2, buildContext.ResolvedModules.Count);
-        Assert.Contains("model", buildContext.ResolvedModules);
-        Assert.Contains("shipment", buildContext.ResolvedModules);
+        Assert.Equal(2, buildContext.ResolvedCapabilityScopes.Count);
+        Assert.Contains("model", buildContext.ResolvedCapabilityScopes);
+        Assert.Contains("shipment", buildContext.ResolvedCapabilityScopes);
     }
 
     [Fact]
-    public void PromptBuildContext_ModuleKeysJson_SortedAndSerializable()
+    public void PromptBuildContext_CapabilityScopesJson_Serializable()
     {
         var buildContext = new PromptBuildContext(
             scopedTools: Array.Empty<ToolDefinition>(),
-            resolvedModules: new[] { "shipment", "model" },
+            resolvedCapabilityScopes: new[] { "shipment", "model" },
             policies: RuntimePolicySnapshot.Empty);
 
-        var json = buildContext.ModuleKeysJson;
+        var json = buildContext.CapabilityScopesJson;
 
         Assert.NotNull(json);
         // JSON should be a valid array
@@ -99,8 +99,8 @@ public class ToolCatalogPackScopedTests
         var ctx = PromptBuildContext.Empty;
 
         Assert.Empty(ctx.ScopedTools);
-        Assert.Empty(ctx.ResolvedModules);
+        Assert.Empty(ctx.ResolvedCapabilityScopes);
         Assert.NotNull(ctx.Policies);
-        Assert.Null(ctx.ModuleKeysJson);
+        Assert.Null(ctx.CapabilityScopesJson);
     }
 }

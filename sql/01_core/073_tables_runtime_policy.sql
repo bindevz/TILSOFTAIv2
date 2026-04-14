@@ -1,7 +1,8 @@
 -- ============================================================
 -- Patch 35.01: RuntimePolicy table
 -- Policy-as-Data: operational knobs live in SQL, not appsettings.
--- Supports per-tenant, per-module, per-app, per-env overrides.
+-- Supports per-tenant, legacy capability-scope, per-app, per-env overrides.
+-- ModuleKey is a compatibility column name, not runtime module ownership.
 -- ============================================================
 
 IF OBJECT_ID('dbo.RuntimePolicy', 'U') IS NULL

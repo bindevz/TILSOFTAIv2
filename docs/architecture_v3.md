@@ -48,7 +48,7 @@ Write path:
 | Approval governance | API and tool callers use `IApprovalEngine`. `ActionApprovalService` is deleted. |
 | Native execution | Warehouse and accounting agents resolve capabilities and adapters without module scope resolution. |
 | Bridge fallback | Still present, measured, and bounded to fallback/catch-all behavior. |
-| Module system | Still used by `ChatPipeline`, module health, and legacy tool catalog behavior; no longer part of native capability ownership. |
+| Module system | Retired from API runtime; legacy SQL naming remains only for capability-scope compatibility. |
 | Observability | Runtime path, selected agent, capability, adapter, duration, and success/failure are emitted via structured logs and metrics. |
 
 ## Sprint 7 Ownership Changes
@@ -59,7 +59,7 @@ Write path:
 | Legacy fallback | `legacy-chat` and `legacyFallback=true` are explicit fallback requests; bridge usage is recorded with a reason. |
 | Capability policy | `RequiredRoles` and `AllowedTenants` are evaluated before adapter resolution. Denials return `CAPABILITY_ACCESS_DENIED`. |
 | REST capabilities | REST endpoint, method, timeout, retry, and auth metadata are configuration-driven through `IntegrationBinding`. |
-| Readiness | `/health/ready` uses `NativeRuntimeHealthCheck`; module health is legacy diagnostic only. |
+| Readiness | `/health/ready` uses `NativeRuntimeHealthCheck`; module health is retired. |
 
 ## Sprint 8 Ownership Changes
 
@@ -71,7 +71,7 @@ Write path:
 | Secret governance | REST auth/API-key material is resolved through `ISecretProvider`; raw secret metadata is rejected. |
 | Contracts | Representative SQL and REST capabilities enforce `ArgumentContract` before adapter resolution. |
 | Readiness | `NativeRuntimeHealthCheck` uses all loaded capabilities and required adapter registrations, without domain hardcoding. |
-| Modules | `ModuleLoaderHostedService` is disabled unless `Modules:EnableLegacyAutoload=true`; module health is diagnostic only. |
+| Modules | Legacy module loader and module health are removed from API runtime; SQL names such as `ModuleKey` are compatibility-only capability scope names. |
 
 ## Sprint 9 Ownership Changes
 
@@ -81,7 +81,7 @@ Write path:
 | Capability sourcing | Static fallback and bootstrap config records are overridden by durable platform catalog records. |
 | External connections | Platform catalog records are primary; bootstrap `ExternalConnections` only apply when fallback is enabled. |
 | Contract validation | Representative capabilities validate names, types, formats, enum values, and length/range constraints. |
-| Module-era registration | Module scope/ReAct legacy pipeline services are no longer registered by default. Module loader remains diagnostic and opt-in. |
+| Module-era registration | Module scope/ReAct legacy pipeline services are no longer registered by default. Module loader is retired from API runtime. |
 | Deep analytics | Deep SQL-backed analytics E2E is isolated as an external workflow boundary owned by Analytics. |
 
 ## Sprint 10 Ownership Changes
@@ -92,7 +92,7 @@ Write path:
 | Catalog integrity | Platform catalog startup validates duplicate keys, REST connection references, secret references, and required argument contracts. |
 | Catalog observability | Startup source mode and mutation operations emit metrics, health data, structured logs, and governance audit events. |
 | Bootstrap fallback | Readiness distinguishes `platform`, `mixed`, `bootstrap_only`, and `empty` catalog source modes. |
-| Module packages | Remaining module packages are classified as packaging-only or diagnostic-only in configuration and health output. |
+| Module packages | Remaining package projects are solution-local compatibility artifacts and are no longer referenced by the production API. |
 | Contract coverage | Production catalog records and static no-argument capabilities now declare explicit `ArgumentContract` records. |
 
 ## Sprint 11 Ownership Changes
@@ -104,7 +104,7 @@ Write path:
 | Recovery | Rollback is represented as a governed compensating change with `RollbackOfChangeId`, not as an unaudited metadata rewind. |
 | Source of truth | Production config disables bootstrap fallback by default and marks mixed/bootstrap-only source modes unhealthy. |
 | Contract lifecycle | `ArgumentContract` has `ContractVersion`, optional `SchemaDialect`, and optional `SchemaRef` for future JSON Schema interop. |
-| Module packages | Module packages are formally retained only as packaging or diagnostic artifacts, not runtime ownership. |
+| Module packages | Package residue is formally retained only as solution-local compatibility artifacts, not runtime ownership. |
 
 ## Sprint 12 Ownership Changes
 

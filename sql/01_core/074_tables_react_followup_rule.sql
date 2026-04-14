@@ -2,6 +2,7 @@
 -- Patch 35.01: ReActFollowUpRule table
 -- Explicit, scoped, versionable follow-up rules for ReAct depth.
 -- LLM decides; C# only nudges based on these rules.
+-- ModuleKey is a legacy capability-scope column name, not runtime module ownership.
 -- ============================================================
 
 IF OBJECT_ID('dbo.ReActFollowUpRule', 'U') IS NULL

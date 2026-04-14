@@ -5,30 +5,30 @@ namespace TILSOFTAI.Orchestration.Prompting;
 
 /// <summary>
 /// PATCH 36.02: Immutable per-request context carrier for prompt building.
-/// Provides scoped tools, resolved modules, and runtime policy snapshot
+/// Provides scoped tools, resolved capability scopes, and runtime policy snapshot
 /// without storing mutable state on singleton providers.
 /// </summary>
 public sealed class PromptBuildContext
 {
     public IReadOnlyList<ToolDefinition> ScopedTools { get; }
-    public IReadOnlyList<string> ResolvedModules { get; }
+    public IReadOnlyList<string> ResolvedCapabilityScopes { get; }
     public RuntimePolicySnapshot Policies { get; }
 
     public PromptBuildContext(
         IReadOnlyList<ToolDefinition> scopedTools,
-        IReadOnlyList<string> resolvedModules,
+        IReadOnlyList<string> resolvedCapabilityScopes,
         RuntimePolicySnapshot policies)
     {
         ScopedTools = scopedTools ?? Array.Empty<ToolDefinition>();
-        ResolvedModules = resolvedModules ?? Array.Empty<string>();
+        ResolvedCapabilityScopes = resolvedCapabilityScopes ?? Array.Empty<string>();
         Policies = policies ?? RuntimePolicySnapshot.Empty;
     }
 
     /// <summary>
-    /// Convenience: serialized module keys for SQL parameters.
+    /// Convenience: serialized capability scopes for SQL compatibility parameters.
     /// </summary>
-    public string? ModuleKeysJson => ResolvedModules.Count > 0
-        ? System.Text.Json.JsonSerializer.Serialize(ResolvedModules)
+    public string? CapabilityScopesJson => ResolvedCapabilityScopes.Count > 0
+        ? System.Text.Json.JsonSerializer.Serialize(ResolvedCapabilityScopes)
         : null;
 
     public static PromptBuildContext Empty { get; } =

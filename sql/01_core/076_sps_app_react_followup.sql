@@ -1,6 +1,7 @@
 -- ============================================================
 -- Patch 35.01: app_react_followup_list_scoped stored procedure
--- Returns enabled follow-up rules for a given tenant/module scope.
+-- Returns enabled follow-up rules for a tenant/capability scope.
+-- @ModuleKeysJson is retained as the legacy SQL parameter name.
 -- ============================================================
 
 CREATE OR ALTER PROCEDURE dbo.app_react_followup_list_scoped
