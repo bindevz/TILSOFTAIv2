@@ -10,7 +10,7 @@ namespace TILSOFTAI.Infrastructure.Policies;
 
 /// <summary>
 /// SQL-backed runtime policy provider with IMemoryCache.
-/// Calls app_policy_resolve SP and caches by scope fingerprint.
+/// Calls app_policy_resolve_by_capability_scope and caches by scope fingerprint.
 /// Safe when Redis is disabled.
 /// </summary>
 public sealed class SqlRuntimePolicyProvider : IRuntimePolicyProvider
@@ -56,13 +56,13 @@ public sealed class SqlRuntimePolicyProvider : IRuntimePolicyProvider
             var parameters = new Dictionary<string, object?>
             {
                 ["@TenantId"] = tenantId,
-                ["@ModuleKeysJson"] = capabilityScopesJson,
+                ["@CapabilityScopesJson"] = capabilityScopesJson,
                 ["@AppKey"] = appKey,
                 ["@Environment"] = env,
                 ["@Language"] = language
             };
 
-            var rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_policy_resolve", parameters, ct);
+            var rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_policy_resolve_by_capability_scope", parameters, ct);
 
             var policies = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
 

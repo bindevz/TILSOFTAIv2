@@ -41,9 +41,15 @@
 - `src/TILSOFTAI.Orchestration/Modules/ModuleScopeResult.cs`
 - `tests/TILSOFTAI.Tests/Modules/ModuleActivationTests.cs`
 
+## Deleted In Sprint 21
+
+- `src/TILSOFTAI.Orchestration/Modules/ITilsoftModule.cs`
+- `src/TILSOFTAI.Modules.Platform/`
+- `src/TILSOFTAI.Modules.Analytics/`
+
 ## Remaining Deprecated Runtime Paths
 
-- Legacy SQL objects with `ModuleKey` naming are compatibility-only capability-scope storage.
+- Legacy SQL objects with historical storage names are compatibility-only; runtime callers use capability-scope wrappers.
 
 ## Why These Are Not Deleted Yet
 
@@ -59,6 +65,10 @@ The obsolete Model module is no longer a project or supported structural concept
 
 API runtime no longer has a `Modules` configuration section, module autoload hosted service, module health check, module activation provider, or API references to Platform/Analytics package projects. SQL `ModuleKey` names remain only as compatibility names for capability-scope filtering.
 
+## Sprint 21 Cleanup Outcome
+
+The last Platform/Analytics package shells and `ITilsoftModule` contract were removed. Runtime SQL callers moved to capability-scope procedures while legacy SQL storage names remain behind compatibility views/procedures for safe rollout and rollback. SQL deployment scripts moved from `sql/02_modules` to `sql/02_capabilities`.
+
 ## Sprint 6 Cleanup Outcome
 
 Native runtime execution no longer depends on module scope resolution or the old orchestration facade. Module-era infrastructure is now explicitly bridge/legacy-only. Runtime telemetry makes native usage, bridge fallback, approval execution, capability invocation, adapter failures, and duration visible.
@@ -68,4 +78,4 @@ Native runtime execution no longer depends on module scope resolution or the old
 - Native general/chat agent or equivalent fallback replacement.
 - Capability-pack loader for legacy tool catalog replacement.
 - Expanded non-SQL capability configuration and production endpoint policy.
-- Future DB rename plan for legacy `ModuleKey` capability-scope columns and `@ModuleKeysJson` parameters.
+- Future DB-major migration to rename physical legacy storage names after telemetry confirms no deployed callers depend on the legacy procedures.

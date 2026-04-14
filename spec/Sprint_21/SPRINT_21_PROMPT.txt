@@ -1,0 +1,199 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 21.
+
+Baseline repository reality (after Sprint 20):
+- The platform is already enterprise-grade and high-assurance.
+- The runtime is meaningfully Multi-Agent:
+  - Supervisor owns orchestration.
+  - Domain Agents own business-domain routing and policy.
+  - Tool Adapters and infrastructure own execution boundaries and provider integration.
+  - Platform Catalog owns governed production capability state.
+- Sprint 20 removed the active module substrate from API runtime:
+  - no module loader
+  - no module health
+  - no module activation provider
+  - no module scope resolver
+  - no `Modules` section in default runtime config
+  - no API references to Platform/Analytics package projects
+- Sprint 20 also renamed runtime-facing code toward capability-scope terminology.
+- However, the repository still has residual compatibility shell debt:
+  - SQL objects still use names such as `ModuleCatalog`, `ModuleKey`, and `@ModuleKeysJson`
+  - `ITilsoftModule` still exists as a legacy package contract
+  - `TILSOFTAI.Modules.Platform` and `TILSOFTAI.Modules.Analytics` still exist as solution-local package shells
+  - some comments/docs still necessarily mention old module names as compatibility language
+
+Sprint 21 mission:
+Finish the remaining compatibility-shell cleanup while keeping migration safety.
+
+Primary objective:
+1. Inventory and reduce the remaining legacy SQL/module naming debt.
+2. Retire, isolate, or re-home `ITilsoftModule` and remaining package-shell artifacts.
+3. Strengthen anti-drift guardrails beyond exact-name checks.
+4. Update docs/comments/tests so forward-looking architecture language is uniformly domain/capability/adaptor-centric.
+5. Preserve enterprise-safe rollout behavior while cleaning semantics.
+6. Keep Sprint 21 focused on semantic closure, not feature breadth.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the orchestration owner.
+2. Domain Agents remain the business-domain routing/policy owners.
+3. Tool Adapters / infrastructure remain the execution boundary and provider owners.
+4. Platform Catalog remains the governed source of truth for production capability state.
+5. Legacy module-era naming is now compatibility debt, not future architecture.
+6. Compatibility cleanup must be migration-safe and explicit.
+7. Remaining shells must be deleted, isolated, or clearly end-of-life.
+8. Sprint 21 success is measured by semantic consistency and migration safety, not runtime novelty.
+9. Prefer forward-looking vocabulary such as capability scope, domain, adapter, dataset, or diagnostic compatibility.
+10. Do not turn Sprint 21 into a feature sprint.
+
+Primary Sprint 21 goals:
+
+A. Migrate remaining SQL compatibility naming where feasible
+- Inventory every remaining SQL surface using:
+  - `ModuleCatalog`
+  - `ModuleKey`
+  - `@ModuleKeysJson`
+- Decide which can now be:
+  - renamed,
+  - dual-supported,
+  - wrapped by compatibility views/procedures,
+  - or temporarily retained with explicit migration markers.
+- Make forward-looking naming clearer without unsafe breakage.
+
+B. Retire or isolate `ITilsoftModule`
+- Decide whether `ITilsoftModule` is still needed.
+- If no longer needed, delete it.
+- If temporarily needed, isolate it under an explicitly legacy compatibility surface.
+- Do not keep it as a normal future-facing abstraction.
+
+C. Re-home remaining package-shell artifacts
+- Evaluate `TILSOFTAI.Modules.Platform` and `TILSOFTAI.Modules.Analytics`.
+- Decide whether to:
+  - delete them,
+  - rename them to non-module supporting library names,
+  - or isolate them as explicit end-of-life compatibility packages.
+- Do not let them remain ambiguous future-facing ownership shells.
+
+D. Strengthen anti-drift guardrails
+- Expand architecture tests/checks so they detect:
+  - reintroduction of module activation patterns,
+  - new runtime references to legacy package shells,
+  - forward-looking docs that normalize module ownership,
+  - new technical pseudo-domain/provider wrappers that violate the ownership model.
+- Keep the checks practical and maintainable.
+
+E. Normalize docs/comments/tests naming
+- Update docs, comments, tests, and support code to prefer:
+  - capability scope
+  - domain routing
+  - adapter execution
+  - catalog ownership
+- Keep legacy names only when explicitly describing migration/compatibility behavior.
+
+F. Preserve enterprise-grade rollout safety
+- Any SQL/schema naming cleanup must come with migration notes.
+- Document cutover, compatibility, and rollback expectations.
+- Do not create brittle breaking changes for deployed environments.
+
+Non-negotiable rules:
+1. Do not weaken evidence verification, promotion gates, manifests, attestation, archives, retention, recovery, or governed control plane behavior.
+2. Do not reintroduce module routing/activation/runtime loading.
+3. Do not add technical pseudo-agents or technical provider/model ownership wrappers.
+4. Do not rename compatibility SQL surfaces without a migration-safe plan.
+5. Do not leave forward-looking docs casually using module-era ownership language.
+6. Do not keep `ITilsoftModule` or package shells as vague future-facing residue.
+7. Prefer additive migration and explicit deprecation over risky breakage.
+8. Prefer deletion or isolation over ambiguous retention.
+9. Keep cleanup measurable and reviewable.
+10. Do not turn Sprint 21 into a feature sprint.
+
+Explicitly in scope:
+- SQL compatibility-name inventory and migration planning
+- partial execution of safe SQL naming cleanup where feasible
+- `ITilsoftModule` retirement or isolation
+- Platform/Analytics package-shell cleanup
+- stronger anti-drift guardrails
+- docs/comments/tests naming cleanup
+- migration notes and rollout guidance
+- validation/build/test updates
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- large domain-agent expansion
+- workflow/product breadth expansion
+
+Recommended implementation order:
+1. Inventory remaining compatibility-shell surfaces.
+2. Decide delete vs isolate vs migrate for each remaining shell.
+3. Execute migration-safe SQL naming cleanup where feasible.
+4. Retire or isolate `ITilsoftModule`.
+5. Re-home or narrow Platform/Analytics package shells.
+6. Strengthen architecture anti-drift checks.
+7. Update docs, comments, tests, and migration notes.
+8. Validate build/tests/runtime posture.
+
+Required architectural outcomes:
+1. Forward-looking architecture language is cleaner and more uniform than after Sprint 20.
+2. Remaining SQL/module naming debt is smaller and more explicitly migration-scoped.
+3. `ITilsoftModule` and remaining package shells are less future-facing or fully retired.
+4. Guardrails are stronger against semantic backsliding.
+5. Enterprise-grade behavior remains intact.
+6. Multi-Agent ownership remains the only future-facing ownership story.
+
+Definition of done:
+- Remaining legacy module-shaped residue is smaller than after Sprint 20.
+- SQL compatibility naming has a clear migration-safe path and partial cleanup where feasible.
+- `ITilsoftModule` is retired or clearly isolated.
+- Platform/Analytics package-shell residue is reduced, renamed, or isolated.
+- Docs/comments/tests now consistently use forward-looking ownership vocabulary.
+- Anti-drift checks are broader and more useful than Sprint 20.
+- The platform is cleaner after Sprint 21 than after Sprint 20 without losing enterprise-grade behavior.
+
+Must-fail conditions:
+- legacy module SQL naming is still treated as normal future-facing architecture
+- `ITilsoftModule` remains as an ambiguous future abstraction
+- Platform/Analytics package-shell residue remains vague and future-facing
+- anti-drift checks are still too weak to prevent obvious semantic regressions
+- migration safety is not addressed explicitly
+- Sprint 21 drifts into feature work instead of semantic closure
+
+Preferred implementation style:
+- migration-safe cleanup
+- explicit deprecation or isolation
+- forward-looking naming
+- bounded compatibility
+- stronger practical guardrails
+- documentation honesty
+- no architecture theater
+
+Required deliverables:
+1. SQL compatibility-name migration changes
+2. Package-shell cleanup changes
+3. Guardrail changes
+4. Docs/comments/tests naming cleanup
+5. Migration / rollout note changes
+6. Validation / build / test updates
+
+Required reporting after implementation:
+1. Summary of Sprint 21 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. SQL compatibility-name migration changes
+6. Package-shell cleanup changes
+7. Guardrail changes
+8. Documentation / migration note changes
+9. Validation / build / test results
+10. Remaining blockers
+11. Recommended Sprint 22 priorities
+
+Final instruction:
+Sprint 21 is about finishing compatibility-shell cleanup without creating migration risk.
+
+Do not spend Sprint 21 adding runtime novelty.
+Do not turn Sprint 21 into a feature sprint.
+
+Spend it leaving the repository with one clear, future-facing architectural story.

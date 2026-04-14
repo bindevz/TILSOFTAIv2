@@ -35,6 +35,25 @@ public sealed class ArchitectureResidueGuardTests
     }
 
     [Fact]
+    public void Solution_ShouldNotContainRetiredPackageShellProjects()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var solution = Path.Combine(repositoryRoot, "TILSOFTAI.slnx");
+        var contents = File.ReadAllText(solution);
+
+        contents.Should().NotContainAny(
+            new[] { "TILSOFTAI.Modules.Platform", "TILSOFTAI.Modules.Analytics" },
+            "Sprint 21 retired the residual Platform and Analytics package shells from the solution");
+
+        Directory.Exists(Path.Combine(repositoryRoot, "src", "TILSOFTAI.Modules.Platform"))
+            .Should().BeFalse("the Platform package shell should not remain as ambiguous future-facing residue");
+        Directory.Exists(Path.Combine(repositoryRoot, "src", "TILSOFTAI.Modules.Analytics"))
+            .Should().BeFalse("the Analytics package shell should not remain as ambiguous future-facing residue");
+        Directory.Exists(Path.Combine(repositoryRoot, "sql", "90_template_module"))
+            .Should().BeFalse("new SQL templates should not normalize module-era naming");
+    }
+
+    [Fact]
     public void ApiSettings_ShouldNotContainModulesSection()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -80,7 +99,8 @@ public sealed class ArchitectureResidueGuardTests
             "IModuleScopeResolver",
             "ModuleScopeResolver",
             "ModuleScopeResult",
-            "IModuleActivationProvider"
+            "IModuleActivationProvider",
+            "ITilsoftModule"
         };
 
         var offenders = Directory
@@ -93,6 +113,64 @@ public sealed class ArchitectureResidueGuardTests
             .ToArray();
 
         offenders.Should().BeEmpty("Sprint 20 removed the legacy module scope resolver and activation provider");
+    }
+
+    [Fact]
+    public void RuntimeCode_ShouldUseCapabilityScopeSqlNames()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var forbidden = new[]
+        {
+            "@ModuleKeysJson",
+            "@ModulesJson",
+            "app_toolcatalog_list_scoped",
+            "app_metadatadictionary_list_scoped",
+            "app_policy_resolve\"",
+            "app_react_followup_list_scoped"
+        };
+
+        var offenders = Directory
+            .EnumerateFiles(Path.Combine(repositoryRoot, "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(ShouldScan)
+            .SelectMany(path => forbidden
+                .Where(token => File.ReadAllText(path).Contains(token, StringComparison.Ordinal))
+                .Select(token => $"{Path.GetRelativePath(repositoryRoot, path)} contains {token}"))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        offenders.Should().BeEmpty("Sprint 21 moved runtime callers to capability-scope SQL wrappers");
+    }
+
+    [Fact]
+    public void ForwardLookingDocs_ShouldNotNormalizeModuleRuntimeOwnership()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var docsToScan = new[]
+        {
+            Path.Combine(repositoryRoot, "README.md"),
+            Path.Combine(repositoryRoot, "docs", "architecture_v3.md"),
+            Path.Combine(repositoryRoot, "docs", "runtime_readiness.md"),
+            Path.Combine(repositoryRoot, "docs", "module_package_classification.md"),
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Api", "appsettings.Sample.README.md")
+        };
+        var forbidden = new[]
+        {
+            "Modules:EnableLegacyAutoload",
+            "ModuleHealthCheck",
+            "ModuleLoaderHostedService",
+            "module loader remains",
+            "module packages are retained"
+        };
+
+        var offenders = docsToScan
+            .Where(File.Exists)
+            .SelectMany(path => forbidden
+                .Where(token => File.ReadAllText(path).Contains(token, StringComparison.OrdinalIgnoreCase))
+                .Select(token => $"{Path.GetRelativePath(repositoryRoot, path)} contains {token}"))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        offenders.Should().BeEmpty("forward-looking docs should describe capability/catalog ownership, not normalize module runtime ownership");
     }
 
     private static string FindRepositoryRoot()

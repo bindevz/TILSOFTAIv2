@@ -3,8 +3,9 @@ SET QUOTED_IDENTIFIER ON;
 GO
 
 -- =============================================
--- SP: app_modulecatalog_list
--- Returns available modules for LLM routing
+-- LEGACY SP: app_modulecatalog_list
+-- Returns compatibility capability scopes from the legacy ModuleCatalog table.
+-- New callers should use app_capabilityscope_list.
 -- =============================================
 CREATE OR ALTER PROCEDURE dbo.app_modulecatalog_list
     @TenantId       nvarchar(50) = NULL,
@@ -23,10 +24,10 @@ END;
 GO
 
 -- =============================================
--- SP: app_toolcatalog_list_scoped
--- Returns tools filtered by selected modules
--- Always includes 'platform' module tools (action_request_write, diagnostics_run, etc.)
--- @ModulesJson: JSON array, e.g., '["model","analytics"]'
+-- LEGACY SP: app_toolcatalog_list_scoped
+-- Returns tools filtered by selected capability scopes.
+-- New callers should use app_toolcatalog_list_by_capability_scope.
+-- @ModulesJson is retained for deployed caller compatibility.
 -- =============================================
 CREATE OR ALTER PROCEDURE dbo.app_toolcatalog_list_scoped
     @TenantId       nvarchar(50),
@@ -83,9 +84,10 @@ END;
 GO
 
 -- =============================================
--- SP: app_metadatadictionary_list_scoped
--- Returns metadata keys filtered by selected modules
--- @ModulesJson: JSON array, e.g., '["model"]'
+-- LEGACY SP: app_metadatadictionary_list_scoped
+-- Returns metadata keys filtered by selected capability scopes.
+-- New callers should use app_metadatadictionary_list_by_capability_scope.
+-- @ModulesJson is retained for deployed caller compatibility.
 -- =============================================
 CREATE OR ALTER PROCEDURE dbo.app_metadatadictionary_list_scoped
     @TenantId       nvarchar(50) = NULL,

@@ -67,22 +67,21 @@ public sealed class MetadataDictionaryContextPackProvider : IScopedContextPackPr
 
         if (capabilityScopes is { Count: > 0 })
         {
-            // Scoped: use the legacy SQL parameter name while callers use capability scope vocabulary.
             var scopedParams = new Dictionary<string, object?>
             {
                 ["@TenantId"] = string.IsNullOrWhiteSpace(context.TenantId) ? null : context.TenantId,
                 ["@Language"] = resolvedLanguage,
                 ["@DefaultLanguage"] = _localizationOptions.DefaultLanguage,
-                ["@ModulesJson"] = System.Text.Json.JsonSerializer.Serialize(capabilityScopes)
+                ["@CapabilityScopesJson"] = System.Text.Json.JsonSerializer.Serialize(capabilityScopes)
             };
-            rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_metadatadictionary_list_scoped", scopedParams, cancellationToken);
+            rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_metadatadictionary_list_by_capability_scope", scopedParams, cancellationToken);
 
             // PATCH 36.03: Language fallback — if no rows for requested language, try default
             if (rows.Count == 0
                 && !string.Equals(resolvedLanguage, _localizationOptions.DefaultLanguage, StringComparison.OrdinalIgnoreCase))
             {
                 scopedParams["@Language"] = _localizationOptions.DefaultLanguage;
-                rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_metadatadictionary_list_scoped", scopedParams, cancellationToken);
+                rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_metadatadictionary_list_by_capability_scope", scopedParams, cancellationToken);
             }
         }
         else

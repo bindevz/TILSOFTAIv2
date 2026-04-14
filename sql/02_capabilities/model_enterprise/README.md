@@ -1,4 +1,4 @@
-# Model Module - Enterprise Adapter
+﻿# Model Module - Enterprise Adapter
 
 This directory contains the Enterprise implementation of the Model Module Adapter.
 
@@ -11,7 +11,7 @@ The Model Module uses an Adapter Pattern to allow the same AI Capabilities (Tool
 ## Implementation Instructions
 
 To deploy the Enterprise version:
-1. Ensure the `sql/02_modules/model` scripts (Tables) are NOT deployed/used, OR simply override the View/SPs.
+1. Ensure the `sql/02_capabilities/model` scripts (Tables) are NOT deployed/used, OR simply override the View/SPs.
 2. Adapt `vw_ModelSemantic` to select from your enterprise tables (`ModelUD`, etc).
 3. Ensure the columns match the contract: `TenantId, Language, ModelId, ModelCode, Name, TotalCbm, TotalWeightKg, LoadabilityIndex, Qnt40HC, PieceCount, BoxInSet`.
 4. Implement the stored procedures in `002_sps_model_enterprise.sql` to verify against your schemas.
@@ -21,3 +21,4 @@ To deploy the Enterprise version:
 - `ModelPiece`
 - `ModelPackagingMethodOption`
 - `ModelMaterialConfig`
+

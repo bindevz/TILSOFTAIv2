@@ -10,7 +10,7 @@ namespace TILSOFTAI.Infrastructure.Policies;
 
 /// <summary>
 /// SQL-backed ReAct follow-up rule provider with IMemoryCache.
-/// Calls app_react_followup_list_scoped SP and caches by scope fingerprint.
+/// Calls app_react_followup_list_by_capability_scope and caches by scope fingerprint.
 /// </summary>
 public sealed class SqlReActFollowUpRuleProvider : IReActFollowUpRuleProvider
 {
@@ -52,11 +52,11 @@ public sealed class SqlReActFollowUpRuleProvider : IReActFollowUpRuleProvider
             var parameters = new Dictionary<string, object?>
             {
                 ["@TenantId"] = tenantId,
-                ["@ModuleKeysJson"] = capabilityScopesJson,
+                ["@CapabilityScopesJson"] = capabilityScopesJson,
                 ["@AppKey"] = appKey
             };
 
-            var rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_react_followup_list_scoped", parameters, ct);
+            var rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_react_followup_list_by_capability_scope", parameters, ct);
 
             var rules = new List<ReActFollowUpRule>();
 
@@ -65,7 +65,7 @@ public sealed class SqlReActFollowUpRuleProvider : IReActFollowUpRuleProvider
                 var rule = new ReActFollowUpRule(
                     RuleId: Convert.ToInt64(row.GetValueOrDefault("RuleId", 0L)),
                     RuleKey: row.GetValueOrDefault("RuleKey", "")?.ToString() ?? "",
-                    ModuleKey: row.GetValueOrDefault("ModuleKey", "")?.ToString() ?? "",
+                    CapabilityScopeKey: row.GetValueOrDefault("CapabilityScopeKey", "")?.ToString() ?? "",
                     ToolName: row.GetValueOrDefault("ToolName", null)?.ToString(),
                     Priority: Convert.ToInt32(row.GetValueOrDefault("Priority", 100)),
                     JsonPath: row.GetValueOrDefault("JsonPath", "")?.ToString() ?? "",

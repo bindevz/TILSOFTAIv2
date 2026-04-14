@@ -19,7 +19,7 @@ public class ReActFollowUpEvaluatorTests
         return new ReActFollowUpRule(
             RuleId: 1,
             RuleKey: ruleKey,
-            ModuleKey: "test",
+            CapabilityScopeKey: "test",
             ToolName: toolName,
             Priority: 10,
             JsonPath: jsonPath,

@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   push:
@@ -102,14 +102,14 @@ jobs:
         Write-Host "Verifying required SQL modules exist..." -ForegroundColor Cyan
         $requiredModules = @(
           "sql/01_core",
-          "sql/02_modules/analytics",
+          "sql/02_capabilities/analytics",
           "sql/99_seed/analytics"
         )
         $requiredFiles = @(
-          "sql/02_modules/analytics/001_tables_analytics.sql",
-          "sql/02_modules/analytics/003_sps_app_analytics.sql",
-          "sql/02_modules/analytics/004_sps_ai_analytics.sql",
-          "sql/02_modules/analytics/005_sps_ai_analytics_execute.sql",
+          "sql/02_capabilities/analytics/001_tables_analytics.sql",
+          "sql/02_capabilities/analytics/003_sps_app_analytics.sql",
+          "sql/02_capabilities/analytics/004_sps_ai_analytics.sql",
+          "sql/02_capabilities/analytics/005_sps_ai_analytics_execute.sql",
           "sql/99_seed/analytics/001_seed_toolcatalog_analytics.sql"
         )
         
@@ -142,7 +142,7 @@ jobs:
         
         Write-Host "All required SQL modules verified:" -ForegroundColor Green
         foreach ($file in $requiredFiles) {
-          Write-Host "  ✓ $file" -ForegroundColor Green
+          Write-Host "  âœ“ $file" -ForegroundColor Green
         }
 
     # PATCH 31.02: Fixed secret scanning - now includes JSON and fails on detection
@@ -235,12 +235,12 @@ jobs:
         run: |
           $conn = "Server=localhost;Database=TILSOFTAI_Test;User ID=sa;Password=Integration_Test_P@ss1!;TrustServerCertificate=True;"
           
-          # Deploy in order: core → atomic → modules → seeds
+          # Deploy in order: core â†’ atomic â†’ modules â†’ seeds
           $folders = @(
             "sql/01_core",
             "sql/02_atomic",
-            "sql/02_modules/analytics",
-            "sql/02_modules/model",
+            "sql/02_capabilities/analytics",
+            "sql/02_capabilities/model",
             "sql/99_seed"
           )
           
@@ -269,3 +269,4 @@ jobs:
         run: dotnet test tests/TILSOFTAI.IntegrationTests --no-build --configuration Release --verbosity normal
         env:
           TEST_SQL_CONNECTION: "Server=localhost;Database=TILSOFTAI_Test;User ID=sa;Password=Integration_Test_P@ss1!;TrustServerCertificate=True;"
+

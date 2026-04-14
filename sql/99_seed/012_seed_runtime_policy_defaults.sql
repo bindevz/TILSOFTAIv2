@@ -1,7 +1,7 @@
--- ============================================================
+﻿-- ============================================================
 -- Patch 35.01: Seed default RuntimePolicy entries
--- Sprint 20: ModuleKey remains only as a legacy capability-scope column name.
--- Global defaults (TenantId/ModuleKey = NULL) — can be overridden per tenant/module.
+-- Sprint 21: Runtime callers use capability-scope wrappers.
+-- Global defaults use no capability-scope override.
 -- ============================================================
 
 -- tool_catalog_context_pack policy
@@ -30,3 +30,4 @@ BEGIN
     );
 END
 GO
+

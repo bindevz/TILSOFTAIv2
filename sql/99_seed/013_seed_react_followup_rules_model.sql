@@ -1,5 +1,6 @@
 -- ============================================================
 -- Patch 35.01: Seed ReActFollowUpRules for product-model tools
+-- Sprint 21: ModuleKey is a legacy storage column for capability scope.
 -- ============================================================
 
 -- Rule 1: model_get_overview → model_get_pieces (when PieceCount > 0)

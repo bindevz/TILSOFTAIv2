@@ -8,7 +8,7 @@ namespace TILSOFTAI.Orchestration.Policies;
 public sealed record ReActFollowUpRule(
     long RuleId,
     string RuleKey,
-    string ModuleKey,
+    string CapabilityScopeKey,
     string? ToolName,
     int Priority,
     string JsonPath,

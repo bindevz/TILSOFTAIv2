@@ -71,7 +71,7 @@ Write path:
 | Secret governance | REST auth/API-key material is resolved through `ISecretProvider`; raw secret metadata is rejected. |
 | Contracts | Representative SQL and REST capabilities enforce `ArgumentContract` before adapter resolution. |
 | Readiness | `NativeRuntimeHealthCheck` uses all loaded capabilities and required adapter registrations, without domain hardcoding. |
-| Modules | Legacy module loader and module health are removed from API runtime; SQL names such as `ModuleKey` are compatibility-only capability scope names. |
+| Compatibility SQL | Runtime callers use capability-scope SQL wrappers; legacy storage names remain only for deployed database compatibility. |
 
 ## Sprint 9 Ownership Changes
 
@@ -81,7 +81,7 @@ Write path:
 | Capability sourcing | Static fallback and bootstrap config records are overridden by durable platform catalog records. |
 | External connections | Platform catalog records are primary; bootstrap `ExternalConnections` only apply when fallback is enabled. |
 | Contract validation | Representative capabilities validate names, types, formats, enum values, and length/range constraints. |
-| Module-era registration | Module scope/ReAct legacy pipeline services are no longer registered by default. Module loader is retired from API runtime. |
+| Legacy registration | Scope/ReAct compatibility procedures remain in SQL only; module loader is retired from API runtime. |
 | Deep analytics | Deep SQL-backed analytics E2E is isolated as an external workflow boundary owned by Analytics. |
 
 ## Sprint 10 Ownership Changes
@@ -92,7 +92,7 @@ Write path:
 | Catalog integrity | Platform catalog startup validates duplicate keys, REST connection references, secret references, and required argument contracts. |
 | Catalog observability | Startup source mode and mutation operations emit metrics, health data, structured logs, and governance audit events. |
 | Bootstrap fallback | Readiness distinguishes `platform`, `mixed`, `bootstrap_only`, and `empty` catalog source modes. |
-| Module packages | Remaining package projects are solution-local compatibility artifacts and are no longer referenced by the production API. |
+| Package shells | Platform and Analytics package shells are retired from the solution. |
 | Contract coverage | Production catalog records and static no-argument capabilities now declare explicit `ArgumentContract` records. |
 
 ## Sprint 11 Ownership Changes
@@ -104,7 +104,7 @@ Write path:
 | Recovery | Rollback is represented as a governed compensating change with `RollbackOfChangeId`, not as an unaudited metadata rewind. |
 | Source of truth | Production config disables bootstrap fallback by default and marks mixed/bootstrap-only source modes unhealthy. |
 | Contract lifecycle | `ArgumentContract` has `ContractVersion`, optional `SchemaDialect`, and optional `SchemaRef` for future JSON Schema interop. |
-| Module packages | Package residue is formally retained only as solution-local compatibility artifacts, not runtime ownership. |
+| Package shells | Residual Platform/Analytics package projects are removed; production ownership remains catalog/capability/adapter based. |
 
 ## Sprint 12 Ownership Changes
 

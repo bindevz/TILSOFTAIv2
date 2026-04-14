@@ -32,7 +32,7 @@ Sprint 14 turns the governed catalog control plane into an artifact-verifiable p
 - Catalog integrity validation reports duplicate keys, unresolved REST connection references, raw secret metadata, and missing contracts.
 - `/health/ready` reports platform catalog source mode and degrades on bootstrap fallback.
 - Startup emits catalog source mode metrics/logs; mutation emits catalog mutation metrics and governance/config-change audit events.
-- Remaining module packages are classified as packaging-only or diagnostic-only.
+- Residual Platform/Analytics package shells were retired in Sprint 21.
 - The obsolete Model module has been removed so technical model/provider concerns no longer appear as module ownership.
 - Production catalog records include explicit argument contracts, including no-argument contracts for summary/list capabilities.
 - Catalog preview validates mutation payloads before submit.
@@ -44,7 +44,7 @@ Sprint 14 turns the governed catalog control plane into an artifact-verifiable p
 - Bootstrap fallback is disabled by default in production config and strict source modes are unhealthy.
 - Rollback is represented through governed compensating changes with `RollbackOfChangeId`.
 - Contract metadata now includes `ContractVersion`, `SchemaDialect`, and `SchemaRef`.
-- Module packages are formally retained only as non-runtime packaging or diagnostic artifacts.
+- Package-shell residue is no longer retained as a future-facing architecture artifact.
 - Catalog promotion gates evaluate source mode, preview validity, approved-change state, expected-version policy, break-glass containment, and certification evidence.
 - Certification evidence has durable SQL storage and API capture/list endpoints.
 - Catalog control-plane SLO and alert/escalation definitions are exposed through API and documentation.

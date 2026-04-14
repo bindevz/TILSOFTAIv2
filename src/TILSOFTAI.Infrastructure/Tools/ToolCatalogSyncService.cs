@@ -262,7 +262,7 @@ public sealed class ToolCatalogSyncService : IScopedToolCatalogResolver
         await using var connection = new SqlConnection(_sqlOptions.ConnectionString);
         await connection.OpenAsync(cancellationToken);
 
-        await using var command = new SqlCommand("dbo.app_toolcatalog_list_scoped", connection)
+        await using var command = new SqlCommand("dbo.app_toolcatalog_list_by_capability_scope", connection)
         {
             CommandType = CommandType.StoredProcedure,
             CommandTimeout = _sqlOptions.CommandTimeoutSeconds
@@ -271,7 +271,7 @@ public sealed class ToolCatalogSyncService : IScopedToolCatalogResolver
         command.Parameters.Add(new SqlParameter("@TenantId", SqlDbType.NVarChar, 50) { Value = tenantId });
         command.Parameters.Add(new SqlParameter("@Language", SqlDbType.NVarChar, 10) { Value = language });
         command.Parameters.Add(new SqlParameter("@DefaultLanguage", SqlDbType.NVarChar, 10) { Value = string.IsNullOrWhiteSpace(defaultLanguage) ? "en" : defaultLanguage });
-        command.Parameters.Add(new SqlParameter("@ModulesJson", SqlDbType.NVarChar, -1) { Value = capabilityScopesJson });
+        command.Parameters.Add(new SqlParameter("@CapabilityScopesJson", SqlDbType.NVarChar, -1) { Value = capabilityScopesJson });
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))

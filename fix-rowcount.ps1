@@ -1,9 +1,8 @@
-# Fix SQL reserved keyword rowCount in all affected scripts
+﻿# Fix SQL reserved keyword rowCount in all affected scripts
 $files = @(
-    "sql\02_modules\model\003_sps_model.sql",
+    "sql\02_capabilities\model\003_sps_model.sql",
     "sql\03_actions\003_sps_ai_action.sql",
-    "sql\02_modules\model_enterprise\002_sps_model_enterprise.sql",
-    "sql\90_template_module\002_sps_ai_template.sql"
+    "sql\02_capabilities\model_enterprise\002_sps_model_enterprise.sql"
 )
 
 foreach ($file in $files) {
@@ -15,3 +14,4 @@ foreach ($file in $files) {
 }
 
 Write-Host "`nAll rowCount fixes applied!" -ForegroundColor Cyan
+

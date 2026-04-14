@@ -29,7 +29,7 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Bootstrap fallback | Visible operational state | Startup logs, metrics, and `/health/ready` now report `platform`, `mixed`, `bootstrap_only`, or `empty`. |
 | Catalog integrity | Enforced on load and mutation | Duplicate keys, unresolved REST connections, raw secrets, and missing contracts are reported as validation errors. |
 | No-argument capabilities | Explicit contracts | Summary/list capabilities now reject unexpected arguments through no-argument contracts. |
-| Module packages | Runtime-detached | Remaining package projects are solution-local compatibility artifacts and are not configured through API runtime. |
+| Package shells | Retired | Platform and Analytics package shell projects were removed from the solution in Sprint 21. |
 
 ## Changed In Sprint 11
 
@@ -39,7 +39,7 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Production fallback | Stricter | Production config disables bootstrap fallback and marks mixed/bootstrap-only source modes unhealthy. |
 | Approval policy | Environment/risk aware | Apply roles, high-risk approver roles, break-glass roles, and production-like independent apply are configured separately. |
 | Contract lifecycle | Versioned baseline | `ArgumentContract` includes `ContractVersion`, `SchemaDialect`, and `SchemaRef` for future schema governance. |
-| Module package end-state | Decided | Module packages are retained only as non-runtime packaging or diagnostic artifacts. |
+| Package shell end-state | Completed | Platform and Analytics package shells were removed rather than retained as non-runtime artifacts. |
 
 ## Changed In Sprint 12
 
@@ -74,7 +74,23 @@ This document tracks transitional components that still exist after Sprint 9, pl
 |-----------|--------|-------|
 | Model module residue | Deleted | The obsolete Model module project and solution/API references were removed. |
 | Multi-Agent ownership language | Clarified | Runtime ownership is Supervisor + Domain Agents + Tool Adapters; technical model/provider concerns are not domain ownership. |
-| Module package classifications | Narrowed | Remaining package residue is limited to Platform packaging-only and Analytics diagnostic-only. |
+| Package shell residue | Removed | Sprint 21 retired Platform and Analytics package shell projects. |
+
+## Removed In Sprint 21
+
+| Component | Result | Notes |
+|-----------|--------|-------|
+| `ITilsoftModule` | Deleted | No runtime or solution-local package project needs a module contract. |
+| Platform package shell | Deleted | Removed from the solution and source tree. |
+| Analytics package shell | Deleted | Removed from the solution and source tree. |
+| Runtime SQL caller names | Migrated | Runtime callers use capability-scope stored procedures and `@CapabilityScopesJson`. |
+
+## Added In Sprint 21
+
+| Component | Result | Notes |
+|-----------|--------|-------|
+| Capability-scope SQL views | Added | Views expose `CapabilityScopeKey` over legacy storage names. |
+| Capability-scope SQL procedures | Added | New procedures provide forward-facing names while preserving old procedures for rollback. |
 
 ## Removed In Sprint 20
 
@@ -128,16 +144,16 @@ This document tracks transitional components that still exist after Sprint 9, pl
 |-------|-------|
 | Status | Compatibility-only |
 | Location | `sql/01_core/070_tables_module_scope.sql`, `sql/01_core/073_tables_runtime_policy.sql`, `sql/01_core/074_tables_react_followup_rule.sql` |
-| Why it exists | Existing stored procedures and upgraded databases still use `ModuleKey` and `@ModuleKeysJson` names for capability-scope filtering. |
-| What depends on it | Tool catalog, metadata dictionary, runtime policy, and ReAct follow-up compatibility procedures. |
+| Why it exists | Existing databases still store historical table/column names. Sprint 21 wrappers provide forward-facing capability-scope names. |
+| What depends on it | Legacy binaries and rollback paths; current runtime callers use the capability-scope wrappers. |
 | Removal condition | A future DB migration can rename columns/parameters after all deployed databases and clients stop depending on the legacy names. |
 
-Current classifications:
+Retired package shells:
 
-| Package | Classification |
-|---------|----------------|
-| `TILSOFTAI.Modules.Platform` | solution-local compatibility package, not referenced by API |
-| `TILSOFTAI.Modules.Analytics` | solution-local diagnostic package, not referenced by API |
+| Package shell | Sprint 21 result |
+|---------------|------------------|
+| Platform | Deleted |
+| Analytics | Deleted |
 
 ### 2. Bootstrap Configuration Sources
 

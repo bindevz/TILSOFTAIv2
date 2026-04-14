@@ -40,7 +40,7 @@ V3 mapping:
 
 Retired module-first runtime:
 - Module loader, module autoload, module activation provider, module health check, and module scope resolver were deleted by Sprint 20.
-- SQL `ModuleKey` and `@ModuleKeysJson` names remain only as compatibility names for capability-scope filtering.
+- Sprint 21 adds capability-scope SQL views/procedures and moves runtime callers to them. Legacy SQL table/column names remain only for deployed database compatibility.
 
 Planned V3 replacement:
 - capability-pack loading
