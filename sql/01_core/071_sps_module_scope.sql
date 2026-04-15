@@ -14,6 +14,22 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    BEGIN TRY
+        IF OBJECT_ID('dbo.app_sql_compatibility_usage_record', 'P') IS NOT NULL
+        BEGIN
+            EXEC dbo.app_sql_compatibility_usage_record
+                @SurfaceName = N'app_modulecatalog_list',
+                @SurfaceKind = N'legacy-procedure',
+                @ForwardSurfaceName = N'app_capabilityscope_list',
+                @TenantId = @TenantId,
+                @Language = @Language,
+                @CompatibilityNotes = N'Legacy capability-scope catalog procedure.';
+        END
+    END TRY
+    BEGIN CATCH
+        DECLARE @IgnoredSqlCompatibilityTelemetryError int = ERROR_NUMBER();
+    END CATCH
+
     SELECT ModuleKey, AppKey, Instruction, Priority
     FROM dbo.ModuleCatalog
     WHERE IsEnabled = 1
@@ -37,6 +53,22 @@ CREATE OR ALTER PROCEDURE dbo.app_toolcatalog_list_scoped
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    BEGIN TRY
+        IF OBJECT_ID('dbo.app_sql_compatibility_usage_record', 'P') IS NOT NULL
+        BEGIN
+            EXEC dbo.app_sql_compatibility_usage_record
+                @SurfaceName = N'app_toolcatalog_list_scoped',
+                @SurfaceKind = N'legacy-procedure',
+                @ForwardSurfaceName = N'app_toolcatalog_list_by_capability_scope',
+                @TenantId = @TenantId,
+                @Language = @Language,
+                @CompatibilityNotes = N'Legacy tool catalog scope procedure using @ModulesJson.';
+        END
+    END TRY
+    BEGIN CATCH
+        DECLARE @IgnoredSqlCompatibilityTelemetryError int = ERROR_NUMBER();
+    END CATCH
 
     -- Validate JSON input
     IF ISJSON(@ModulesJson) <> 1
@@ -97,6 +129,22 @@ CREATE OR ALTER PROCEDURE dbo.app_metadatadictionary_list_scoped
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    BEGIN TRY
+        IF OBJECT_ID('dbo.app_sql_compatibility_usage_record', 'P') IS NOT NULL
+        BEGIN
+            EXEC dbo.app_sql_compatibility_usage_record
+                @SurfaceName = N'app_metadatadictionary_list_scoped',
+                @SurfaceKind = N'legacy-procedure',
+                @ForwardSurfaceName = N'app_metadatadictionary_list_by_capability_scope',
+                @TenantId = @TenantId,
+                @Language = @Language,
+                @CompatibilityNotes = N'Legacy metadata dictionary scope procedure using @ModulesJson.';
+        END
+    END TRY
+    BEGIN CATCH
+        DECLARE @IgnoredSqlCompatibilityTelemetryError int = ERROR_NUMBER();
+    END CATCH
 
     IF ISJSON(@ModulesJson) <> 1
     BEGIN

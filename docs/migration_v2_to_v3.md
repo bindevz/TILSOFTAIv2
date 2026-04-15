@@ -42,12 +42,12 @@ Retired module-first runtime:
 - Module loader, module autoload, module activation provider, module health check, and module scope resolver were deleted by Sprint 20.
 - Sprint 21 adds capability-scope SQL views/procedures and moves runtime callers to them. Legacy SQL table/column names remain only for deployed database compatibility.
 
-Planned V3 replacement:
-- capability-pack loading
+Current V3 replacement:
+- platform catalog and static/bootstrap capability sources
 - supervisor-to-agent routing
 - capability resolution by adapter/system target
 
-## What Sprint 2 must do
+## Historical Sprint 2 Plan
 
 Required next steps:
 - add first real domain agents with owned capability sets instead of the single `LegacyChatDomainAgent`

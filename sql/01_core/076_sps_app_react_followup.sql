@@ -12,6 +12,22 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    BEGIN TRY
+        IF OBJECT_ID('dbo.app_sql_compatibility_usage_record', 'P') IS NOT NULL
+        BEGIN
+            EXEC dbo.app_sql_compatibility_usage_record
+                @SurfaceName = N'app_react_followup_list_scoped',
+                @SurfaceKind = N'legacy-procedure',
+                @ForwardSurfaceName = N'app_react_followup_list_by_capability_scope',
+                @TenantId = @TenantId,
+                @AppKey = @AppKey,
+                @CompatibilityNotes = N'Legacy ReAct follow-up scope procedure using @ModuleKeysJson.';
+        END
+    END TRY
+    BEGIN CATCH
+        DECLARE @IgnoredSqlCompatibilityTelemetryError int = ERROR_NUMBER();
+    END CATCH
+
     DECLARE @ModuleKeys TABLE (ModuleKey nvarchar(50));
     INSERT INTO @ModuleKeys (ModuleKey)
     SELECT value FROM OPENJSON(@ModuleKeysJson);

@@ -71,11 +71,10 @@ The last Platform/Analytics package shells and `ITilsoftModule` contract were re
 
 ## Sprint 6 Cleanup Outcome
 
-Native runtime execution no longer depends on module scope resolution or the old orchestration facade. Module-era infrastructure is now explicitly bridge/legacy-only. Runtime telemetry makes native usage, bridge fallback, approval execution, capability invocation, adapter failures, and duration visible.
+Native runtime execution no longer depends on module scope resolution or the old orchestration facade. Runtime telemetry makes native usage, approval execution, capability invocation, adapter failures, and duration visible.
 
-## Sprint 7 Cleanup Prerequisites
+## Current Follow-up
 
-- Native general/chat agent or equivalent fallback replacement.
-- Capability-pack loader for legacy tool catalog replacement.
-- Expanded non-SQL capability configuration and production endpoint policy.
-- Future DB-major migration to rename physical legacy storage names after telemetry confirms no deployed callers depend on the legacy procedures.
+- Maintain compatibility telemetry until legacy SQL procedure usage is zero for the agreed evidence window.
+- Use `docs/db_major_readiness_checklist.md` before any physical SQL rename.
+- Keep forward-facing runtime ownership in Supervisor, Domain Agents, Tool Adapters, and Platform Catalog.

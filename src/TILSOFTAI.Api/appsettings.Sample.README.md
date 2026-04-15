@@ -237,4 +237,4 @@ Optional safety fields:
 
 ## Legacy Package Classification
 
-Default runtime configuration does not include a module activation section. Production API startup resolves tools from native registries and the platform catalog; the old Platform and Analytics package shells were retired in Sprint 21.
+Default runtime configuration does not include a module activation section. Production API startup resolves tools from native registries and the platform catalog; the old Platform and Analytics package shells are retired.

@@ -1,6 +1,6 @@
-# Enterprise Readiness Gap Report - Sprint 19
+# Enterprise Readiness Gap Report
 
-Sprint 14 turns the governed catalog control plane into an artifact-verifiable production path. Evidence now has trust tiers, controlled-provider byte verification, freshness enforcement, retention snapshots, and hardened dossier hashes.
+The governed catalog control plane is an artifact-verifiable production path. Evidence has trust tiers, controlled-provider byte verification, freshness enforcement, retention snapshots, hardened dossier hashes, and managed release provenance.
 
 ## Completed Through Sprint 7
 
@@ -64,14 +64,14 @@ Sprint 14 turns the governed catalog control plane into an artifact-verifiable p
 |---------|----------------|-------------------------|
 | Catalog admin write path needs live certification | The platform now stores and enforces evidence, but the local implementation run did not execute real staging/prod-like drills. | Run the runbook and failure drills against staging/prod-like SQL with signed-off accepted evidence. |
 | Bootstrap fallback still exists as an emergency mechanism | Production config is stricter, but fallback code remains available for lower environments and emergencies. | Keep production fallback disabled by default and alert on any fallback source mode. |
-| Bounded Platform/Analytics package residue still physically exists | Their end-state is non-runtime packaging/diagnostic support. | Remove remaining packages only when packaging/diagnostic ownership no longer needs them. |
+| Legacy physical SQL storage names still exist | They are compatibility-only, but a DB-major rename needs proof that no deployed callers still use the legacy procedure names. | Use `SqlCompatibilityUsageLog`, the observability runbook, and the DB-major readiness checklist before scheduling physical renames. |
 | SQL remains dominant | Most production capabilities are still SQL-backed even with two governed REST paths. | Continue adding governed non-SQL capabilities where production workflows require them. |
 | Contract richness still depends on capability shape | Schema lifecycle exists, but future records must keep using it consistently. | Enforce preview and contract review in catalog operations and evaluate JSON Schema artifacts when schemas become shared. |
 | Signed bundle verification is still reserved | Sprint 14 adds controlled provider byte verification, but not signed publisher validation. | Add `signature_verified` support when compliance requires publisher-signature proof. |
 
 ## Verification Notes
 
-Sprint 12 local verification should include:
+Local verification should include:
 - `dotnet build src/TILSOFTAI.Api/TILSOFTAI.Api.csproj -nologo --no-restore /nr:false /p:UseSharedCompilation=false -m:1`
 - `dotnet test tests/TILSOFTAI.Tests/TILSOFTAI.Tests.csproj -nologo --no-restore /nr:false /p:UseSharedCompilation=false -m:1 -v:minimal`
 - `dotnet test tests/TILSOFTAI.IntegrationTests/TILSOFTAI.IntegrationTests.csproj -nologo --no-restore /nr:false /p:UseSharedCompilation=false -m:1 -v:minimal`

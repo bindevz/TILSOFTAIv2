@@ -1,4 +1,4 @@
-﻿# Model Module - Enterprise Adapter
+# Model Module - Enterprise Adapter
 
 This directory contains the Enterprise implementation of the Model Module Adapter.
 

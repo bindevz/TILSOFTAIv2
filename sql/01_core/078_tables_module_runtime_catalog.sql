@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- PATCH 37.01 / SPRINT 20: ModuleRuntimeCatalog legacy compatibility surface
 -- SPRINT 20: LEGACY COMPATIBILITY ONLY.
 -- Production API startup no longer registers a module loader or consumes this catalog.
@@ -31,6 +31,20 @@ CREATE OR ALTER PROCEDURE dbo.app_module_runtime_list
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    BEGIN TRY
+        IF OBJECT_ID('dbo.app_sql_compatibility_usage_record', 'P') IS NOT NULL
+        BEGIN
+            EXEC dbo.app_sql_compatibility_usage_record
+                @SurfaceName = N'app_module_runtime_list',
+                @SurfaceKind = N'legacy-procedure',
+                @TenantId = @TenantId,
+                @CompatibilityNotes = N'Legacy package-runtime diagnostic procedure.';
+        END
+    END TRY
+    BEGIN CATCH
+        DECLARE @IgnoredSqlCompatibilityTelemetryError int = ERROR_NUMBER();
+    END CATCH
 
     ;WITH cte AS (
         SELECT

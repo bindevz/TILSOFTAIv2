@@ -1,4 +1,4 @@
-# Architecture V3 - Sprint 19
+# Architecture V3
 
 ## Runtime Shape
 
@@ -198,4 +198,4 @@ Validation failure returns `CAPABILITY_ARGUMENT_VALIDATION_FAILED` before adapte
 
 ## Current State
 
-The native path is supervisor-driven, policy-gated, contract-validated, and adapter-backed. The bridge, ChatPipeline, and Model module are retired or deleted. Remaining compatibility debt is limited to opt-in module diagnostics, bootstrap catalog fallback, bounded Platform/Analytics package residue, and continued live operational certification.
+The native path is supervisor-driven, policy-gated, contract-validated, and adapter-backed. The bridge, ChatPipeline, package-loader runtime, package shell projects, and Model module are retired or deleted. Remaining compatibility debt is limited to legacy physical SQL storage names behind capability-scope wrappers, bootstrap catalog fallback, DB-major readiness evidence, and continued live operational certification.

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using System.Text;
 using System.Text.Json;
 using Xunit;
 
@@ -173,6 +174,106 @@ public sealed class ArchitectureResidueGuardTests
         offenders.Should().BeEmpty("forward-looking docs should describe capability/catalog ownership, not normalize module runtime ownership");
     }
 
+    [Fact]
+    public void ForwardFacingText_ShouldNotContainVisibleMojibake()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var forbidden = new[]
+        {
+            "\u00c3",
+            "\u00c2",
+            "\u00c4",
+            "\u00c6",
+            "\u00e2\u20ac",
+            "\u00e2\u0153",
+            "\u00e2\u2020",
+            "\u00e1\u00ba"
+        };
+
+        var offenders = EnumerateForwardFacingTextFiles(repositoryRoot)
+            .SelectMany(path => forbidden
+                .Where(token => File.ReadAllText(path, Encoding.UTF8).Contains(token, StringComparison.Ordinal))
+                .Select(token => $"{Path.GetRelativePath(repositoryRoot, path)} contains mojibake token U+{(int)token[0]:X4}"))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        offenders.Should().BeEmpty("forward-facing docs, SQL, CI, and source text should render as clean UTF-8");
+    }
+
+    [Fact]
+    public void ForwardFacingText_ShouldNotUseUtf8Bom()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var offenders = EnumerateForwardFacingTextFiles(repositoryRoot)
+            .Where(path =>
+            {
+                var bytes = File.ReadAllBytes(path);
+                return bytes.Length >= 3
+                    && bytes[0] == 0xEF
+                    && bytes[1] == 0xBB
+                    && bytes[2] == 0xBF;
+            })
+            .Select(path => Path.GetRelativePath(repositoryRoot, path))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        offenders.Should().BeEmpty("forward-facing repository text should avoid BOM noise in reviews and tooling");
+    }
+
+    [Fact]
+    public void PrimaryDocs_ShouldNotHaveStaleSprintHeaders()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var docsToScan = new[]
+        {
+            Path.Combine(repositoryRoot, "docs", "architecture_v3.md"),
+            Path.Combine(repositoryRoot, "docs", "compatibility_debt_report.md"),
+            Path.Combine(repositoryRoot, "docs", "module_package_classification.md"),
+            Path.Combine(repositoryRoot, "docs", "sql_capability_scope_migration.md")
+        };
+        var staleHeaders = new[] { "Sprint 19", "Sprint 20", "Sprint 21" };
+
+        var offenders = docsToScan
+            .Where(File.Exists)
+            .Select(path => new { Path = path, Header = File.ReadLines(path, Encoding.UTF8).FirstOrDefault() ?? string.Empty })
+            .Where(item => staleHeaders.Any(marker => item.Header.Contains(marker, StringComparison.OrdinalIgnoreCase)))
+            .Select(item => $"{Path.GetRelativePath(repositoryRoot, item.Path)} starts with {item.Header}")
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        offenders.Should().BeEmpty("primary docs should describe the current repository state rather than a previous sprint as the current label");
+    }
+
+    [Fact]
+    public void SqlCompatibilityObservability_ShouldRemainAvailable()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var observabilitySql = Path.Combine(repositoryRoot, "sql", "01_core", "082_tables_sql_compatibility_observability.sql");
+        var contents = File.ReadAllText(observabilitySql, Encoding.UTF8);
+
+        contents.Should().Contain("SqlCompatibilityUsageLog");
+        contents.Should().Contain("SqlCompatibilityUsageDaily");
+        contents.Should().Contain("app_sql_compatibility_usage_summary");
+        contents.Should().Contain("app_sql_compatibility_retirement_readiness");
+
+        var instrumentedSql = new[]
+        {
+            Path.Combine(repositoryRoot, "sql", "01_core", "071_sps_module_scope.sql"),
+            Path.Combine(repositoryRoot, "sql", "01_core", "075_sps_app_policy.sql"),
+            Path.Combine(repositoryRoot, "sql", "01_core", "076_sps_app_react_followup.sql"),
+            Path.Combine(repositoryRoot, "sql", "01_core", "078_tables_module_runtime_catalog.sql"),
+            Path.Combine(repositoryRoot, "sql", "01_core", "080_sps_capability_scope_compat.sql")
+        };
+
+        var missingInstrumentation = instrumentedSql
+            .Where(path => !File.ReadAllText(path, Encoding.UTF8).Contains("app_sql_compatibility_usage_record", StringComparison.Ordinal))
+            .Select(path => Path.GetRelativePath(repositoryRoot, path))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        missingInstrumentation.Should().BeEmpty("legacy SQL compatibility paths and forward wrappers should emit retirement-readiness telemetry");
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -206,7 +307,7 @@ public sealed class ArchitectureResidueGuardTests
             return false;
         }
 
-        return Path.GetExtension(path) is ".cs" or ".csproj" or ".json" or ".md" or ".sql" or ".slnx";
+        return Path.GetExtension(path) is ".cs" or ".csproj" or ".json" or ".md" or ".sql" or ".slnx" or ".yml" or ".yaml" or ".ps1";
     }
 
     private static bool ShouldScanSource(string path)
@@ -219,5 +320,42 @@ public sealed class ArchitectureResidueGuardTests
         var relativePath = Path.GetRelativePath(FindRepositoryRoot(), path);
         return relativePath.StartsWith("src" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             || relativePath.StartsWith("tests" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> EnumerateForwardFacingTextFiles(string repositoryRoot)
+    {
+        var directories = new[]
+        {
+            ".github",
+            "docs",
+            "sql",
+            "src",
+            "tests"
+        };
+
+        foreach (var directoryName in directories)
+        {
+            var directory = Path.Combine(repositoryRoot, directoryName);
+            if (!Directory.Exists(directory))
+            {
+                continue;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Where(ShouldScan))
+            {
+                yield return file;
+            }
+        }
+
+        var rootFiles = new[]
+        {
+            Path.Combine(repositoryRoot, "README.md"),
+            Path.Combine(repositoryRoot, "TILSOFTAI.slnx")
+        };
+
+        foreach (var file in rootFiles.Where(File.Exists))
+        {
+            yield return file;
+        }
     }
 }

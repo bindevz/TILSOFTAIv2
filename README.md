@@ -75,13 +75,12 @@ Write requests:
 
 These components remain intentionally narrow:
 
-- Legacy capability-scope SQL tables: compatibility-only storage; runtime callers use capability-scope wrappers.
-- `TILSOFTAI.Modules.Platform` and `TILSOFTAI.Modules.Analytics` package shells were retired in Sprint 21.
+- Legacy physical SQL storage names: compatibility-only storage behind capability-scope wrappers and usage telemetry.
 - `InMemoryCapabilityRegistry`: test fixture only.
 
 The obsolete Model module was removed in Sprint 19. Do not reintroduce a technical model/provider module or pseudo-domain to own production behavior.
 
-See `docs/compatibility_debt_report.md` and `docs/enterprise_readiness_gap_report.md` for removal conditions and blockers.
+See `docs/compatibility_debt_report.md`, `docs/sql_compatibility_observability_runbook.md`, `docs/db_major_readiness_checklist.md`, and `docs/enterprise_readiness_gap_report.md` for removal conditions and blockers.
 
 ## Documentation
 
@@ -90,6 +89,8 @@ See `docs/compatibility_debt_report.md` and `docs/enterprise_readiness_gap_repor
 - `docs/enterprise_readiness_gap_report.md`
 - `docs/operational_runtime_observability.md`
 - `docs/runtime_readiness.md`
+- `docs/sql_compatibility_observability_runbook.md`
+- `docs/db_major_readiness_checklist.md`
 - `docs/external_integration_governance.md`
 - `docs/platform_catalog_governance.md`
 - `docs/catalog_control_plane_runbook.md`

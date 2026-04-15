@@ -1,6 +1,6 @@
-# Compatibility Debt Report - Sprint 19
+# Compatibility Debt Report
 
-This document tracks transitional components that still exist after Sprint 9, plus the components removed or reduced during the sprint.
+This document tracks transitional components that still exist, the cleanup already completed, and the current compatibility surfaces that need operational evidence before retirement.
 
 ## Removed In Sprint 9
 
@@ -29,7 +29,7 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | Bootstrap fallback | Visible operational state | Startup logs, metrics, and `/health/ready` now report `platform`, `mixed`, `bootstrap_only`, or `empty`. |
 | Catalog integrity | Enforced on load and mutation | Duplicate keys, unresolved REST connections, raw secrets, and missing contracts are reported as validation errors. |
 | No-argument capabilities | Explicit contracts | Summary/list capabilities now reject unexpected arguments through no-argument contracts. |
-| Package shells | Retired | Platform and Analytics package shell projects were removed from the solution in Sprint 21. |
+| Package shells | Retired | Platform and Analytics package shell projects are removed from the solution. |
 
 ## Changed In Sprint 11
 
@@ -74,7 +74,7 @@ This document tracks transitional components that still exist after Sprint 9, pl
 |-----------|--------|-------|
 | Model module residue | Deleted | The obsolete Model module project and solution/API references were removed. |
 | Multi-Agent ownership language | Clarified | Runtime ownership is Supervisor + Domain Agents + Tool Adapters; technical model/provider concerns are not domain ownership. |
-| Package shell residue | Removed | Sprint 21 retired Platform and Analytics package shell projects. |
+| Package shell residue | Removed | Platform and Analytics package shell projects are retired. |
 
 ## Removed In Sprint 21
 
@@ -148,6 +148,8 @@ This document tracks transitional components that still exist after Sprint 9, pl
 | What depends on it | Legacy binaries and rollback paths; current runtime callers use the capability-scope wrappers. |
 | Removal condition | A future DB migration can rename columns/parameters after all deployed databases and clients stop depending on the legacy names. |
 
+Sprint 22 adds `SqlCompatibilityUsageLog`, `SqlCompatibilityUsageDaily`, `app_sql_compatibility_usage_summary`, and `app_sql_compatibility_retirement_readiness` so this removal condition can be proven from production-shaped telemetry instead of guessed.
+
 Retired package shells:
 
 | Package shell | Sprint 21 result |
@@ -176,4 +178,4 @@ Retired package shells:
 
 ## Current Debt Priorities
 
-Completed in code. Remaining priorities are live staging/prod-like certification evidence, optional signed bundle verification where required, operator training, and future cleanup of Platform/Analytics residue when packaging or diagnostic ownership no longer needs it. The removed Model module must not be reintroduced as a technical module or pseudo-agent.
+Current priorities are compatibility observability, DB-major readiness evidence, live staging/prod-like certification evidence, optional signed bundle verification where required, and operator training. Removed package shells and the removed Model module must not be reintroduced as technical modules, pseudo-agents, or package-loader ownership shortcuts.

@@ -90,6 +90,22 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    BEGIN TRY
+        IF OBJECT_ID('dbo.app_sql_compatibility_usage_record', 'P') IS NOT NULL
+        BEGIN
+            EXEC dbo.app_sql_compatibility_usage_record
+                @SurfaceName = N'app_capabilityscope_list',
+                @SurfaceKind = N'capability-scope-wrapper',
+                @ForwardSurfaceName = N'app_capabilityscope_list',
+                @TenantId = @TenantId,
+                @Language = @Language,
+                @CompatibilityNotes = N'Forward capability-scope wrapper over legacy storage names.';
+        END
+    END TRY
+    BEGIN CATCH
+        DECLARE @IgnoredSqlCompatibilityTelemetryError int = ERROR_NUMBER();
+    END CATCH
+
     SELECT CapabilityScopeKey, AppKey, Instruction, Priority
     FROM dbo.CapabilityScopeCatalog
     WHERE IsEnabled = 1
@@ -107,6 +123,22 @@ CREATE OR ALTER PROCEDURE dbo.app_toolcatalog_list_by_capability_scope
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    BEGIN TRY
+        IF OBJECT_ID('dbo.app_sql_compatibility_usage_record', 'P') IS NOT NULL
+        BEGIN
+            EXEC dbo.app_sql_compatibility_usage_record
+                @SurfaceName = N'app_toolcatalog_list_by_capability_scope',
+                @SurfaceKind = N'capability-scope-wrapper',
+                @ForwardSurfaceName = N'app_toolcatalog_list_by_capability_scope',
+                @TenantId = @TenantId,
+                @Language = @Language,
+                @CompatibilityNotes = N'Forward tool catalog capability-scope wrapper.';
+        END
+    END TRY
+    BEGIN CATCH
+        DECLARE @IgnoredSqlCompatibilityTelemetryError int = ERROR_NUMBER();
+    END CATCH
 
     IF ISJSON(@CapabilityScopesJson) <> 1
     BEGIN
@@ -159,6 +191,22 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    BEGIN TRY
+        IF OBJECT_ID('dbo.app_sql_compatibility_usage_record', 'P') IS NOT NULL
+        BEGIN
+            EXEC dbo.app_sql_compatibility_usage_record
+                @SurfaceName = N'app_metadatadictionary_list_by_capability_scope',
+                @SurfaceKind = N'capability-scope-wrapper',
+                @ForwardSurfaceName = N'app_metadatadictionary_list_by_capability_scope',
+                @TenantId = @TenantId,
+                @Language = @Language,
+                @CompatibilityNotes = N'Forward metadata dictionary capability-scope wrapper.';
+        END
+    END TRY
+    BEGIN CATCH
+        DECLARE @IgnoredSqlCompatibilityTelemetryError int = ERROR_NUMBER();
+    END CATCH
+
     IF ISJSON(@CapabilityScopesJson) <> 1
     BEGIN
         RAISERROR('@CapabilityScopesJson must be a valid JSON array.', 16, 1);
@@ -190,6 +238,23 @@ CREATE OR ALTER PROCEDURE dbo.app_policy_resolve_by_capability_scope
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    BEGIN TRY
+        IF OBJECT_ID('dbo.app_sql_compatibility_usage_record', 'P') IS NOT NULL
+        BEGIN
+            EXEC dbo.app_sql_compatibility_usage_record
+                @SurfaceName = N'app_policy_resolve_by_capability_scope',
+                @SurfaceKind = N'capability-scope-wrapper',
+                @ForwardSurfaceName = N'app_policy_resolve_by_capability_scope',
+                @TenantId = @TenantId,
+                @AppKey = @AppKey,
+                @Language = @Language,
+                @CompatibilityNotes = N'Forward runtime policy capability-scope wrapper.';
+        END
+    END TRY
+    BEGIN CATCH
+        DECLARE @IgnoredSqlCompatibilityTelemetryError int = ERROR_NUMBER();
+    END CATCH
 
     DECLARE @CapabilityScopes TABLE (CapabilityScopeKey nvarchar(50));
     IF (@CapabilityScopesJson IS NOT NULL AND ISJSON(@CapabilityScopesJson) = 1)
@@ -253,6 +318,22 @@ CREATE OR ALTER PROCEDURE dbo.app_react_followup_list_by_capability_scope
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    BEGIN TRY
+        IF OBJECT_ID('dbo.app_sql_compatibility_usage_record', 'P') IS NOT NULL
+        BEGIN
+            EXEC dbo.app_sql_compatibility_usage_record
+                @SurfaceName = N'app_react_followup_list_by_capability_scope',
+                @SurfaceKind = N'capability-scope-wrapper',
+                @ForwardSurfaceName = N'app_react_followup_list_by_capability_scope',
+                @TenantId = @TenantId,
+                @AppKey = @AppKey,
+                @CompatibilityNotes = N'Forward ReAct follow-up capability-scope wrapper.';
+        END
+    END TRY
+    BEGIN CATCH
+        DECLARE @IgnoredSqlCompatibilityTelemetryError int = ERROR_NUMBER();
+    END CATCH
 
     IF ISJSON(@CapabilityScopesJson) <> 1
     BEGIN

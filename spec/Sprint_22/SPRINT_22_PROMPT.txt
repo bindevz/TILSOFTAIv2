@@ -1,0 +1,204 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 22.
+
+Baseline repository reality (after Sprint 21):
+- The platform is already enterprise-grade and high-assurance.
+- The runtime is strongly Multi-Agent:
+  - Supervisor owns orchestration.
+  - Domain Agents own business-domain routing and policy.
+  - Tool Adapters / infrastructure own execution boundaries and provider integration.
+  - Platform Catalog owns governed production capability state.
+- Sprint 21 removed the last package-shell residue:
+  - `TILSOFTAI.Modules.Platform` deleted
+  - `TILSOFTAI.Modules.Analytics` deleted
+  - `ITilsoftModule` deleted
+  - old module template SQL folder deleted
+- Sprint 21 added forward-facing capability-scope SQL wrappers and moved runtime callers to them.
+- Physical SQL storage names still intentionally remain for deployed database compatibility:
+  - `ModuleCatalog`
+  - `ToolCatalogScope.ModuleKey`
+  - `MetadataDictionaryScope.ModuleKey`
+  - `RuntimePolicy.ModuleKey`
+  - `ReActFollowUpRule.ModuleKey`
+- The architecture is now strong and largely clean.
+- The main remaining debt is:
+  1. migration observability for the remaining physical SQL compatibility shell
+  2. repository hygiene / wording consistency / stale doc state
+  3. visible UTF-8/BOM/mojibake artifacts in some workflow/script/SQL/doc files
+
+Sprint 22 mission:
+Harden migration observability and eliminate repository-quality inconsistencies without reopening architecture or adding feature breadth.
+
+Primary objective:
+1. Add an operationally useful way to know whether legacy SQL compatibility paths are still in use.
+2. Normalize wording and forward-looking vocabulary across docs, CI, scripts, and comments.
+3. Fix visible UTF-8/BOM/mojibake issues.
+4. Remove stale sprint metadata and stale cleanup/debt narrative from primary docs.
+5. Strengthen guardrails so repo hygiene and consistency regressions are caught automatically.
+6. Produce a DB-major readiness checklist for eventual physical SQL rename/cleanup.
+7. Keep Sprint 22 focused on polish, observability, and enterprise-grade consistency.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the orchestration owner.
+2. Domain Agents remain business-domain routing/policy owners.
+3. Tool Adapters / infrastructure remain execution and provider owners.
+4. Platform Catalog remains the governed source of truth for production capability state.
+5. Legacy physical SQL names are compatibility-only, not future-facing architecture.
+6. Sprint 22 is about readiness, consistency, and polish—not new runtime concepts.
+7. Forward-looking repository language should be capability/catalog/adapter/domain-agent oriented.
+8. Compatibility retirement should be observable, not guessed.
+9. Cleanup must remain migration-safe and enterprise-appropriate.
+10. Do not turn Sprint 22 into a feature sprint.
+
+Primary Sprint 22 goals:
+
+A. Add migration observability
+- Provide an operationally useful way to know whether legacy SQL compatibility procedures are still being used.
+- Make it possible to determine readiness for physical SQL rename/retirement.
+- Add runbook documentation explaining:
+  - what to monitor
+  - how to interpret it
+  - what thresholds or conditions matter
+  - when a DB-major rename is safe
+
+B. Normalize repository language
+- Update docs, CI, comments, scripts, and readme fragments to use current architecture language.
+- Remove casual or stale uses of module-era runtime wording except where explicitly historical.
+- Make forward-looking text consistent with:
+  - capability scope
+  - capability
+  - catalog
+  - adapter
+  - domain agent
+
+C. Fix encoding / BOM / mojibake issues
+- Identify visible UTF-8/BOM/garbled text issues.
+- Correct affected workflow, SQL, docs, and script files.
+- Ensure non-English content renders correctly.
+- Ensure files do not carry hidden encoding debt that creates tooling or review friction.
+
+D. Remove stale sprint / debt narrative
+- Fix outdated document headers/titles and sprint labels.
+- Remove stale references implying deleted residue still meaningfully exists.
+- Ensure “current debt priorities” and similar summary sections reflect the actual current repo state.
+
+E. Strengthen hygiene guardrails
+- Add practical checks for:
+  - stale forward-looking module-runtime wording in key docs
+  - reintroduction of retired directory/package-shell structures
+  - visible mojibake/BOM patterns where detectable
+  - stale sprint metadata in selected primary docs where appropriate
+- Keep checks maintainable and not overly brittle.
+
+F. Produce DB-major readiness guidance
+- Define the explicit conditions for eventually renaming or permanently abstracting the remaining physical SQL storage names.
+- Include:
+  - telemetry requirements
+  - migration sequence
+  - rollback expectations
+  - operator communication
+  - validation expectations
+
+G. Preserve enterprise-grade behavior
+- Do not weaken evidence verification, promotion gates, manifests, attestation, archives, retention, recovery, or governed control plane behavior.
+- Do not reopen module-era architecture.
+- Do not add feature breadth.
+
+Non-negotiable rules:
+1. Do not weaken enterprise-grade trust/governance/runtime controls.
+2. Do not reopen module activation/routing concepts.
+3. Do not perform unsafe physical SQL renames without explicit migration readiness.
+4. Do not leave visible encoding/mojibake artifacts in forward-facing repository files.
+5. Do not keep stale sprint/debt narrative in primary docs.
+6. Do not let forward-looking docs casually normalize legacy module terminology.
+7. Prefer observability and readiness over speculative cleanup.
+8. Prefer precise, practical guardrails over vague assertions.
+9. Keep the sprint tightly bounded to polish/observability/consistency.
+10. Do not turn Sprint 22 into a feature sprint.
+
+Explicitly in scope:
+- migration observability for legacy SQL compatibility usage
+- runbook / checklist for DB-major readiness
+- wording consistency cleanup
+- UTF-8/BOM/mojibake cleanup
+- stale sprint metadata cleanup
+- hygiene/consistency guardrails
+- validation/build/test updates for the above
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- large domain-agent expansion
+- workflow/product breadth expansion
+
+Recommended implementation order:
+1. Inventory visible consistency/encoding/stale-state debt.
+2. Clean docs/CI/scripts wording and sprint metadata.
+3. Add migration observability and readiness guidance.
+4. Add hygiene/consistency guardrails.
+5. Validate build/tests/rendering/workflow behavior.
+6. Remove small dead leftovers revealed by the cleanup.
+
+Required architectural outcomes:
+1. Forward-looking repository language is more consistent than after Sprint 21.
+2. Visible encoding/mojibake/BOM issues are materially reduced or eliminated.
+3. The team has a concrete way to know whether legacy SQL compatibility paths are still needed.
+4. The repo is better prepared for a future DB-major cleanup.
+5. Enterprise-grade behavior remains intact.
+6. Multi-Agent remains the only future-facing ownership story.
+
+Definition of done:
+- Visible encoding/mojibake/BOM issues in forward-facing files are corrected.
+- Primary docs no longer carry stale sprint/debt narrative.
+- Forward-looking docs/scripts/CI use current capability-oriented vocabulary consistently.
+- There is an explicit migration observability story for legacy SQL compatibility usage.
+- A DB-major readiness checklist exists and is operationally meaningful.
+- Guardrails catch important hygiene/consistency regressions.
+- The repository is cleaner after Sprint 22 than after Sprint 21 without losing enterprise-grade behavior.
+
+Must-fail conditions:
+- visible mojibake/BOM/encoding issues remain in important forward-facing files
+- stale sprint/debt narrative remains in primary docs
+- there is still no operational way to judge readiness for retiring legacy SQL compatibility paths
+- guardrails still ignore repo hygiene/consistency drift
+- Sprint 22 drifts into feature work instead of polish/observability hardening
+
+Preferred implementation style:
+- migration-safe polish
+- documentation truthfulness
+- capability-oriented vocabulary
+- practical observability
+- maintainable guardrails
+- clean encoding
+- no architecture theater
+
+Required deliverables:
+1. Migration observability changes
+2. Encoding / wording / stale-doc cleanup changes
+3. Guardrail changes
+4. DB-major readiness checklist / runbook changes
+5. Validation / build / test updates
+
+Required reporting after implementation:
+1. Summary of Sprint 22 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Migration observability changes
+6. Encoding / wording / stale-doc cleanup changes
+7. Guardrail changes
+8. DB-major readiness checklist changes
+9. Validation / build / test results
+10. Remaining blockers
+11. Recommended Sprint 23 priorities
+
+Final instruction:
+Sprint 22 is about making the repository measurably ready for the final compatibility retirement and making it look and behave like a polished enterprise asset.
+
+Do not spend Sprint 22 adding runtime novelty.
+Do not turn Sprint 22 into a feature sprint.
+
+Spend it on observability, consistency, encoding cleanup, and truthful documentation.

@@ -1,6 +1,6 @@
-# SQL Capability Scope Migration - Sprint 21
+# SQL Capability Scope Migration
 
-Sprint 21 adds forward-facing capability-scope SQL wrappers while preserving deployed database compatibility.
+The repository uses forward-facing capability-scope SQL wrappers while preserving deployed database compatibility.
 
 ## Inventory
 
@@ -19,11 +19,21 @@ Sprint 21 adds forward-facing capability-scope SQL wrappers while preserving dep
 
 ## Rollout Sequence
 
-1. Deploy the Sprint 21 SQL wrappers and views.
+1. Deploy the capability-scope SQL wrappers and views.
 2. Deploy application code that calls the capability-scope procedures.
 3. Keep legacy procedures and tables in place for older binaries, existing deployments, and rollback.
-4. Monitor for calls to the legacy procedure names through SQL audit/query telemetry.
+4. Monitor legacy procedure and capability-scope wrapper usage through `SqlCompatibilityUsageLog`, `SqlCompatibilityUsageDaily`, and `app_sql_compatibility_usage_summary`.
 5. After all deployed callers use capability-scope procedures, schedule a DB-major migration to rename physical columns/tables or keep views as the permanent abstraction.
+
+## Observability
+
+Sprint 22 adds a concrete compatibility-usage signal:
+
+- legacy procedures record `legacy-procedure`
+- capability-scope wrappers record `capability-scope-wrapper`
+- `dbo.app_sql_compatibility_retirement_readiness` summarizes whether a DB-major rename is a candidate for the selected evidence window
+
+See `docs/sql_compatibility_observability_runbook.md` for operator queries and `docs/db_major_readiness_checklist.md` for go/no-go criteria.
 
 ## Repository Layout
 

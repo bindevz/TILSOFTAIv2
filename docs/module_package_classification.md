@@ -1,4 +1,4 @@
-# Package Shell Retirement - Sprint 21
+# Package Shell Retirement
 
 Runtime routing is supervisor-native, domain-agent-native, catalog-native, and adapter-native. The old Platform and Analytics package shells are no longer production routing owners and are no longer solution projects.
 

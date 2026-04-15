@@ -1,4 +1,4 @@
-﻿name: CI
+name: CI
 
 on:
   push:
@@ -131,18 +131,18 @@ jobs:
         
         if ($missing.Count -gt 0) {
           Write-Host ""
-          Write-Host "ERROR: Required SQL modules are missing!" -ForegroundColor Red
+          Write-Host "ERROR: Required SQL capability files are missing!" -ForegroundColor Red
           foreach ($m in $missing) {
             Write-Host "  - $m" -ForegroundColor Red
           }
           Write-Host ""
-          Write-Host "The analytics module requires these files for proper operation." -ForegroundColor Yellow
+          Write-Host "The analytics capability requires these files for proper operation." -ForegroundColor Yellow
           exit 1
         }
         
-        Write-Host "All required SQL modules verified:" -ForegroundColor Green
+        Write-Host "All required SQL capability files verified:" -ForegroundColor Green
         foreach ($file in $requiredFiles) {
-          Write-Host "  âœ“ $file" -ForegroundColor Green
+          Write-Host "  OK $file" -ForegroundColor Green
         }
 
     # PATCH 31.02: Fixed secret scanning - now includes JSON and fails on detection
@@ -235,7 +235,7 @@ jobs:
         run: |
           $conn = "Server=localhost;Database=TILSOFTAI_Test;User ID=sa;Password=Integration_Test_P@ss1!;TrustServerCertificate=True;"
           
-          # Deploy in order: core â†’ atomic â†’ modules â†’ seeds
+          # Deploy in order: core, atomic, capabilities, seeds
           $folders = @(
             "sql/01_core",
             "sql/02_atomic",

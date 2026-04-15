@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- Patch 35.01: Seed default RuntimePolicy entries
 -- Sprint 21: Runtime callers use capability-scope wrappers.
 -- Global defaults use no capability-scope override.

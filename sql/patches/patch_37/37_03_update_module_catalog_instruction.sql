@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- PATCH 37.03: Legacy capability-scope data update for product-model totals.
 -- ModuleCatalog/ModuleKey are historical storage names retained for compatibility.
 -- ============================================================
@@ -9,7 +9,7 @@ ALSO use this capability scope for totals/counts of models (e.g., total models i
 WHERE ModuleKey='model' AND Language='en';
 
 UPDATE dbo.ModuleCatalog
-SET Instruction = N'Sáº£n pháº©m model: kÃ­ch thÆ°á»›c, trá»ng lÆ°á»£ng, CBM, pieces, váº­t liá»‡u, Ä‘Ã³ng gÃ³i, chá»‰ sá»‘ logistics.
-DÃ™NG capability scope nÃ y cáº£ cho truy váº¥n tá»•ng/Ä‘áº¿m sá»‘ lÆ°á»£ng model (vÃ­ dá»¥: tá»•ng sá»‘ model trong mÃ¹a) báº±ng tool chuyÃªn biá»‡t.'
+SET Instruction = N'Sản phẩm model: kích thước, trọng lượng, CBM, pieces, vật liệu, đóng gói, chỉ số logistics.
+Dùng capability scope này cả cho truy vấn tổng/đếm số lượng model (ví dụ: tổng số model trong mùa) bằng tool chuyên biệt.'
 WHERE ModuleKey='model' AND Language='vi';
 

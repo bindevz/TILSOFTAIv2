@@ -18,6 +18,23 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    BEGIN TRY
+        IF OBJECT_ID('dbo.app_sql_compatibility_usage_record', 'P') IS NOT NULL
+        BEGIN
+            EXEC dbo.app_sql_compatibility_usage_record
+                @SurfaceName = N'app_policy_resolve',
+                @SurfaceKind = N'legacy-procedure',
+                @ForwardSurfaceName = N'app_policy_resolve_by_capability_scope',
+                @TenantId = @TenantId,
+                @AppKey = @AppKey,
+                @Language = @Language,
+                @CompatibilityNotes = N'Legacy runtime policy procedure using @ModuleKeysJson.';
+        END
+    END TRY
+    BEGIN CATCH
+        DECLARE @IgnoredSqlCompatibilityTelemetryError int = ERROR_NUMBER();
+    END CATCH
+
     DECLARE @ModuleKeys TABLE (ModuleKey nvarchar(50));
     IF (@ModuleKeysJson IS NOT NULL AND ISJSON(@ModuleKeysJson) = 1)
     BEGIN
