@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "inventoryVersion": "sprint-23",
+  "scope": "remaining-sql-compatibility-envelope",
+  "physicalStorageNames": [
+    {
+      "name": "ModuleCatalog",
+      "forwardSurface": "CapabilityScopeCatalog",
+      "status": "compatibility-only",
+      "repoPaths": [ "sql/01_core/070_tables_module_scope.sql" ]
+    },
+    {
+      "name": "ToolCatalogScope.ModuleKey",
+      "forwardSurface": "ToolCatalogCapabilityScope.CapabilityScopeKey",
+      "status": "compatibility-only",
+      "repoPaths": [ "sql/01_core/070_tables_module_scope.sql" ]
+    },
+    {
+      "name": "MetadataDictionaryScope.ModuleKey",
+      "forwardSurface": "MetadataDictionaryCapabilityScope.CapabilityScopeKey",
+      "status": "compatibility-only",
+      "repoPaths": [ "sql/01_core/070_tables_module_scope.sql" ]
+    },
+    {
+      "name": "RuntimePolicy.ModuleKey",
+      "forwardSurface": "RuntimePolicyCapabilityScope.CapabilityScopeKey",
+      "status": "compatibility-only",
+      "repoPaths": [ "sql/01_core/073_tables_runtime_policy.sql" ]
+    },
+    {
+      "name": "ReActFollowUpRule.ModuleKey",
+      "forwardSurface": "ReActFollowUpRuleCapabilityScope.CapabilityScopeKey",
+      "status": "compatibility-only",
+      "repoPaths": [ "sql/01_core/074_tables_react_followup_rule.sql" ]
+    }
+  ],
+  "legacyProcedures": [
+    {
+      "name": "app_modulecatalog_list",
+      "forwardSurface": "app_capabilityscope_list",
+      "status": "retained-for-deployed-callers",
+      "repoPaths": [ "sql/01_core/071_sps_module_scope.sql" ]
+    },
+    {
+      "name": "app_toolcatalog_list_scoped",
+      "forwardSurface": "app_toolcatalog_list_by_capability_scope",
+      "status": "retained-for-deployed-callers",
+      "repoPaths": [ "sql/01_core/071_sps_module_scope.sql" ]
+    },
+    {
+      "name": "app_metadatadictionary_list_scoped",
+      "forwardSurface": "app_metadatadictionary_list_by_capability_scope",
+      "status": "retained-for-deployed-callers",
+      "repoPaths": [ "sql/01_core/071_sps_module_scope.sql" ]
+    },
+    {
+      "name": "app_policy_resolve",
+      "forwardSurface": "app_policy_resolve_by_capability_scope",
+      "status": "retained-for-deployed-callers",
+      "repoPaths": [ "sql/01_core/075_sps_app_policy.sql" ]
+    },
+    {
+      "name": "app_react_followup_list_scoped",
+      "forwardSurface": "app_react_followup_list_by_capability_scope",
+      "status": "retained-for-deployed-callers",
+      "repoPaths": [ "sql/01_core/076_sps_app_react_followup.sql" ]
+    }
+  ],
+  "forwardWrappers": [
+    {
+      "name": "app_capabilityscope_list",
+      "status": "current-runtime-surface",
+      "repoPaths": [ "sql/01_core/080_sps_capability_scope_compat.sql" ]
+    },
+    {
+      "name": "app_toolcatalog_list_by_capability_scope",
+      "status": "current-runtime-surface",
+      "repoPaths": [ "sql/01_core/080_sps_capability_scope_compat.sql" ]
+    },
+    {
+      "name": "app_metadatadictionary_list_by_capability_scope",
+      "status": "current-runtime-surface",
+      "repoPaths": [ "sql/01_core/080_sps_capability_scope_compat.sql" ]
+    },
+    {
+      "name": "app_policy_resolve_by_capability_scope",
+      "status": "current-runtime-surface",
+      "repoPaths": [ "sql/01_core/080_sps_capability_scope_compat.sql" ]
+    },
+    {
+      "name": "app_react_followup_list_by_capability_scope",
+      "status": "current-runtime-surface",
+      "repoPaths": [ "sql/01_core/080_sps_capability_scope_compat.sql" ]
+    }
+  ],
+  "legacyDiagnostics": [
+    {
+      "name": "ModuleRuntimeCatalog",
+      "procedure": "app_module_runtime_list",
+      "status": "optional-legacy-diagnostics-only",
+      "deploymentPath": "sql/97_legacy_diagnostics/078_tables_module_runtime_catalog.sql",
+      "defaultDeployment": false,
+      "retirementCondition": "No legacy diagnostic usage in compatibility telemetry for the agreed evidence window."
+    }
+  ],
+  "telemetryLifecycle": {
+    "rawRetentionDaysDefault": 90,
+    "rawRetentionDaysMinimum": 30,
+    "rollupObject": "SqlCompatibilityUsageRollup",
+    "purgeProcedure": "app_sql_compatibility_usage_purge"
+  }
+}

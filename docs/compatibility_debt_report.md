@@ -148,7 +148,7 @@ This document tracks transitional components that still exist, the cleanup alrea
 | What depends on it | Legacy binaries and rollback paths; current runtime callers use the capability-scope wrappers. |
 | Removal condition | A future DB migration can rename columns/parameters after all deployed databases and clients stop depending on the legacy names. |
 
-Sprint 22 adds `SqlCompatibilityUsageLog`, `SqlCompatibilityUsageDaily`, `app_sql_compatibility_usage_summary`, and `app_sql_compatibility_retirement_readiness` so this removal condition can be proven from production-shaped telemetry instead of guessed.
+Compatibility telemetry adds `SqlCompatibilityUsageLog`, `SqlCompatibilityUsageDaily`, `SqlCompatibilityUsageRollup`, `app_sql_compatibility_usage_summary`, `app_sql_compatibility_retirement_readiness`, `app_sql_compatibility_usage_rollup`, and `app_sql_compatibility_usage_purge` so this removal condition can be proven from governed production-shaped telemetry instead of guessed.
 
 Retired package shells:
 
@@ -156,6 +156,12 @@ Retired package shells:
 |---------------|------------------|
 | Platform | Deleted |
 | Analytics | Deleted |
+
+Optional legacy diagnostics:
+
+| Surface | Status | Location |
+|---------|--------|----------|
+| `ModuleRuntimeCatalog` / `app_module_runtime_list` | Optional legacy diagnostics only; not deployed from `sql/01_core` | `sql/97_legacy_diagnostics/078_tables_module_runtime_catalog.sql` |
 
 ### 2. Bootstrap Configuration Sources
 
@@ -178,4 +184,4 @@ Retired package shells:
 
 ## Current Debt Priorities
 
-Current priorities are compatibility observability, DB-major readiness evidence, live staging/prod-like certification evidence, optional signed bundle verification where required, and operator training. Removed package shells and the removed Model module must not be reintroduced as technical modules, pseudo-agents, or package-loader ownership shortcuts.
+Current priorities are compatibility telemetry lifecycle governance, DB-major readiness evidence packets, live staging/prod-like certification evidence, optional signed bundle verification where required, and operator training. Removed package shells and the removed Model module must not be reintroduced as technical modules, pseudo-agents, or package-loader ownership shortcuts.

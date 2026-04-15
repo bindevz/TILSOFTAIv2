@@ -91,6 +91,8 @@ See `docs/compatibility_debt_report.md`, `docs/sql_compatibility_observability_r
 - `docs/runtime_readiness.md`
 - `docs/sql_compatibility_observability_runbook.md`
 - `docs/db_major_readiness_checklist.md`
+- `docs/compatibility_inventory.json`
+- `docs/db_major_readiness_evidence_packet.template.json`
 - `docs/external_integration_governance.md`
 - `docs/platform_catalog_governance.md`
 - `docs/catalog_control_plane_runbook.md`

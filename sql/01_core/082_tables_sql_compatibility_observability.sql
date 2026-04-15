@@ -3,7 +3,7 @@ SET QUOTED_IDENTIFIER ON;
 GO
 
 -- ============================================================
--- Sprint 22: SQL compatibility observability.
+-- SQL compatibility observability and lifecycle governance.
 -- Tracks usage of legacy compatibility procedures and the
 -- capability-scope wrapper procedures that replace them.
 -- ============================================================
@@ -30,6 +30,40 @@ BEGIN
             CONSTRAINT DF_SqlCompatibilityUsageLog_ObservedAtUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT PK_SqlCompatibilityUsageLog PRIMARY KEY CLUSTERED (UsageId),
         CONSTRAINT CK_SqlCompatibilityUsageLog_SurfaceKind CHECK
+            (SurfaceKind IN (N'legacy-procedure', N'capability-scope-wrapper'))
+    );
+END;
+GO
+
+IF OBJECT_ID('dbo.SqlCompatibilityUsageRollup', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.SqlCompatibilityUsageRollup
+    (
+        ObservedDateUtc    date NOT NULL,
+        SurfaceKind        nvarchar(40)  NOT NULL,
+        SurfaceName        nvarchar(128) NOT NULL,
+        ForwardSurfaceName nvarchar(128) NULL,
+        TenantId           nvarchar(50)  NOT NULL
+            CONSTRAINT DF_SqlCompatibilityUsageRollup_TenantId DEFAULT N'',
+        AppKey             nvarchar(50)  NOT NULL
+            CONSTRAINT DF_SqlCompatibilityUsageRollup_AppKey DEFAULT N'',
+        Language           nvarchar(10)  NOT NULL
+            CONSTRAINT DF_SqlCompatibilityUsageRollup_Language DEFAULT N'',
+        UsageCount         bigint        NOT NULL,
+        FirstObservedAtUtc datetime2(3)  NOT NULL,
+        LastObservedAtUtc  datetime2(3)  NOT NULL,
+        RolledUpAtUtc      datetime2(3)  NOT NULL
+            CONSTRAINT DF_SqlCompatibilityUsageRollup_RolledUpAtUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT PK_SqlCompatibilityUsageRollup PRIMARY KEY CLUSTERED
+        (
+            ObservedDateUtc,
+            SurfaceKind,
+            SurfaceName,
+            TenantId,
+            AppKey,
+            Language
+        ),
+        CONSTRAINT CK_SqlCompatibilityUsageRollup_SurfaceKind CHECK
             (SurfaceKind IN (N'legacy-procedure', N'capability-scope-wrapper'))
     );
 END;
@@ -119,26 +153,169 @@ GO
 
 CREATE OR ALTER VIEW dbo.SqlCompatibilityUsageDaily
 AS
+    WITH RawDaily AS
+    (
+        SELECT
+            CAST(ObservedAtUtc AS date) AS ObservedDateUtc,
+            SurfaceKind,
+            SurfaceName,
+            ForwardSurfaceName,
+            TenantId,
+            AppKey,
+            Language,
+            COUNT_BIG(*) AS UsageCount,
+            MIN(ObservedAtUtc) AS FirstObservedAtUtc,
+            MAX(LastObservedAtUtc) AS LastObservedAtUtc
+        FROM dbo.SqlCompatibilityUsageLog raw
+        WHERE NOT EXISTS
+        (
+            SELECT 1
+            FROM dbo.SqlCompatibilityUsageRollup rollup
+            WHERE rollup.ObservedDateUtc = CAST(raw.ObservedAtUtc AS date)
+              AND rollup.SurfaceKind = raw.SurfaceKind
+              AND rollup.SurfaceName = raw.SurfaceName
+              AND ISNULL(rollup.TenantId, N'') = ISNULL(raw.TenantId, N'')
+              AND ISNULL(rollup.AppKey, N'') = ISNULL(raw.AppKey, N'')
+              AND ISNULL(rollup.Language, N'') = ISNULL(raw.Language, N'')
+        )
+        GROUP BY
+            CAST(ObservedAtUtc AS date),
+            SurfaceKind,
+            SurfaceName,
+            ForwardSurfaceName,
+            TenantId,
+            AppKey,
+            Language
+    )
     SELECT
-        CAST(ObservedAtUtc AS date) AS ObservedDateUtc,
+        ObservedDateUtc,
         SurfaceKind,
         SurfaceName,
         ForwardSurfaceName,
         TenantId,
         AppKey,
         Language,
-        COUNT_BIG(*) AS UsageCount,
-        MIN(ObservedAtUtc) AS FirstObservedAtUtc,
-        MAX(ObservedAtUtc) AS LastObservedAtUtc
-    FROM dbo.SqlCompatibilityUsageLog
-    GROUP BY
-        CAST(ObservedAtUtc AS date),
+        UsageCount,
+        FirstObservedAtUtc,
+        LastObservedAtUtc
+    FROM dbo.SqlCompatibilityUsageRollup
+    UNION ALL
+    SELECT
+        ObservedDateUtc,
         SurfaceKind,
         SurfaceName,
         ForwardSurfaceName,
         TenantId,
         AppKey,
-        Language;
+        Language,
+        UsageCount,
+        FirstObservedAtUtc,
+        LastObservedAtUtc
+    FROM RawDaily;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_sql_compatibility_usage_rollup
+    @ThroughUtc datetime2(3) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @RollupThroughUtc datetime2(3) = COALESCE(@ThroughUtc, DATEADD(day, -90, SYSUTCDATETIME()));
+
+    ;WITH Daily AS
+    (
+        SELECT
+            CAST(ObservedAtUtc AS date) AS ObservedDateUtc,
+            SurfaceKind,
+            SurfaceName,
+            MAX(ForwardSurfaceName) AS ForwardSurfaceName,
+            TenantId,
+            AppKey,
+            Language,
+            COUNT_BIG(*) AS UsageCount,
+            MIN(ObservedAtUtc) AS FirstObservedAtUtc,
+            MAX(ObservedAtUtc) AS LastObservedAtUtc
+        FROM dbo.SqlCompatibilityUsageLog
+        WHERE ObservedAtUtc < @RollupThroughUtc
+        GROUP BY
+            CAST(ObservedAtUtc AS date),
+            SurfaceKind,
+            SurfaceName,
+            TenantId,
+            AppKey,
+            Language
+    )
+    MERGE dbo.SqlCompatibilityUsageRollup AS target
+    USING Daily AS source
+       ON target.ObservedDateUtc = source.ObservedDateUtc
+      AND target.SurfaceKind = source.SurfaceKind
+      AND target.SurfaceName = source.SurfaceName
+      AND ISNULL(target.TenantId, N'') = ISNULL(source.TenantId, N'')
+      AND ISNULL(target.AppKey, N'') = ISNULL(source.AppKey, N'')
+      AND ISNULL(target.Language, N'') = ISNULL(source.Language, N'')
+    WHEN MATCHED THEN
+        UPDATE SET
+            ForwardSurfaceName = source.ForwardSurfaceName,
+            UsageCount = source.UsageCount,
+            FirstObservedAtUtc = source.FirstObservedAtUtc,
+            LastObservedAtUtc = source.LastObservedAtUtc,
+            RolledUpAtUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT
+            (
+                ObservedDateUtc,
+                SurfaceKind,
+                SurfaceName,
+                ForwardSurfaceName,
+                TenantId,
+                AppKey,
+                Language,
+                UsageCount,
+                FirstObservedAtUtc,
+                LastObservedAtUtc
+            )
+        VALUES
+            (
+                source.ObservedDateUtc,
+                source.SurfaceKind,
+                source.SurfaceName,
+                source.ForwardSurfaceName,
+                COALESCE(source.TenantId, N''),
+                COALESCE(source.AppKey, N''),
+                COALESCE(source.Language, N''),
+                source.UsageCount,
+                source.FirstObservedAtUtc,
+                source.LastObservedAtUtc
+            );
+
+    SELECT @@ROWCOUNT AS RollupRowsAffected;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.app_sql_compatibility_usage_purge
+    @RawRetentionDays int = 90
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF @RawRetentionDays < 30
+    BEGIN
+        RAISERROR('@RawRetentionDays must be at least 30 days.', 16, 1);
+        RETURN;
+    END
+
+    DECLARE @CutoffUtc datetime2(3) = DATEADD(day, -@RawRetentionDays, SYSUTCDATETIME());
+
+    EXEC dbo.app_sql_compatibility_usage_rollup @ThroughUtc = @CutoffUtc;
+
+    DELETE FROM dbo.SqlCompatibilityUsageLog
+    WHERE ObservedAtUtc < @CutoffUtc;
+
+    SELECT
+        @CutoffUtc AS RawCutoffUtc,
+        @RawRetentionDays AS RawRetentionDays,
+        @@ROWCOUNT AS DeletedRawUsageRows;
+END;
 GO
 
 CREATE OR ALTER PROCEDURE dbo.app_sql_compatibility_usage_summary
@@ -156,11 +333,11 @@ BEGIN
         TenantId,
         AppKey,
         Language,
-        COUNT_BIG(*) AS UsageCount,
-        MIN(ObservedAtUtc) AS FirstObservedAtUtc,
-        MAX(ObservedAtUtc) AS LastObservedAtUtc
-    FROM dbo.SqlCompatibilityUsageLog
-    WHERE (@SinceUtc IS NULL OR ObservedAtUtc >= @SinceUtc)
+        SUM(UsageCount) AS UsageCount,
+        MIN(FirstObservedAtUtc) AS FirstObservedAtUtc,
+        MAX(LastObservedAtUtc) AS LastObservedAtUtc
+    FROM dbo.SqlCompatibilityUsageDaily
+    WHERE (@SinceUtc IS NULL OR LastObservedAtUtc >= @SinceUtc)
       AND (@SurfaceKind IS NULL OR SurfaceKind = @SurfaceKind)
       AND (@TenantId IS NULL OR TenantId = @TenantId)
     GROUP BY SurfaceKind, SurfaceName, ForwardSurfaceName, TenantId, AppKey, Language
@@ -180,10 +357,10 @@ BEGIN
     (
         SELECT
             SurfaceKind,
-            COUNT_BIG(*) AS UsageCount,
+            SUM(UsageCount) AS UsageCount,
             MAX(ObservedAtUtc) AS LastObservedAtUtc
-        FROM dbo.SqlCompatibilityUsageLog
-        WHERE ObservedAtUtc >= @WindowStartUtc
+        FROM dbo.SqlCompatibilityUsageDaily
+        WHERE LastObservedAtUtc >= @WindowStartUtc
         GROUP BY SurfaceKind
     )
     SELECT

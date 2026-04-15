@@ -1,6 +1,6 @@
 # SQL Compatibility Observability Runbook
 
-Sprint 22 makes the remaining legacy SQL compatibility shell measurable. The legacy physical storage names still exist for deployed database safety, but operators can now see whether callers are using the old procedure names or the forward capability-scope wrappers.
+The remaining legacy SQL compatibility shell is measurable and governed. The legacy physical storage names still exist for deployed database safety, but operators can see whether callers are using old procedure names or the forward capability-scope wrappers, and raw telemetry now has a rollup/purge lifecycle.
 
 ## Signals
 
@@ -9,6 +9,7 @@ Sprint 22 makes the remaining legacy SQL compatibility shell measurable. The leg
 | Legacy procedure usage | `dbo.SqlCompatibilityUsageLog` where `SurfaceKind = 'legacy-procedure'` | A caller still depends on old SQL procedure names or legacy parameter names. |
 | Capability-scope wrapper usage | `dbo.SqlCompatibilityUsageLog` where `SurfaceKind = 'capability-scope-wrapper'` | A caller is using the forward-facing SQL procedure names. |
 | Daily usage trend | `dbo.SqlCompatibilityUsageDaily` | Per-day usage grouped by surface, tenant, app, and language. |
+| Retained daily rollup | `dbo.SqlCompatibilityUsageRollup` | Long-lived summarized evidence retained after raw rows are purged. |
 | Summary by surface | `dbo.app_sql_compatibility_usage_summary` | Operator-friendly query for current usage counts and last-seen timestamps. |
 | DB-major readiness snapshot | `dbo.app_sql_compatibility_retirement_readiness` | A compact go/no-go view for physical rename planning. |
 
@@ -21,6 +22,8 @@ Legacy compatibility procedures record `legacy-procedure`:
 - `dbo.app_metadatadictionary_list_scoped`
 - `dbo.app_policy_resolve`
 - `dbo.app_react_followup_list_scoped`
+Optional legacy diagnostics record `legacy-procedure` only when explicitly deployed:
+
 - `dbo.app_module_runtime_list`
 
 Forward compatibility wrappers record `capability-scope-wrapper`:
@@ -32,6 +35,32 @@ Forward compatibility wrappers record `capability-scope-wrapper`:
 - `dbo.app_react_followup_list_by_capability_scope`
 
 Usage recording is non-blocking. If the telemetry procedure is unavailable or fails, the compatibility path continues.
+
+## Lifecycle Policy
+
+Raw compatibility usage rows are operational telemetry, not permanent release evidence. The default policy is:
+
+| Data | Default lifecycle |
+|------|-------------------|
+| Raw rows in `SqlCompatibilityUsageLog` | Retain 90 days by default; minimum allowed purge retention is 30 days. |
+| Daily rollups in `SqlCompatibilityUsageRollup` | Retain as release evidence until superseded by the organization's audit-retention policy. |
+| Release readiness packet | Attach to the release record for DB-major rename decisions. |
+
+Roll up and purge old raw rows:
+
+```sql
+EXEC dbo.app_sql_compatibility_usage_purge
+    @RawRetentionDays = 90;
+```
+
+Roll up without deleting raw rows:
+
+```sql
+EXEC dbo.app_sql_compatibility_usage_rollup
+    @ThroughUtc = DATEADD(day, -90, SYSUTCDATETIME());
+```
+
+The summary and readiness procedures read `SqlCompatibilityUsageDaily`, which combines retained rollups and current raw rows.
 
 ## Operator Queries
 
@@ -85,3 +114,15 @@ The default readiness procedure uses a 30-day window. Production environments sh
 - one complete release cycle with representative tenant traffic.
 
 DB-major rename planning should not proceed from synthetic traffic alone.
+
+## Release Evidence Packet
+
+For a DB-major decision, attach a completed packet based on `docs/db_major_readiness_evidence_packet.template.json`. The packet should include:
+
+- compatibility inventory version and hash from `docs/compatibility_inventory.json`
+- telemetry window start/end
+- usage summary output
+- readiness output
+- rollback posture
+- operator communication reference
+- validation results

@@ -1,0 +1,194 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 23.
+
+Baseline repository reality (after Sprint 22):
+- The platform is already enterprise-grade and high-assurance.
+- The runtime is strongly Multi-Agent:
+  - Supervisor owns orchestration.
+  - Domain Agents own business-domain routing and policy.
+  - Tool Adapters / infrastructure own execution boundaries and provider integration.
+  - Platform Catalog owns governed production capability state.
+- Sprint 21 removed the package-shell/module-contract residue and moved runtime callers to forward capability-scope SQL wrappers.
+- Sprint 22 added:
+  - SQL compatibility observability
+  - `SqlCompatibilityUsageLog`
+  - `SqlCompatibilityUsageDaily`
+  - `app_sql_compatibility_usage_summary`
+  - `app_sql_compatibility_retirement_readiness`
+  - operator runbook and DB-major readiness checklist
+  - broader guardrails for BOM/mojibake/stale sprint headers/observability presence
+- The repository is now clean architecturally and much cleaner textually.
+- Remaining compatibility debt is mainly:
+  1. physical SQL compatibility names that are still intentionally retained
+  2. governance/lifecycle of the new compatibility telemetry
+  3. the last module-shaped diagnostic compatibility surface: `ModuleRuntimeCatalog` / `app_module_runtime_list`
+  4. readiness evidence that is documented but not yet fully operationalized as a release-grade artifact flow
+
+Sprint 23 mission:
+Turn compatibility observability into compatibility retirement governance.
+
+Primary objective:
+1. Add lifecycle governance for compatibility telemetry.
+2. Make the remaining compatibility envelope machine-verifiable and reviewable.
+3. Reduce or harder-isolate the last module-shaped diagnostic residue.
+4. Strengthen release evidence for the eventual DB-major retirement path.
+5. Add stronger validation around compatibility observability behavior.
+6. Clean remaining forward-facing legacy wording where it is no longer justified.
+7. Keep Sprint 23 focused on compatibility retirement governance, not feature breadth.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the orchestration owner.
+2. Domain Agents remain business-domain routing/policy owners.
+3. Tool Adapters / infrastructure remain execution and provider owners.
+4. Platform Catalog remains the governed source of truth for production capability state.
+5. Physical legacy SQL names remain compatibility-only until evidence proves they can be renamed.
+6. Compatibility telemetry must be governed, not just collected.
+7. Remaining legacy residue must be bounded and explicit.
+8. Release decisions should use repeatable evidence artifacts, not memory or informal reasoning.
+9. Forward-looking repository language should remain capability/catalog/adapter/domain-agent oriented.
+10. Do not turn Sprint 23 into a feature sprint.
+
+Primary Sprint 23 goals:
+
+A. Govern compatibility telemetry lifecycle
+- Define and implement retention / purge / rollup / archival behavior for compatibility telemetry.
+- Ensure raw usage logging does not become unmanaged operational debt.
+- Preserve enough summary evidence for release decision-making.
+- Document the lifecycle clearly.
+
+B. Produce a compatibility inventory/report
+- Add a machine-verifiable report or inventory of remaining compatibility surfaces.
+- Include:
+  - physical SQL compatibility names
+  - legacy retained procedures
+  - remaining legacy diagnostic surfaces
+  - any intentionally historical references
+- Make it easy to compare current state to previous state.
+
+C. Reduce or isolate the final module-shaped diagnostic surface
+- Evaluate `ModuleRuntimeCatalog` and `app_module_runtime_list`.
+- Decide whether to:
+  - retire them,
+  - move them into an explicitly optional legacy deployment path,
+  - or isolate them more aggressively as historical diagnostics only.
+- Do not leave them as a vaguely normal SQL surface.
+
+D. Strengthen release evidence for eventual DB-major cleanup
+- Improve the readiness artifact flow so that a future DB-major physical rename can be justified through repeatable evidence.
+- Include compatibility telemetry summary, compatibility inventory, rollout/rollback conditions, and release attachment guidance.
+
+E. Strengthen validation
+- Add tests or SQL smoke coverage for:
+  - instrumentation presence
+  - summary/readiness behavior
+  - lifecycle behavior where feasible
+  - distinction between legacy and wrapper usage
+- Ensure compatibility-governance behavior is not silently broken later.
+
+F. Clean remaining forward-facing legacy wording
+- Remove or tighten remaining phrases that still present legacy module concepts as normal future-facing terminology.
+- Keep historical wording only where it is explicitly needed for compatibility explanation.
+
+Non-negotiable rules:
+1. Do not weaken enterprise-grade trust/governance/runtime controls.
+2. Do not perform the actual physical DB-major rename yet unless evidence is already fully proven.
+3. Do not reopen module-era runtime ownership or package-loader semantics.
+4. Do not let compatibility telemetry become unmanaged data sprawl.
+5. Do not keep `ModuleRuntimeCatalog` / `app_module_runtime_list` ambiguous.
+6. Do not rely on informal human processes for DB-major readiness evidence.
+7. Prefer explicit isolation and bounded compatibility over vague retention.
+8. Prefer machine-verifiable inventory/evidence where reasonable.
+9. Keep the sprint narrow and operationally focused.
+10. Do not turn Sprint 23 into a feature sprint.
+
+Explicitly in scope:
+- compatibility telemetry lifecycle governance
+- retention / purge / rollup / archival behavior
+- compatibility inventory/report generation
+- reduction/isolation decision for `ModuleRuntimeCatalog` / `app_module_runtime_list`
+- stronger readiness evidence artifacts
+- tests/smoke coverage for compatibility governance
+- remaining wording cleanup
+- validation/build/test updates for the above
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- large domain-agent expansion
+- actual physical DB rename
+- workflow/product breadth expansion
+
+Recommended implementation order:
+1. Inventory remaining compatibility surfaces and choose target state.
+2. Add telemetry lifecycle governance.
+3. Add static/CI compatibility inventory reporting.
+4. Reduce or isolate `ModuleRuntimeCatalog` / `app_module_runtime_list`.
+5. Strengthen release evidence/readiness artifacts.
+6. Add tests/smoke coverage.
+7. Clean remaining wording drift.
+8. Validate build/tests/sql deployment behavior.
+
+Required architectural outcomes:
+1. Compatibility telemetry is production-operable, not just visible.
+2. Remaining compatibility surfaces are explicitly bounded and easier to review over time.
+3. The final module-shaped diagnostic residue is smaller, harder-isolated, or more clearly end-of-life.
+4. DB-major readiness evidence becomes more structured and repeatable.
+5. Enterprise-grade behavior remains intact.
+6. Multi-Agent remains the only future-facing ownership story.
+
+Definition of done:
+- Compatibility telemetry has a defined lifecycle and does not remain unmanaged raw data.
+- A machine-verifiable compatibility inventory/report exists.
+- `ModuleRuntimeCatalog` / `app_module_runtime_list` are more isolated, more explicitly legacy, or materially reduced.
+- Readiness evidence is stronger and more structured than after Sprint 22.
+- Compatibility observability/governance behavior has stronger validation coverage.
+- Remaining forward-facing wording drift is reduced.
+- The repository is cleaner after Sprint 23 than after Sprint 22 without losing enterprise-grade behavior.
+
+Must-fail conditions:
+- compatibility telemetry still has no lifecycle governance
+- remaining compatibility surfaces are still not bounded in a machine-verifiable way
+- `ModuleRuntimeCatalog` remains an ambiguously normal surface
+- readiness evidence is still mostly ad hoc documentation rather than a more structured artifact flow
+- Sprint 23 drifts into feature work instead of compatibility retirement governance
+
+Preferred implementation style:
+- evidence-driven governance
+- bounded compatibility
+- explicit isolation
+- practical lifecycle management
+- maintainable validation
+- clean forward-facing vocabulary
+- no architecture theater
+
+Required deliverables:
+1. Compatibility telemetry lifecycle changes
+2. Compatibility inventory/report changes
+3. Legacy diagnostic residue changes
+4. Readiness evidence artifact changes
+5. Validation / build / test updates
+
+Required reporting after implementation:
+1. Summary of Sprint 23 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Compatibility telemetry lifecycle changes
+6. Compatibility inventory/report changes
+7. Legacy diagnostic residue changes
+8. Readiness evidence artifact changes
+9. Validation / build / test results
+10. Remaining blockers
+11. Recommended Sprint 24 priorities
+
+Final instruction:
+Sprint 23 is about governing the final compatibility shell and shrinking it safely.
+
+Do not spend Sprint 23 adding runtime novelty.
+Do not turn Sprint 23 into a feature sprint.
+Do not perform the physical DB rename prematurely.
+
+Spend it on lifecycle governance, explicit compatibility inventory, readiness evidence, and isolation of the remaining legacy envelope.

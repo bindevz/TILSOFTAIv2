@@ -1,10 +1,12 @@
 -- ============================================================
--- PATCH 37.01 / SPRINT 20: ModuleRuntimeCatalog legacy compatibility surface
--- SPRINT 20: LEGACY COMPATIBILITY ONLY.
--- Production API startup no longer registers a module loader or consumes this catalog.
+-- OPTIONAL LEGACY DIAGNOSTICS: ModuleRuntimeCatalog
+-- Historical package-runtime catalog retained only for upgraded
+-- databases that still need diagnostic queries during compatibility
+-- retirement. This file is intentionally outside sql/01_core so new
+-- deployments do not treat package-runtime diagnostics as normal core
+-- platform schema.
 -- ============================================================
 
--- Table
 IF OBJECT_ID('dbo.ModuleRuntimeCatalog','U') IS NULL
 BEGIN
     CREATE TABLE dbo.ModuleRuntimeCatalog(
@@ -24,7 +26,6 @@ BEGIN
 END
 GO
 
--- Legacy SP: resolve enabled modules for tenant/env for historical tooling.
 CREATE OR ALTER PROCEDURE dbo.app_module_runtime_list
     @TenantId    nvarchar(50) = NULL,
     @Environment nvarchar(50) = NULL
@@ -39,7 +40,7 @@ BEGIN
                 @SurfaceName = N'app_module_runtime_list',
                 @SurfaceKind = N'legacy-procedure',
                 @TenantId = @TenantId,
-                @CompatibilityNotes = N'Legacy package-runtime diagnostic procedure.';
+                @CompatibilityNotes = N'Optional legacy package-runtime diagnostic procedure.';
         END
     END TRY
     BEGIN CATCH
@@ -68,6 +69,6 @@ BEGIN
 END
 GO
 
--- No baseline rows are seeded. Legacy rows may exist in upgraded databases,
--- but new deployments must not activate package projects as runtime modules.
-
+-- No baseline rows are seeded. Legacy rows may exist in upgraded
+-- databases, but new deployments must not activate package projects
+-- as runtime modules.

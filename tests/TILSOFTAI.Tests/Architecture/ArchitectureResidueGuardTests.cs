@@ -253,16 +253,20 @@ public sealed class ArchitectureResidueGuardTests
 
         contents.Should().Contain("SqlCompatibilityUsageLog");
         contents.Should().Contain("SqlCompatibilityUsageDaily");
+        contents.Should().Contain("SqlCompatibilityUsageRollup");
         contents.Should().Contain("app_sql_compatibility_usage_summary");
         contents.Should().Contain("app_sql_compatibility_retirement_readiness");
+        contents.Should().Contain("app_sql_compatibility_usage_rollup");
+        contents.Should().Contain("app_sql_compatibility_usage_purge");
+        contents.Should().Contain("SurfaceKind IN (N'legacy-procedure', N'capability-scope-wrapper')");
 
         var instrumentedSql = new[]
         {
             Path.Combine(repositoryRoot, "sql", "01_core", "071_sps_module_scope.sql"),
             Path.Combine(repositoryRoot, "sql", "01_core", "075_sps_app_policy.sql"),
             Path.Combine(repositoryRoot, "sql", "01_core", "076_sps_app_react_followup.sql"),
-            Path.Combine(repositoryRoot, "sql", "01_core", "078_tables_module_runtime_catalog.sql"),
-            Path.Combine(repositoryRoot, "sql", "01_core", "080_sps_capability_scope_compat.sql")
+            Path.Combine(repositoryRoot, "sql", "01_core", "080_sps_capability_scope_compat.sql"),
+            Path.Combine(repositoryRoot, "sql", "97_legacy_diagnostics", "078_tables_module_runtime_catalog.sql")
         };
 
         var missingInstrumentation = instrumentedSql
@@ -272,6 +276,86 @@ public sealed class ArchitectureResidueGuardTests
             .ToArray();
 
         missingInstrumentation.Should().BeEmpty("legacy SQL compatibility paths and forward wrappers should emit retirement-readiness telemetry");
+    }
+
+    [Fact]
+    public void LegacyRuntimeDiagnosticSql_ShouldBeOptionalNotCore()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var corePath = Path.Combine(repositoryRoot, "sql", "01_core", "078_tables_module_runtime_catalog.sql");
+        var optionalPath = Path.Combine(repositoryRoot, "sql", "97_legacy_diagnostics", "078_tables_module_runtime_catalog.sql");
+
+        File.Exists(corePath)
+            .Should().BeFalse("ModuleRuntimeCatalog should not remain in the default core SQL deployment path");
+        File.Exists(optionalPath)
+            .Should().BeTrue("historical package-runtime diagnostics should be explicitly optional while retirement evidence is gathered");
+
+        var contents = File.ReadAllText(optionalPath, Encoding.UTF8);
+        contents.Should().Contain("OPTIONAL LEGACY DIAGNOSTICS");
+        contents.Should().Contain("normal core");
+        contents.Should().Contain("app_sql_compatibility_usage_record");
+    }
+
+    [Fact]
+    public void CompatibilityInventory_ShouldBoundRemainingLegacyEnvelope()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var inventoryPath = Path.Combine(repositoryRoot, "docs", "compatibility_inventory.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(inventoryPath, Encoding.UTF8));
+        var root = document.RootElement;
+
+        root.GetProperty("schemaVersion").GetInt32().Should().Be(1);
+        root.GetProperty("inventoryVersion").GetString().Should().Be("sprint-23");
+
+        ReadNames(root.GetProperty("physicalStorageNames"))
+            .Should().BeEquivalentTo(
+                "ModuleCatalog",
+                "ToolCatalogScope.ModuleKey",
+                "MetadataDictionaryScope.ModuleKey",
+                "RuntimePolicy.ModuleKey",
+                "ReActFollowUpRule.ModuleKey");
+
+        ReadNames(root.GetProperty("legacyProcedures"))
+            .Should().BeEquivalentTo(
+                "app_modulecatalog_list",
+                "app_toolcatalog_list_scoped",
+                "app_metadatadictionary_list_scoped",
+                "app_policy_resolve",
+                "app_react_followup_list_scoped");
+
+        var diagnostics = root.GetProperty("legacyDiagnostics");
+        diagnostics.GetArrayLength().Should().Be(1);
+        diagnostics[0].GetProperty("deploymentPath").GetString()
+            .Should().Be("sql/97_legacy_diagnostics/078_tables_module_runtime_catalog.sql");
+        diagnostics[0].GetProperty("defaultDeployment").GetBoolean().Should().BeFalse();
+
+        foreach (var path in ReadInventoryPaths(root))
+        {
+            File.Exists(Path.Combine(repositoryRoot, path))
+                .Should().BeTrue($"compatibility inventory path should exist: {path}");
+        }
+    }
+
+    [Fact]
+    public void DbMajorEvidencePacketTemplate_ShouldContainReleaseDecisionInputs()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var templatePath = Path.Combine(repositoryRoot, "docs", "db_major_readiness_evidence_packet.template.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(templatePath, Encoding.UTF8));
+        var root = document.RootElement;
+
+        root.GetProperty("schemaVersion").GetInt32().Should().Be(1);
+        root.GetProperty("packetType").GetString().Should().Be("db-major-compatibility-retirement-readiness");
+        root.GetProperty("compatibilityInventory").GetProperty("inventoryPath").GetString()
+            .Should().Be("docs/compatibility_inventory.json");
+        root.GetProperty("telemetryWindow").TryGetProperty("legacyProcedureUsageCount", out _)
+            .Should().BeTrue();
+        root.GetProperty("telemetryWindow").TryGetProperty("capabilityScopeWrapperUsageCount", out _)
+            .Should().BeTrue();
+        root.GetProperty("readinessDecision").TryGetProperty("isDbMajorRenameCandidate", out _)
+            .Should().BeTrue();
+        root.GetProperty("releaseAttachments").TryGetProperty("rollbackPlanUri", out _)
+            .Should().BeTrue();
     }
 
     private static string FindRepositoryRoot()
@@ -356,6 +440,33 @@ public sealed class ArchitectureResidueGuardTests
         foreach (var file in rootFiles.Where(File.Exists))
         {
             yield return file;
+        }
+    }
+
+    private static string[] ReadNames(JsonElement array)
+    {
+        return array
+            .EnumerateArray()
+            .Select(item => item.GetProperty("name").GetString() ?? string.Empty)
+            .ToArray();
+    }
+
+    private static IEnumerable<string> ReadInventoryPaths(JsonElement root)
+    {
+        foreach (var sectionName in new[] { "physicalStorageNames", "legacyProcedures", "forwardWrappers" })
+        {
+            foreach (var item in root.GetProperty(sectionName).EnumerateArray())
+            {
+                foreach (var path in item.GetProperty("repoPaths").EnumerateArray())
+                {
+                    yield return path.GetString() ?? string.Empty;
+                }
+            }
+        }
+
+        foreach (var item in root.GetProperty("legacyDiagnostics").EnumerateArray())
+        {
+            yield return item.GetProperty("deploymentPath").GetString() ?? string.Empty;
         }
     }
 }

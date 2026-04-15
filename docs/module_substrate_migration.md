@@ -27,3 +27,9 @@ These names now mean capability scope filters. They are not runtime module owner
 New production work must add capability records, tool records, adapter bindings, platform catalog records, or domain-agent routing. It must not add package loader activation or new module ownership.
 
 Future database cleanup may rename physical storage names after `SqlCompatibilityUsageLog` telemetry confirms all deployed callers use capability-scope procedure names for the agreed evidence window.
+
+## Optional Legacy Diagnostics
+
+`ModuleRuntimeCatalog` and `app_module_runtime_list` are no longer part of the default core SQL deployment path. They live under `sql/97_legacy_diagnostics` for upgraded databases that still need historical package-runtime diagnostics during compatibility retirement.
+
+New deployments should not deploy this optional diagnostic file unless an operator explicitly needs to inspect legacy package-runtime rows. Any usage is recorded as `legacy-procedure` compatibility telemetry and blocks DB-major retirement until explained.

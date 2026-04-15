@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "packetType": "db-major-compatibility-retirement-readiness",
+  "releaseId": "",
+  "environment": "",
+  "generatedAtUtc": "",
+  "generatedBy": "",
+  "compatibilityInventory": {
+    "inventoryPath": "docs/compatibility_inventory.json",
+    "inventoryVersion": "sprint-23",
+    "inventorySha256": "",
+    "unexpectedLegacySurfaceCount": 0
+  },
+  "telemetryWindow": {
+    "windowStartUtc": "",
+    "windowEndUtc": "",
+    "representativeTrafficStatement": "",
+    "legacyProcedureUsageCount": 0,
+    "capabilityScopeWrapperUsageCount": 0,
+    "legacyProcedureLastObservedAtUtc": null,
+    "capabilityScopeWrapperLastObservedAtUtc": "",
+    "rawRetentionDays": 90,
+    "rollupIncluded": true
+  },
+  "readinessDecision": {
+    "isDbMajorRenameCandidate": false,
+    "decision": "go-or-no-go",
+    "decisionReason": "",
+    "approvedBy": "",
+    "approvedAtUtc": ""
+  },
+  "releaseAttachments": {
+    "usageSummaryQueryOutputUri": "",
+    "retirementReadinessQueryOutputUri": "",
+    "staticInventoryUri": "",
+    "rollbackPlanUri": "",
+    "operatorCommunicationUri": ""
+  },
+  "rollbackPosture": {
+    "rollbackTested": false,
+    "rollbackMethod": "",
+    "rollbackOwner": ""
+  },
+  "validation": {
+    "unitTestsPassed": false,
+    "integrationTestsPassed": false,
+    "sqlDeploymentSmokePassed": false,
+    "postCutoverChecksDefined": false
+  }
+}

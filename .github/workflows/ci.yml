@@ -145,6 +145,45 @@ jobs:
           Write-Host "  OK $file" -ForegroundColor Green
         }
 
+    - name: Verify Compatibility Inventory
+      shell: pwsh
+      run: |
+        Write-Host "Verifying compatibility inventory..." -ForegroundColor Cyan
+        $inventoryPath = "docs/compatibility_inventory.json"
+        if (-not (Test-Path $inventoryPath)) {
+          Write-Error "Missing compatibility inventory: $inventoryPath"
+          exit 1
+        }
+
+        $inventory = Get-Content $inventoryPath -Raw | ConvertFrom-Json
+        if ($inventory.schemaVersion -ne 1) {
+          Write-Error "Unsupported compatibility inventory schema version: $($inventory.schemaVersion)"
+          exit 1
+        }
+
+        if (Test-Path "sql/01_core/078_tables_module_runtime_catalog.sql") {
+          Write-Error "ModuleRuntimeCatalog must remain outside the default core SQL deployment path."
+          exit 1
+        }
+
+        $repoPaths = @()
+        foreach ($entry in $inventory.physicalStorageNames + $inventory.legacyProcedures + $inventory.forwardWrappers) {
+          foreach ($path in $entry.repoPaths) {
+            $repoPaths += $path
+          }
+        }
+        foreach ($entry in $inventory.legacyDiagnostics) {
+          $repoPaths += $entry.deploymentPath
+        }
+
+        $missing = $repoPaths | Sort-Object -Unique | Where-Object { -not (Test-Path $_) }
+        if ($missing.Count -gt 0) {
+          Write-Error "Compatibility inventory references missing paths: $($missing -join ', ')"
+          exit 1
+        }
+
+        Write-Host "Compatibility inventory verified." -ForegroundColor Green
+
     # PATCH 31.02: Fixed secret scanning - now includes JSON and fails on detection
     - name: Verify No Hardcoded Credentials
       shell: pwsh
@@ -235,7 +274,8 @@ jobs:
         run: |
           $conn = "Server=localhost;Database=TILSOFTAI_Test;User ID=sa;Password=Integration_Test_P@ss1!;TrustServerCertificate=True;"
           
-          # Deploy in order: core, atomic, capabilities, seeds
+          # Deploy in order: core, atomic, capabilities, seeds.
+          # Optional legacy diagnostics under sql/97_legacy_diagnostics are not deployed by default.
           $folders = @(
             "sql/01_core",
             "sql/02_atomic",

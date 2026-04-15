@@ -19,6 +19,10 @@ Legacy procedures still retained for older binaries:
 - `app_metadatadictionary_list_scoped`
 - `app_policy_resolve`
 - `app_react_followup_list_scoped`
+
+Optional legacy diagnostics, outside the default core deployment:
+
+- `ModuleRuntimeCatalog`
 - `app_module_runtime_list`
 
 Forward-facing procedures current runtimes should use:
@@ -42,6 +46,7 @@ All criteria must pass before scheduling a DB-major physical rename:
 | Test coverage | Unit, integration, SQL deployment, and representative smoke tests pass against the planned rename branch. |
 | Operator communication | Operators have the affected surfaces, timing, rollback path, and post-cutover checks before the maintenance window. |
 | Audit evidence | The readiness query output and deployment inventory are attached to the release record. |
+| Evidence packet | A completed `docs/db_major_readiness_evidence_packet.template.json` packet is attached to the release record with inventory hash and telemetry output references. |
 
 ## No-Go Conditions
 
@@ -52,19 +57,22 @@ Do not schedule the DB-major rename if any of these are true:
 - Any active deployment still contains `@ModulesJson`, `@ModuleKeysJson`, `app_toolcatalog_list_scoped`, `app_metadatadictionary_list_scoped`, `app_policy_resolve`, or `app_react_followup_list_scoped` as runtime calls.
 - Rollback requires reintroducing package loaders, package shell projects, or module-runtime ownership.
 - Operators cannot identify which tenants or applications were covered by the evidence window.
+- `ModuleRuntimeCatalog` is deployed as a normal core schema object instead of an explicitly optional legacy diagnostic.
 
 ## Migration Sequence
 
 1. Freeze new SQL compatibility changes except bug fixes.
 2. Capture 30 days or one full release cycle of compatibility usage telemetry.
 3. Verify no legacy procedure usage in production-like and production environments.
-4. Run static repository checks for legacy runtime procedure names and parameter names.
-5. Prepare a DB-major branch that renames physical storage names or formalizes the wrapper boundary.
-6. Run SQL deployment in a production-like environment with restored production-shaped data.
-7. Execute application smoke tests, catalog mutation tests, policy resolution tests, ReAct follow-up tests, and rollback tests.
-8. Communicate the maintenance window and post-cutover evidence checks.
-9. Deploy during the approved window.
-10. Monitor legacy usage, wrapper usage, runtime errors, and policy resolution for the agreed observation period.
+4. Run `app_sql_compatibility_usage_purge` only after confirming rollups cover the evidence window.
+5. Run static repository checks for legacy runtime procedure names and parameter names.
+6. Attach `docs/compatibility_inventory.json` and a completed readiness evidence packet to the release record.
+7. Prepare a DB-major branch that renames physical storage names or formalizes the wrapper boundary.
+8. Run SQL deployment in a production-like environment with restored production-shaped data.
+9. Execute application smoke tests, catalog mutation tests, policy resolution tests, ReAct follow-up tests, and rollback tests.
+10. Communicate the maintenance window and post-cutover evidence checks.
+11. Deploy during the approved window.
+12. Monitor legacy usage, wrapper usage, runtime errors, and policy resolution for the agreed observation period.
 
 ## Rollback Expectations
 
