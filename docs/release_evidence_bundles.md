@@ -23,14 +23,26 @@ The generated bundle directory is intentionally ignored by git. Attach the compl
 
 ## Generate A Bundle
 
+For release review, prefer generating a certification run manifest first:
+
+```powershell
+./tools/evidence/New-CertificationRunManifest.ps1 `
+  -ReleaseId "release-2026-04-16" `
+  -Environment "staging" `
+  -OutputPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
+  -CatalogSourceMode "platform" `
+  -EvidenceRefsPath "release-evidence/release-2026-04-16/evidence-refs.json"
+```
+
+Then generate the bundle from that manifest:
+
 ```powershell
 ./tools/evidence/New-ReleaseEvidenceBundle.ps1 `
   -ReleaseId "release-2026-04-16" `
   -Environment "staging" `
-  -CatalogSourceMode "platform" `
+  -CertificationRunPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
   -WindowStartUtc "2026-04-01T00:00:00Z" `
   -WindowEndUtc "2026-04-16T00:00:00Z" `
-  -EvidenceRefsPath "docs/certification_evidence_refs.example.json" `
   -UsageSummaryUri "artifact://release-evidence/release-2026-04-16/usage-summary.json" `
   -RetirementReadinessUri "artifact://release-evidence/release-2026-04-16/readiness.json" `
   -RollbackPlanUri "artifact://release-evidence/release-2026-04-16/rollback.md" `
@@ -53,6 +65,16 @@ Validation fails when:
 - production-like fallback was used without authorization evidence.
 
 Use `-AllowMissingEvidence` only for local dry runs. Release review should validate without that switch.
+
+## Generate Review Summary
+
+```powershell
+./tools/evidence/New-CertificationReviewSummary.ps1 `
+  -CertificationRunPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
+  -BundlePath "release-evidence/release-2026-04-16"
+```
+
+The summary emits machine-readable `certification-review-summary.json` and operator-readable `certification-review-summary.md`.
 
 ## Fallback Posture
 

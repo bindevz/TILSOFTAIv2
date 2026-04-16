@@ -13,6 +13,7 @@ param(
     [string]$CatalogSourceMode = "unknown",
     [switch]$FallbackAuthorized,
     [string]$FallbackAuthorizationUri = "",
+    [string]$CertificationRunPath = "",
     [string]$EvidenceRefsPath = "",
     [string]$UsageSummaryUri = "",
     [string]$RetirementReadinessUri = "",
@@ -75,6 +76,21 @@ function Read-EvidenceRefs {
     return $items
 }
 
+function Read-EvidenceFromCertificationRun {
+    param([object]$CertificationRun)
+
+    $items = @()
+    foreach ($evidence in $CertificationRun.requiredEvidence) {
+        $items += [ordered]@{
+            evidenceKind = [string]$evidence.evidenceKind
+            status = [string]$evidence.status
+            evidenceUri = [string]$evidence.evidenceUri
+        }
+    }
+
+    return $items
+}
+
 $repoRoot = Resolve-RepoRoot
 $now = (Get-Date).ToUniversalTime().ToString("o")
 if ([string]::IsNullOrWhiteSpace($WindowEndUtc)) {
@@ -99,6 +115,34 @@ if (-not (Test-Path $templatePath)) {
 $inventory = Get-Content $inventoryPath -Raw | ConvertFrom-Json
 $inventoryHash = (Get-FileHash -Path $inventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $packet = Get-Content $templatePath -Raw | ConvertFrom-Json
+$certificationRun = $null
+
+if (-not [string]::IsNullOrWhiteSpace($CertificationRunPath)) {
+    $resolvedCertificationRunPath = if ([System.IO.Path]::IsPathRooted($CertificationRunPath)) {
+        $CertificationRunPath
+    }
+    else {
+        Join-Path $repoRoot $CertificationRunPath
+    }
+
+    if (-not (Test-Path $resolvedCertificationRunPath)) {
+        throw "Missing certification run manifest: $CertificationRunPath"
+    }
+
+    $certificationRun = Get-Content $resolvedCertificationRunPath -Raw | ConvertFrom-Json
+    if ($certificationRun.releaseId -ne $ReleaseId) {
+        throw "Certification run releaseId '$($certificationRun.releaseId)' does not match '$ReleaseId'."
+    }
+
+    if ($certificationRun.environment -ne $Environment) {
+        throw "Certification run environment '$($certificationRun.environment)' does not match '$Environment'."
+    }
+
+    $CatalogSourceMode = [string]$certificationRun.fallbackPosture.catalogSourceMode
+    $FallbackAuthorized = [bool]$certificationRun.fallbackPosture.fallbackAuthorized
+    $FallbackAuthorizationUri = [string]$certificationRun.fallbackPosture.fallbackAuthorizationUri
+}
+
 $fallbackUsed = $CatalogSourceMode -in @("mixed", "bootstrap_only")
 $productionLike = $Environment -in @("prod", "production", "staging")
 
@@ -129,7 +173,8 @@ $certificationManifest = [ordered]@{
     releaseId = $ReleaseId
     environment = $Environment
     generatedAtUtc = $now
-    requiredEvidence = Read-EvidenceRefs -Path $EvidenceRefsPath
+    certificationRunId = $(if ($null -eq $certificationRun) { "" } else { [string]$certificationRun.certificationRunId })
+    requiredEvidence = $(if ($null -eq $certificationRun) { Read-EvidenceRefs -Path $EvidenceRefsPath } else { Read-EvidenceFromCertificationRun -CertificationRun $certificationRun })
 }
 
 $fallbackPosture = [ordered]@{
@@ -154,6 +199,7 @@ $validationResults = [ordered]@{
     bundleGenerated = $true
     inventoryHashCaptured = -not [string]::IsNullOrWhiteSpace($inventoryHash)
     fallbackPostureCaptured = $true
+    certificationRunPath = $CertificationRunPath
     evidenceRefsPath = $EvidenceRefsPath
 }
 

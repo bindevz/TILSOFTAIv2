@@ -1,0 +1,208 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 25.
+
+Baseline repository reality (after Sprint 24):
+- The platform is already enterprise-grade and high-assurance.
+- The runtime is strongly Multi-Agent:
+  - Supervisor owns orchestration.
+  - Domain Agents own business-domain routing and policy.
+  - Tool Adapters / infrastructure own execution boundaries and provider integration.
+  - Platform Catalog owns governed production capability state.
+- Sprint 22 added SQL compatibility observability and DB-major readiness guidance.
+- Sprint 23 added compatibility telemetry lifecycle governance, inventory, and optional legacy-diagnostics isolation.
+- Sprint 24 added:
+  - executable release evidence bundle generation
+  - executable release evidence bundle validation
+  - fallback posture in readiness/evidence packet structures
+  - release evidence bundle conventions
+  - explicit signed-artifact verification deferral/scoping
+  - CI smoke verification for evidence bundle generation and validation
+- The repository is now clean architecturally, clean in Multi-Agent ownership, and stronger in operational evidence handling.
+- The major remaining enterprise blocker is still called out in `docs/enterprise_readiness_gap_report.md`:
+  - the catalog admin write path still needs live staging/prod-like certification evidence
+- Sprint 24 improved release evidence execution, but certification readiness is still too distributed across:
+  - certification evidence refs
+  - release bundle packet
+  - readiness checklist
+  - fallback posture
+  - signoff expectations
+  - runbook execution docs
+
+Sprint 25 mission:
+Turn certification readiness into a first-class, machine-reviewable artifact flow.
+
+Primary objective:
+1. Add a structured certification run manifest / packet flow.
+2. Add stricter validation for required certification evidence references.
+3. Add a generated certification review summary for release review.
+4. Integrate fallback posture more directly into certification decision artifacts.
+5. Add focused operator docs for staging/prod-like certification preparation.
+6. Add CI/tests for certification execution readiness artifacts.
+7. Keep Sprint 25 focused on certification execution readiness, not feature breadth.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the orchestration owner.
+2. Domain Agents remain business-domain routing/policy owners.
+3. Tool Adapters / infrastructure remain execution and provider owners.
+4. Platform Catalog remains the governed source of truth for production capability state.
+5. Certification artifacts must support release governance and operator review, not just exist as loose files.
+6. Fallback is emergency-only in production-like contexts and should remain a first-class certification decision input.
+7. Example evidence refs are not equivalent to accepted real evidence.
+8. Evidence should be machine-reviewable where practical and operator-usable where review requires judgment.
+9. Forward-looking repository language remains capability/catalog/adapter/domain-agent oriented.
+10. Do not turn Sprint 25 into a feature sprint.
+
+Primary Sprint 25 goals:
+
+A. Add a certification run manifest / packet flow
+- Introduce a structured certification artifact that captures:
+  - release id
+  - environment
+  - required drills/evidence kinds
+  - signoff expectations
+  - fallback posture
+  - freshness expectations
+  - review state
+- Keep it machine-readable and compatible with existing bundle flow.
+
+B. Add stricter validation for certification evidence references
+- Validate that all required certification evidence kinds are present.
+- Validate structure and non-empty values for references.
+- Fail clearly on missing drill/signoff evidence unless the flow is explicitly a dry run.
+- Keep validation practical and maintainable.
+
+C. Add a certification review summary generator
+- Generate a concise review artifact from:
+  - certification manifest/packet
+  - release evidence bundle
+  - fallback posture
+  - readiness packet
+- Surface missing evidence, fallback issues, stale/missing review metadata, and signoff gaps clearly.
+
+D. Integrate fallback posture into certification decision flow
+- Ensure certification artifacts explicitly show:
+  - source mode
+  - production-like status
+  - fallback usage
+  - fallback authorization
+  - whether certification can be accepted
+- Do not leave fallback as a secondary attachment only.
+
+E. Add focused operator execution docs
+- Write a practical guide for staging/prod-like certification preparation:
+  - start the certification run
+  - gather drill evidence
+  - attach signoff
+  - generate review summary
+  - validate artifacts
+  - understand blockers
+- Keep it aligned with repo scripts, not conceptual only.
+
+F. Add CI/tests for certification readiness artifacts
+- Add practical tests/smoke checks for:
+  - manifest/packet structure
+  - required evidence kinds
+  - summary generation
+  - fallback posture representation
+  - clear failure on missing critical fields
+
+Non-negotiable rules:
+1. Do not weaken enterprise-grade trust/governance/runtime controls.
+2. Do not reopen module-era ownership or compatibility sprawl.
+3. Do not treat example evidence refs as equivalent to accepted live evidence.
+4. Do not pretend staging/prod-like certification has already happened unless real evidence exists.
+5. Do not assume the DB-major rename should happen now.
+6. Do not keep certification review fragmented across too many manual artifacts if it can be consolidated.
+7. Prefer machine-readable and reviewable certification artifacts.
+8. Prefer bounded operator flows over broad new systems.
+9. Keep the sprint narrow and certification-focused.
+10. Do not turn Sprint 25 into a feature sprint.
+
+Explicitly in scope:
+- certification manifest / packet design
+- stricter certification evidence reference validation
+- certification review summary generation
+- stronger fallback integration in certification artifacts
+- operator docs for certification preparation
+- CI/tests for certification readiness artifacts
+- naming cleanup around certification/release evidence where helpful
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- large domain-agent expansion
+- pretending live certification has already been achieved
+- forced DB-major physical rename
+
+Recommended implementation order:
+1. Define certification manifest / packet structure.
+2. Add generators/validators for certification evidence refs.
+3. Add certification review summary generation.
+4. Strengthen fallback posture integration.
+5. Add focused operator guide.
+6. Add CI/tests for certification readiness artifacts.
+7. Validate build/tests/docs behavior.
+
+Required architectural outcomes:
+1. Certification readiness becomes a first-class artifact flow.
+2. Required evidence kinds are validated more strictly than after Sprint 24.
+3. Certification review is easier and less manual than after Sprint 24.
+4. Fallback posture is a first-class certification input.
+5. Enterprise-grade behavior remains intact.
+6. Multi-Agent remains the only future-facing ownership story.
+
+Definition of done:
+- A certification manifest/packet flow exists.
+- Certification evidence references are validated more strictly.
+- A certification review summary can be generated.
+- Fallback posture is represented directly in certification decision artifacts.
+- Operator docs provide one practical path for certification preparation.
+- CI/tests protect the new certification readiness artifacts.
+- The repository is still enterprise-grade, still Multi-Agent, and materially closer to real live-certification execution than after Sprint 24.
+
+Must-fail conditions:
+- certification readiness still depends on loose manual assembly across many files
+- required certification evidence kinds are not validated more strictly
+- fallback posture remains secondary instead of a first-class certification input
+- Sprint 25 drifts into feature work instead of certification execution readiness
+
+Preferred implementation style:
+- machine-reviewable artifacts
+- operator-usable flows
+- explicit fallback posture
+- concise review summaries
+- practical validation
+- no architecture theater
+
+Required deliverables:
+1. Certification manifest/packet changes
+2. Evidence validation changes
+3. Review summary generation changes
+4. Fallback integration changes
+5. Operator doc changes
+6. Validation / build / test updates
+
+Required reporting after implementation:
+1. Summary of Sprint 25 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Certification manifest/packet changes
+6. Evidence validation changes
+7. Review summary generation changes
+8. Fallback integration changes
+9. Validation / build / test results
+10. Remaining blockers
+11. Recommended Sprint 26 priorities
+
+Final instruction:
+Sprint 25 is about making certification execution readiness concrete and reviewable.
+
+Do not spend Sprint 25 adding runtime novelty.
+Do not turn Sprint 25 into a feature sprint.
+Do not pretend live certification has happened unless real staging/prod-like evidence exists.
+
+Spend it on certification artifact flow, stricter evidence validation, review summaries, and fallback-aware certification readiness.

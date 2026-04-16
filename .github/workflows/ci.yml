@@ -187,14 +187,26 @@ jobs:
     - name: Verify Release Evidence Bundle Flow
       shell: pwsh
       run: |
+        Write-Host "Generating certification evidence smoke manifest..." -ForegroundColor Cyan
+        ./tools/evidence/New-CertificationRunManifest.ps1 `
+          -ReleaseId "ci-evidence-smoke" `
+          -Environment "staging" `
+          -OutputPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-run-manifest.json" `
+          -CatalogSourceMode "platform" `
+          -EvidenceRefsPath "docs/certification_evidence_refs.example.json" `
+          -AllowExampleEvidence
+
+        ./tools/evidence/Test-CertificationRunManifest.ps1 `
+          -ManifestPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-run-manifest.json" `
+          -AllowExampleEvidence
+
         Write-Host "Generating release evidence smoke bundle..." -ForegroundColor Cyan
         ./tools/evidence/New-ReleaseEvidenceBundle.ps1 `
           -ReleaseId "ci-evidence-smoke" `
           -Environment "staging" `
           -OutputRoot "artifacts/evidence-smoke" `
-          -CatalogSourceMode "platform" `
+          -CertificationRunPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-run-manifest.json" `
           -WindowStartUtc "2026-01-01T00:00:00Z" `
-          -EvidenceRefsPath "docs/certification_evidence_refs.example.json" `
           -UsageSummaryUri "artifact://ci-evidence-smoke/usage-summary.json" `
           -RetirementReadinessUri "artifact://ci-evidence-smoke/readiness.json" `
           -RollbackPlanUri "artifact://ci-evidence-smoke/rollback.md" `
@@ -203,7 +215,12 @@ jobs:
         ./tools/evidence/Test-ReleaseEvidenceBundle.ps1 `
           -BundlePath "artifacts/evidence-smoke/ci-evidence-smoke"
 
-        Write-Host "Release evidence bundle flow verified." -ForegroundColor Green
+        ./tools/evidence/New-CertificationReviewSummary.ps1 `
+          -CertificationRunPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-run-manifest.json" `
+          -BundlePath "artifacts/evidence-smoke/ci-evidence-smoke" `
+          -OutputRoot "artifacts/evidence-smoke/ci-evidence-smoke"
+
+        Write-Host "Certification and release evidence flow verified." -ForegroundColor Green
 
     # PATCH 31.02: Fixed secret scanning - now includes JSON and fails on detection
     - name: Verify No Hardcoded Credentials

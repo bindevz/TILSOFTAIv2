@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "manifestType": "staging-prodlike-certification-run",
+  "releaseId": "",
+  "certificationRunId": "",
+  "environment": "",
+  "generatedAtUtc": "",
+  "generatedBy": "",
+  "reviewState": "draft",
+  "freshnessWindowDays": 30,
+  "fallbackPosture": {
+    "catalogSourceMode": "unknown",
+    "productionLike": false,
+    "fallbackUsed": false,
+    "fallbackAuthorized": false,
+    "fallbackAuthorizationUri": "",
+    "fallbackDecision": "unknown"
+  },
+  "requiredEvidence": [
+    {
+      "evidenceKind": "runbook_execution",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 30
+    },
+    {
+      "evidenceKind": "preview_failure_drill",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 30
+    },
+    {
+      "evidenceKind": "version_conflict_drill",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 30
+    },
+    {
+      "evidenceKind": "duplicate_submit_drill",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 30
+    },
+    {
+      "evidenceKind": "sql_apply_outage_drill",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 30
+    },
+    {
+      "evidenceKind": "fallback_risk_drill",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 30
+    },
+    {
+      "evidenceKind": "operator_signoff",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 14
+    }
+  ],
+  "signoff": {
+    "required": true,
+    "operatorSignoffEvidenceKind": "operator_signoff",
+    "approvedBy": "",
+    "approvedAtUtc": "",
+    "signoffUri": ""
+  },
+  "reviewNotes": []
+}

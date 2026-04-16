@@ -94,6 +94,7 @@ See `docs/compatibility_debt_report.md`, `docs/sql_compatibility_observability_r
 - `docs/compatibility_inventory.json`
 - `docs/db_major_readiness_evidence_packet.template.json`
 - `docs/release_evidence_bundles.md`
+- `docs/staging_prodlike_certification_execution.md`
 - `docs/signed_artifact_verification_decision.md`
 - `docs/external_integration_governance.md`
 - `docs/platform_catalog_governance.md`
