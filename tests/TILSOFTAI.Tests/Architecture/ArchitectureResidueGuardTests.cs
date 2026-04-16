@@ -356,6 +356,44 @@ public sealed class ArchitectureResidueGuardTests
             .Should().BeTrue();
         root.GetProperty("releaseAttachments").TryGetProperty("rollbackPlanUri", out _)
             .Should().BeTrue();
+        root.GetProperty("releaseAttachments").TryGetProperty("fallbackPostureUri", out _)
+            .Should().BeTrue();
+        root.GetProperty("fallbackPosture").TryGetProperty("catalogSourceMode", out _)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void ReleaseEvidenceAutomation_ShouldRemainExecutableAndValidated()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var generator = Path.Combine(repositoryRoot, "tools", "evidence", "New-ReleaseEvidenceBundle.ps1");
+        var validator = Path.Combine(repositoryRoot, "tools", "evidence", "Test-ReleaseEvidenceBundle.ps1");
+        var bundleDocs = Path.Combine(repositoryRoot, "docs", "release_evidence_bundles.md");
+        var signingDecision = Path.Combine(repositoryRoot, "docs", "signed_artifact_verification_decision.md");
+        var evidenceRefs = Path.Combine(repositoryRoot, "docs", "certification_evidence_refs.example.json");
+
+        File.Exists(generator).Should().BeTrue("Sprint 24 requires an executable evidence generation flow");
+        File.Exists(validator).Should().BeTrue("Sprint 24 requires generated evidence validation");
+        File.Exists(bundleDocs).Should().BeTrue("operators need the bundle convention");
+        File.Exists(signingDecision).Should().BeTrue("signed artifact verification must be explicitly scoped or deferred");
+
+        var generatorText = File.ReadAllText(generator, Encoding.UTF8);
+        generatorText.Should().Contain("compatibility_inventory.json");
+        generatorText.Should().Contain("fallback-posture.json");
+        generatorText.Should().Contain("certification-evidence-manifest.json");
+        generatorText.Should().Contain("Get-FileHash");
+
+        var validatorText = File.ReadAllText(validator, Encoding.UTF8);
+        validatorText.Should().Contain("Missing certification evidence");
+        validatorText.Should().Contain("Production-like fallback was used without authorization evidence");
+
+        using var refsDocument = JsonDocument.Parse(File.ReadAllText(evidenceRefs, Encoding.UTF8));
+        var refsRoot = refsDocument.RootElement;
+        foreach (var evidenceKind in RequiredCertificationEvidenceKinds)
+        {
+            refsRoot.TryGetProperty(evidenceKind, out var value).Should().BeTrue($"{evidenceKind} should have an example evidence reference");
+            value.GetString().Should().StartWith("artifact://");
+        }
     }
 
     private static string FindRepositoryRoot()
@@ -414,7 +452,8 @@ public sealed class ArchitectureResidueGuardTests
             "docs",
             "sql",
             "src",
-            "tests"
+            "tests",
+            "tools"
         };
 
         foreach (var directoryName in directories)
@@ -469,4 +508,15 @@ public sealed class ArchitectureResidueGuardTests
             yield return item.GetProperty("deploymentPath").GetString() ?? string.Empty;
         }
     }
+
+    private static readonly string[] RequiredCertificationEvidenceKinds =
+    {
+        "runbook_execution",
+        "preview_failure_drill",
+        "version_conflict_drill",
+        "duplicate_submit_drill",
+        "sql_apply_outage_drill",
+        "fallback_risk_drill",
+        "operator_signoff"
+    };
 }

@@ -33,8 +33,16 @@
     "usageSummaryQueryOutputUri": "",
     "retirementReadinessQueryOutputUri": "",
     "staticInventoryUri": "",
+    "fallbackPostureUri": "",
     "rollbackPlanUri": "",
     "operatorCommunicationUri": ""
+  },
+  "fallbackPosture": {
+    "catalogSourceMode": "unknown",
+    "productionLike": false,
+    "fallbackUsed": false,
+    "fallbackAuthorized": false,
+    "fallbackAuthorizationUri": ""
   },
   "rollbackPosture": {
     "rollbackTested": false,

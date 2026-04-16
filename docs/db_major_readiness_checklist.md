@@ -47,6 +47,7 @@ All criteria must pass before scheduling a DB-major physical rename:
 | Operator communication | Operators have the affected surfaces, timing, rollback path, and post-cutover checks before the maintenance window. |
 | Audit evidence | The readiness query output and deployment inventory are attached to the release record. |
 | Evidence packet | A completed `docs/db_major_readiness_evidence_packet.template.json` packet is attached to the release record with inventory hash and telemetry output references. |
+| Evidence bundle | `tools/evidence/New-ReleaseEvidenceBundle.ps1` generated the release evidence bundle and `tools/evidence/Test-ReleaseEvidenceBundle.ps1` validated it without `-AllowMissingEvidence`. |
 
 ## No-Go Conditions
 
@@ -66,13 +67,14 @@ Do not schedule the DB-major rename if any of these are true:
 3. Verify no legacy procedure usage in production-like and production environments.
 4. Run `app_sql_compatibility_usage_purge` only after confirming rollups cover the evidence window.
 5. Run static repository checks for legacy runtime procedure names and parameter names.
-6. Attach `docs/compatibility_inventory.json` and a completed readiness evidence packet to the release record.
-7. Prepare a DB-major branch that renames physical storage names or formalizes the wrapper boundary.
-8. Run SQL deployment in a production-like environment with restored production-shaped data.
-9. Execute application smoke tests, catalog mutation tests, policy resolution tests, ReAct follow-up tests, and rollback tests.
-10. Communicate the maintenance window and post-cutover evidence checks.
-11. Deploy during the approved window.
-12. Monitor legacy usage, wrapper usage, runtime errors, and policy resolution for the agreed observation period.
+6. Generate and validate the release evidence bundle described in `docs/release_evidence_bundles.md`.
+7. Attach `docs/compatibility_inventory.json` and the completed readiness evidence packet to the release record.
+8. Prepare a DB-major branch that renames physical storage names or formalizes the wrapper boundary.
+9. Run SQL deployment in a production-like environment with restored production-shaped data.
+10. Execute application smoke tests, catalog mutation tests, policy resolution tests, ReAct follow-up tests, and rollback tests.
+11. Communicate the maintenance window and post-cutover evidence checks.
+12. Deploy during the approved window.
+13. Monitor legacy usage, wrapper usage, runtime errors, and policy resolution for the agreed observation period.
 
 ## Rollback Expectations
 

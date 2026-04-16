@@ -1,0 +1,202 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 24.
+
+Baseline repository reality (after Sprint 23):
+- The platform is already enterprise-grade and high-assurance.
+- The runtime is strongly Multi-Agent:
+  - Supervisor owns orchestration.
+  - Domain Agents own business-domain routing and policy.
+  - Tool Adapters / infrastructure own execution boundaries and provider integration.
+  - Platform Catalog owns governed production capability state.
+- Sprint 21 removed package-shell/module-contract residue and moved runtime callers to forward capability-scope SQL wrappers.
+- Sprint 22 added SQL compatibility observability, DB-major readiness guidance, and repository hygiene guardrails.
+- Sprint 23 added:
+  - compatibility telemetry lifecycle governance
+  - `SqlCompatibilityUsageRollup`
+  - `app_sql_compatibility_usage_rollup`
+  - `app_sql_compatibility_usage_purge`
+  - machine-verifiable `docs/compatibility_inventory.json`
+  - `docs/db_major_readiness_evidence_packet.template.json`
+  - isolation of `ModuleRuntimeCatalog` / `app_module_runtime_list` under `sql/97_legacy_diagnostics`
+  - stronger CI/tests for compatibility governance
+- The repository is now clean architecturally, clean in Multi-Agent ownership, and has a tightly bounded compatibility envelope.
+- Remaining enterprise blockers are mostly operational:
+  1. live staging/prod-like certification evidence still needs real execution
+  2. release evidence packet generation is still not automated enough
+  3. bootstrap fallback discipline needs stronger operational proof
+  4. signed artifact verification is still reserved/optional unless compliance requires it
+  5. DB-major physical rename still requires proven evidence windows and should not be assumed safe yet
+
+Sprint 24 mission:
+Turn operational-readiness documentation into executable, repeatable release-grade evidence collection.
+
+Primary objective:
+1. Add an executable staging/prod-like certification evidence collection flow.
+2. Automate release/readiness evidence packet generation as much as practical.
+3. Add stronger operational proof for bootstrap fallback discipline.
+4. Define and use evidence-bundle conventions for release review.
+5. Add validation for generated evidence artifacts.
+6. Make an explicit scoped decision on the signed-artifact verification path.
+7. Keep Sprint 24 focused on enterprise operational proof, not feature breadth.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the orchestration owner.
+2. Domain Agents remain business-domain routing/policy owners.
+3. Tool Adapters / infrastructure remain execution and provider owners.
+4. Platform Catalog remains the governed source of truth for production capability state.
+5. Compatibility telemetry and inventory now exist and should be used as evidence inputs, not ignored.
+6. Enterprise-grade blockers should now be reduced by execution and evidence, not by more abstract architecture cleanup.
+7. Fallback is emergency-only in production-like contexts and should be proven as such operationally.
+8. Evidence should be artifact-first, machine-verifiable where practical, and repeatable.
+9. Forward-looking repository language should remain capability/catalog/adapter/domain-agent oriented.
+10. Do not turn Sprint 24 into a feature sprint.
+
+Primary Sprint 24 goals:
+
+A. Add executable certification evidence collection
+- Implement repo-native scripts/templates/flows that gather evidence for:
+  - runbook execution
+  - failure drill execution
+  - signoff capture
+  - promotion-gate evidence attachment
+  - release record inputs
+- Keep the flow repeatable and operator-usable.
+
+B. Automate readiness/release evidence packet generation
+- Reduce manual filling of evidence packet structures.
+- Populate as much as practical from:
+  - compatibility inventory
+  - telemetry summaries/readiness outputs
+  - validation results
+  - release metadata
+- Manual approval/signoff fields may remain manual, but the packet should not start mostly empty.
+
+C. Add bootstrap fallback operational proof
+- Add explicit operational checks/evidence showing whether certification or release activities used:
+  - platform mode
+  - mixed mode
+  - bootstrap-only fallback
+- Ensure production-like evidence clearly indicates fallback posture.
+- Make emergency-only use visible and reviewable.
+
+D. Define release evidence-bundle conventions
+- Standardize how release evidence is collected and stored/referenced.
+- Include:
+  - certification evidence references
+  - compatibility inventory hash/version
+  - compatibility telemetry outputs
+  - fallback posture
+  - rollback posture
+  - validation results
+- Keep the convention lightweight and auditable.
+
+E. Add validation for evidence outputs
+- Validate generated evidence artifacts for:
+  - required fields
+  - source references
+  - internal consistency
+  - missing prerequisite evidence
+- Fail clearly when evidence is incomplete or contradictory.
+
+F. Make an explicit signed-artifact verification decision
+- Either explicitly defer `signature_verified` work with rationale,
+- or prepare bounded scaffolding if compliance pressure is near-term.
+- Do not leave this as vague future work.
+
+Non-negotiable rules:
+1. Do not weaken enterprise-grade trust/governance/runtime controls.
+2. Do not reopen module-era ownership or compatibility sprawl.
+3. Do not assume the physical DB-major rename should happen in Sprint 24.
+4. Do not treat templates alone as sufficient evidence execution.
+5. Do not leave bootstrap fallback as only a conceptual control.
+6. Do not add broad product/runtime feature breadth.
+7. Prefer generated and validated evidence artifacts over manual narrative assembly.
+8. Prefer repeatable operator flows over one-off instructions.
+9. Keep the sprint narrow and operationally focused.
+10. Do not turn Sprint 24 into a feature sprint.
+
+Explicitly in scope:
+- certification evidence collection flow
+- readiness/release evidence packet generation
+- fallback operational-proof artifacts/checks
+- release evidence-bundle conventions
+- validation/tests for evidence outputs
+- explicit signed-artifact verification decision/scoping
+- docs/runbooks/scripts for the above
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- large domain-agent expansion
+- automatic execution of DB-major physical rename
+- workflow/product breadth expansion
+
+Recommended implementation order:
+1. Inventory remaining operational-proof blockers.
+2. Define evidence-bundle structure and packet-generation approach.
+3. Add executable certification collection flow.
+4. Add bootstrap fallback operational-proof capture.
+5. Add validation/tests for generated evidence artifacts.
+6. Clarify signed-verification decision.
+7. Validate build/tests/docs behavior.
+
+Required architectural outcomes:
+1. The repo can collect operational certification evidence more repeatably than after Sprint 23.
+2. Release/readiness evidence packets are more generated and less manually assembled.
+3. Bootstrap fallback posture is visible in operational evidence.
+4. Enterprise-grade behavior remains intact.
+5. Multi-Agent remains the only future-facing ownership story.
+6. The platform is closer to real production-like certification than after Sprint 23.
+
+Definition of done:
+- An executable certification evidence collection flow exists.
+- Evidence packet generation is more automated than before.
+- Fallback posture is captured in evidence artifacts or operational checks.
+- Evidence artifacts are validated for structure and consistency.
+- A clear signed-artifact verification decision/scoping note exists.
+- The repository is still enterprise-grade, still Multi-Agent, and materially closer to live operational certification than after Sprint 23.
+
+Must-fail conditions:
+- certification evidence remains mostly a manual reading exercise
+- release evidence packets remain mostly blank/manual
+- bootstrap fallback discipline remains only conceptual
+- Sprint 24 drifts into feature work instead of enterprise operational-proof work
+
+Preferred implementation style:
+- executable evidence
+- repeatable operator flow
+- artifact-first release review
+- validation over trust
+- bounded operational scope
+- no architecture theater
+
+Required deliverables:
+1. Certification evidence flow changes
+2. Release evidence generation changes
+3. Fallback operational-proof changes
+4. Validation / build / test updates
+5. Signed-artifact verification decision/scoping changes
+
+Required reporting after implementation:
+1. Summary of Sprint 24 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Certification evidence flow changes
+6. Release evidence generation changes
+7. Fallback operational-proof changes
+8. Validation / build / test results
+9. Remaining blockers
+10. Recommended Sprint 25 priorities
+
+Final instruction:
+Sprint 24 is about making enterprise operational proof executable.
+
+Do not spend Sprint 24 adding runtime novelty.
+Do not turn Sprint 24 into a feature sprint.
+Do not perform the DB-major physical rename just because the repository now looks ready.
+
+Spend it on certification evidence execution, release evidence automation, and fallback operational proof.

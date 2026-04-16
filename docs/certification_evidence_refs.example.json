@@ -1,0 +1,9 @@
+{
+  "runbook_execution": "artifact://release-evidence/example/runbook_execution.json",
+  "preview_failure_drill": "artifact://release-evidence/example/preview_failure_drill.json",
+  "version_conflict_drill": "artifact://release-evidence/example/version_conflict_drill.json",
+  "duplicate_submit_drill": "artifact://release-evidence/example/duplicate_submit_drill.json",
+  "sql_apply_outage_drill": "artifact://release-evidence/example/sql_apply_outage_drill.json",
+  "fallback_risk_drill": "artifact://release-evidence/example/fallback_risk_drill.json",
+  "operator_signoff": "artifact://release-evidence/example/operator_signoff.json"
+}

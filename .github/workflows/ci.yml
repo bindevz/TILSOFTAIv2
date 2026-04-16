@@ -96,10 +96,10 @@ jobs:
           Write-Host "These are warnings only - build will continue."
         }
 
-    - name: Verify Required SQL Modules
+    - name: Verify Required SQL Capability Files
       shell: pwsh
       run: |
-        Write-Host "Verifying required SQL modules exist..." -ForegroundColor Cyan
+        Write-Host "Verifying required SQL capability files exist..." -ForegroundColor Cyan
         $requiredModules = @(
           "sql/01_core",
           "sql/02_capabilities/analytics",
@@ -183,6 +183,27 @@ jobs:
         }
 
         Write-Host "Compatibility inventory verified." -ForegroundColor Green
+
+    - name: Verify Release Evidence Bundle Flow
+      shell: pwsh
+      run: |
+        Write-Host "Generating release evidence smoke bundle..." -ForegroundColor Cyan
+        ./tools/evidence/New-ReleaseEvidenceBundle.ps1 `
+          -ReleaseId "ci-evidence-smoke" `
+          -Environment "staging" `
+          -OutputRoot "artifacts/evidence-smoke" `
+          -CatalogSourceMode "platform" `
+          -WindowStartUtc "2026-01-01T00:00:00Z" `
+          -EvidenceRefsPath "docs/certification_evidence_refs.example.json" `
+          -UsageSummaryUri "artifact://ci-evidence-smoke/usage-summary.json" `
+          -RetirementReadinessUri "artifact://ci-evidence-smoke/readiness.json" `
+          -RollbackPlanUri "artifact://ci-evidence-smoke/rollback.md" `
+          -OperatorCommunicationUri "artifact://ci-evidence-smoke/operator-communication.md"
+
+        ./tools/evidence/Test-ReleaseEvidenceBundle.ps1 `
+          -BundlePath "artifacts/evidence-smoke/ci-evidence-smoke"
+
+        Write-Host "Release evidence bundle flow verified." -ForegroundColor Green
 
     # PATCH 31.02: Fixed secret scanning - now includes JSON and fails on detection
     - name: Verify No Hardcoded Credentials

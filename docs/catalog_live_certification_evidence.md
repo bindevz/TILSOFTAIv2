@@ -1,6 +1,8 @@
-# Catalog Live Certification Evidence - Sprint 12
+# Catalog Live Certification Evidence
 
-Sprint 12 adds a durable evidence path for staging and prod-like certification. This document is the certification package index; it must be filled with real evidence from the target environment before production promotion is accepted.
+The platform has a durable evidence path for staging and prod-like certification. This document is the certification package index; it must be filled with real evidence from the target environment before production promotion is accepted.
+
+Sprint 24 adds executable release evidence bundle generation. Use `tools/evidence/New-ReleaseEvidenceBundle.ps1` to assemble the release evidence bundle and `tools/evidence/Test-ReleaseEvidenceBundle.ps1` to validate it before release review.
 
 ## Required Evidence Kinds
 
@@ -53,3 +55,7 @@ Sprint 13 trusted evidence requires:
 - non-stale collection timestamp.
 
 Do not mark evidence as accepted unless it came from a real staging or prod-like execution. Synthetic unit test output is not live certification evidence.
+
+## Bundle Attachment
+
+For release review, attach the generated bundle described in `docs/release_evidence_bundles.md`. The bundle captures required certification evidence references, compatibility inventory hash, compatibility readiness output references, fallback source-mode posture, rollback posture, and validation output references.
