@@ -174,6 +174,8 @@ $certificationManifest = [ordered]@{
     environment = $Environment
     generatedAtUtc = $now
     certificationRunId = $(if ($null -eq $certificationRun) { "" } else { [string]$certificationRun.certificationRunId })
+    executionContext = $(if ($null -eq $certificationRun) { $null } else { $certificationRun.executionContext })
+    reviewGate = $(if ($null -eq $certificationRun) { $null } else { $certificationRun.reviewGate })
     requiredEvidence = $(if ($null -eq $certificationRun) { Read-EvidenceRefs -Path $EvidenceRefsPath } else { Read-EvidenceFromCertificationRun -CertificationRun $certificationRun })
 }
 
@@ -187,6 +189,7 @@ $fallbackPosture = [ordered]@{
     fallbackUsed = $fallbackUsed
     fallbackAuthorized = [bool]$FallbackAuthorized
     fallbackAuthorizationUri = $FallbackAuthorizationUri
+    fallbackDecision = $(if ($null -eq $certificationRun) { $(if ((-not $productionLike) -or (-not $fallbackUsed)) { "accepted" } elseif ([bool]$FallbackAuthorized -and -not [string]::IsNullOrWhiteSpace($FallbackAuthorizationUri)) { "authorized_exception" } else { "blocked" }) } else { [string]$certificationRun.fallbackPosture.fallbackDecision })
     fallbackDisciplinePassed = (-not $productionLike) -or (-not $fallbackUsed) -or ([bool]$FallbackAuthorized -and -not [string]::IsNullOrWhiteSpace($FallbackAuthorizationUri))
 }
 

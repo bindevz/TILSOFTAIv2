@@ -371,17 +371,19 @@ public sealed class ArchitectureResidueGuardTests
         var generator = Path.Combine(repositoryRoot, "tools", "evidence", "New-ReleaseEvidenceBundle.ps1");
         var validator = Path.Combine(repositoryRoot, "tools", "evidence", "Test-ReleaseEvidenceBundle.ps1");
         var summaryGenerator = Path.Combine(repositoryRoot, "tools", "evidence", "New-CertificationReviewSummary.ps1");
+        var summaryValidator = Path.Combine(repositoryRoot, "tools", "evidence", "Test-CertificationReviewSummary.ps1");
         var bundleDocs = Path.Combine(repositoryRoot, "docs", "release_evidence_bundles.md");
         var executionDocs = Path.Combine(repositoryRoot, "docs", "staging_prodlike_certification_execution.md");
         var signingDecision = Path.Combine(repositoryRoot, "docs", "signed_artifact_verification_decision.md");
         var runTemplate = Path.Combine(repositoryRoot, "docs", "certification_run_manifest.template.json");
         var evidenceRefs = Path.Combine(repositoryRoot, "docs", "certification_evidence_refs.example.json");
 
-        File.Exists(certificationGenerator).Should().BeTrue("Sprint 25 requires a first-class certification run manifest generator");
-        File.Exists(certificationValidator).Should().BeTrue("Sprint 25 requires stricter certification evidence validation");
+        File.Exists(certificationGenerator).Should().BeTrue("Sprint 26 requires a first-class certification run manifest generator");
+        File.Exists(certificationValidator).Should().BeTrue("Sprint 26 requires stricter certification evidence validation");
         File.Exists(generator).Should().BeTrue("Sprint 24 requires an executable evidence generation flow");
         File.Exists(validator).Should().BeTrue("Sprint 24 requires generated evidence validation");
-        File.Exists(summaryGenerator).Should().BeTrue("Sprint 25 requires a certification review summary generator");
+        File.Exists(summaryGenerator).Should().BeTrue("Sprint 26 requires a certification review summary generator");
+        File.Exists(summaryValidator).Should().BeTrue("Sprint 26 requires a certification review summary gate validator");
         File.Exists(bundleDocs).Should().BeTrue("operators need the bundle convention");
         File.Exists(executionDocs).Should().BeTrue("operators need one staging/prod-like certification execution path");
         File.Exists(signingDecision).Should().BeTrue("signed artifact verification must be explicitly scoped or deferred");
@@ -391,17 +393,23 @@ public sealed class ArchitectureResidueGuardTests
         certificationGeneratorText.Should().Contain("fallbackPosture");
         certificationGeneratorText.Should().Contain("requiredEvidence");
         certificationGeneratorText.Should().Contain("blocked_example");
+        certificationGeneratorText.Should().Contain("executionContext");
+        certificationGeneratorText.Should().Contain("reviewGate");
 
         var certificationValidatorText = File.ReadAllText(certificationValidator, Encoding.UTF8);
         certificationValidatorText.Should().Contain("unsupported URI or identifier");
         certificationValidatorText.Should().Contain("Operator signoff evidence is required");
         certificationValidatorText.Should().Contain("Production-like fallback requires fallbackAuthorizationUri");
+        certificationValidatorText.Should().Contain("acceptedForReleaseReview");
+        certificationValidatorText.Should().Contain("collectedAtUtc");
 
         var generatorText = File.ReadAllText(generator, Encoding.UTF8);
         generatorText.Should().Contain("CertificationRunPath");
         generatorText.Should().Contain("compatibility_inventory.json");
         generatorText.Should().Contain("fallback-posture.json");
         generatorText.Should().Contain("certification-evidence-manifest.json");
+        generatorText.Should().Contain("executionContext");
+        generatorText.Should().Contain("fallbackDecision");
         generatorText.Should().Contain("Get-FileHash");
 
         var validatorText = File.ReadAllText(validator, Encoding.UTF8);
@@ -412,11 +420,19 @@ public sealed class ArchitectureResidueGuardTests
         summaryGeneratorText.Should().Contain("certification-review-summary.json");
         summaryGeneratorText.Should().Contain("missing_evidence");
         summaryGeneratorText.Should().Contain("fallback_authorization_gap");
+        summaryGeneratorText.Should().Contain("review_gate_state_mismatch");
+
+        var summaryValidatorText = File.ReadAllText(summaryValidator, Encoding.UTF8);
+        summaryValidatorText.Should().Contain("ready_for_release_review");
+        summaryValidatorText.Should().Contain("AllowBlocked");
+        summaryValidatorText.Should().Contain("example evidence");
 
         using var templateDocument = JsonDocument.Parse(File.ReadAllText(runTemplate, Encoding.UTF8));
         var templateRoot = templateDocument.RootElement;
         templateRoot.GetProperty("manifestType").GetString().Should().Be("staging-prodlike-certification-run");
         templateRoot.GetProperty("fallbackPosture").TryGetProperty("fallbackDecision", out _).Should().BeTrue();
+        templateRoot.GetProperty("executionContext").TryGetProperty("changeTicketId", out _).Should().BeTrue();
+        templateRoot.GetProperty("reviewGate").TryGetProperty("acceptedForReleaseReview", out _).Should().BeTrue();
         ReadEvidenceKinds(templateRoot.GetProperty("requiredEvidence")).Should().BeEquivalentTo(RequiredCertificationEvidenceKinds);
 
         using var refsDocument = JsonDocument.Parse(File.ReadAllText(evidenceRefs, Encoding.UTF8));

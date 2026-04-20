@@ -2,7 +2,9 @@
 
 The platform has a durable evidence path for staging and prod-like certification. This document is the certification package index; it must be filled with real evidence from the target environment before production promotion is accepted.
 
-Use `tools/evidence/New-CertificationRunManifest.ps1` to create the first-class certification run artifact. Then use `tools/evidence/New-ReleaseEvidenceBundle.ps1` to assemble the release evidence bundle and `tools/evidence/Test-ReleaseEvidenceBundle.ps1` to validate it before release review.
+Use `tools/evidence/New-CertificationRunManifest.ps1` to create the first-class certification run artifact, then validate it with `tools/evidence/Test-CertificationRunManifest.ps1`. The manifest carries execution context placeholders, fallback posture, and a `reviewGate` decision so dry-run/example evidence cannot be mistaken for live certification.
+
+After the manifest is valid, use `tools/evidence/New-ReleaseEvidenceBundle.ps1` to assemble the release evidence bundle, `tools/evidence/Test-ReleaseEvidenceBundle.ps1` to validate it, `tools/evidence/New-CertificationReviewSummary.ps1` to generate the review output, and `tools/evidence/Test-CertificationReviewSummary.ps1` to validate the final review gate before release review.
 
 ## Required Evidence Kinds
 
@@ -58,4 +60,4 @@ Do not mark evidence as accepted unless it came from a real staging or prod-like
 
 ## Bundle Attachment
 
-For release review, follow `docs/staging_prodlike_certification_execution.md` and attach the generated bundle described in `docs/release_evidence_bundles.md`. The bundle captures required certification evidence references, compatibility inventory hash, compatibility readiness output references, fallback source-mode posture, rollback posture, validation output references, and the generated certification review summary.
+For release review, follow `docs/staging_prodlike_certification_execution.md` and attach the generated bundle described in `docs/release_evidence_bundles.md`. The bundle captures required certification evidence references, compatibility inventory hash, compatibility readiness output references, fallback source-mode posture, rollback posture, validation output references, certification run id, execution context, review gate state, and the generated certification review summary.

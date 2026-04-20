@@ -193,6 +193,10 @@ jobs:
           -Environment "staging" `
           -OutputPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-run-manifest.json" `
           -CatalogSourceMode "platform" `
+          -ChangeTicketId "TICKET-2600" `
+          -TenantScopeRef "artifact://ci-evidence-smoke/tenant-scope.json" `
+          -ExecutionWindowId "ci-certification-window" `
+          -OperatorId "ci" `
           -EvidenceRefsPath "docs/certification_evidence_refs.example.json" `
           -AllowExampleEvidence
 
@@ -219,6 +223,11 @@ jobs:
           -CertificationRunPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-run-manifest.json" `
           -BundlePath "artifacts/evidence-smoke/ci-evidence-smoke" `
           -OutputRoot "artifacts/evidence-smoke/ci-evidence-smoke"
+
+        ./tools/evidence/Test-CertificationReviewSummary.ps1 `
+          -SummaryPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-review-summary.json" `
+          -AllowBlocked `
+          -AllowExampleEvidence
 
         Write-Host "Certification and release evidence flow verified." -ForegroundColor Green
 

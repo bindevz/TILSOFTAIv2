@@ -1,6 +1,6 @@
 # Staging And Prod-Like Certification Execution
 
-This guide is the Sprint 25 operator path for preparing a certification run. It does not replace real staging/prod-like execution; it makes the evidence preparation and review flow repeatable.
+This guide is the Sprint 26 operator path for preparing a certification run. It does not replace real staging/prod-like execution; it makes the evidence preparation and review-gate flow repeatable.
 
 ## 1. Gather Evidence References
 
@@ -24,6 +24,11 @@ Use `docs/certification_evidence_refs.example.json` as the shape, but do not use
   -Environment "staging" `
   -OutputPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
   -CatalogSourceMode "platform" `
+  -ChangeTicketId "CHANGE-12345" `
+  -TenantScopeRef "artifact://release-evidence/release-2026-04-16/tenant-scope.json" `
+  -ExecutionWindowId "staging-window-2026-04-16" `
+  -OperatorId "operator@example.com" `
+  -ApproverId "approver@example.com" `
   -EvidenceRefsPath "release-evidence/release-2026-04-16/evidence-refs.json"
 ```
 
@@ -38,7 +43,9 @@ If `mixed` or `bootstrap_only` is observed, include both:
 
 Without that authorization reference, certification review is blocked.
 
-## 3. Validate The Certification Run
+The generated manifest includes `executionContext` placeholders and a `reviewGate` decision. For live review, `reviewGate.acceptedForReleaseReview` must be `true`; dry-run/example manifests must not be treated as release evidence.
+
+## 3. Validate The Certification Run Manifest
 
 ```powershell
 ./tools/evidence/Test-CertificationRunManifest.ps1 `
@@ -77,6 +84,15 @@ Validation blocks release prep when evidence is missing, example refs are used, 
 
 Release review starts with `certification-review-summary.md` and `certification-review-summary.json`.
 
+Validate the generated review gate before presenting the package for release review:
+
+```powershell
+./tools/evidence/Test-CertificationReviewSummary.ps1 `
+  -SummaryPath "release-evidence/release-2026-04-16/certification-review-summary.json"
+```
+
+Use `-AllowBlocked` only in local/CI smoke checks where the purpose is to prove blocker detection, not to approve a release.
+
 ## Promotion Blockers
 
 Promotion is blocked when:
@@ -85,5 +101,7 @@ Promotion is blocked when:
 - operator signoff is missing,
 - evidence refs are examples or malformed,
 - evidence is stale for its freshness window,
+- freshness windows are absent or invalid,
 - production-like fallback was used without authorization,
-- release ids differ across certification manifest and bundle artifacts.
+- release ids or certification run ids differ across certification manifest and bundle artifacts,
+- the certification manifest review gate is not `ready_for_review`.

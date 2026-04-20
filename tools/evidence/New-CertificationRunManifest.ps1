@@ -14,6 +14,12 @@ param(
     [switch]$FallbackAuthorized,
     [string]$FallbackAuthorizationUri = "",
     [int]$FreshnessWindowDays = 30,
+    [string]$ChangeTicketId = "",
+    [string]$TenantScopeRef = "",
+    [string]$ExecutionWindowId = "",
+    [string]$OperatorId = "",
+    [string]$ApproverId = "",
+    [string[]]$IncidentRefs = @(),
     [switch]$AllowExampleEvidence
 )
 
@@ -84,6 +90,12 @@ $manifest.certificationRunId = $CertificationRunId
 $manifest.environment = $Environment
 $manifest.generatedAtUtc = $now
 $manifest.generatedBy = $GeneratedBy
+$manifest.executionContext.changeTicketId = $ChangeTicketId
+$manifest.executionContext.tenantScopeRef = $TenantScopeRef
+$manifest.executionContext.executionWindowId = $ExecutionWindowId
+$manifest.executionContext.operatorId = $OperatorId
+$manifest.executionContext.approverId = $ApproverId
+$manifest.executionContext.incidentRefs = @($IncidentRefs | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 $manifest.freshnessWindowDays = $FreshnessWindowDays
 $manifest.fallbackPosture.catalogSourceMode = $CatalogSourceMode
 $manifest.fallbackPosture.productionLike = $productionLike
@@ -120,7 +132,22 @@ foreach ($item in $manifest.requiredEvidence) {
 
 $signoff = $manifest.requiredEvidence | Where-Object { $_.evidenceKind -eq "operator_signoff" } | Select-Object -First 1
 $manifest.signoff.signoffUri = $signoff.evidenceUri
-$manifest.reviewState = if ($missingCount -gt 0 -or $fallbackDecision -eq "blocked" -or ($exampleCount -gt 0 -and -not $AllowExampleEvidence)) {
+$signoffPresent = -not [string]::IsNullOrWhiteSpace([string]$signoff.evidenceUri)
+$blockers = @()
+if ($missingCount -gt 0) {
+    $blockers += "missing_evidence"
+}
+if ($exampleCount -gt 0 -and -not $AllowExampleEvidence) {
+    $blockers += "example_evidence"
+}
+if ($fallbackDecision -eq "blocked") {
+    $blockers += "fallback_authorization_gap"
+}
+if (-not $signoffPresent) {
+    $blockers += "operator_signoff_missing"
+}
+
+$manifest.reviewState = if ($blockers.Count -gt 0) {
     "blocked"
 }
 elseif ($exampleCount -gt 0) {
@@ -129,6 +156,14 @@ elseif ($exampleCount -gt 0) {
 else {
     "ready_for_review"
 }
+$manifest.reviewGate.decision = $manifest.reviewState
+$manifest.reviewGate.acceptedForReleaseReview = $manifest.reviewState -eq "ready_for_review"
+$manifest.reviewGate.decidedAtUtc = $now
+$manifest.reviewGate.blockers = @($blockers)
+$manifest.reviewGate.decisionInputs.requiredEvidenceComplete = $missingCount -eq 0
+$manifest.reviewGate.decisionInputs.exampleEvidencePresent = $exampleCount -gt 0
+$manifest.reviewGate.decisionInputs.fallbackAccepted = $fallbackDecision -ne "blocked"
+$manifest.reviewGate.decisionInputs.operatorSignoffPresent = $signoffPresent
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutputPath) | Out-Null
 $manifest | ConvertTo-Json -Depth 12 | Set-Content -Path $OutputPath -Encoding utf8

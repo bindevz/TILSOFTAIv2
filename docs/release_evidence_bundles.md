@@ -31,6 +31,10 @@ For release review, prefer generating a certification run manifest first:
   -Environment "staging" `
   -OutputPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
   -CatalogSourceMode "platform" `
+  -ChangeTicketId "CHANGE-12345" `
+  -TenantScopeRef "artifact://release-evidence/release-2026-04-16/tenant-scope.json" `
+  -ExecutionWindowId "staging-window-2026-04-16" `
+  -OperatorId "operator@example.com" `
   -EvidenceRefsPath "release-evidence/release-2026-04-16/evidence-refs.json"
 ```
 
@@ -76,6 +80,15 @@ Use `-AllowMissingEvidence` only for local dry runs. Release review should valid
 
 The summary emits machine-readable `certification-review-summary.json` and operator-readable `certification-review-summary.md`.
 
+Validate the review gate:
+
+```powershell
+./tools/evidence/Test-CertificationReviewSummary.ps1 `
+  -SummaryPath "release-evidence/release-2026-04-16/certification-review-summary.json"
+```
+
+The validator fails unless the summary is `ready_for_release_review`. Use `-AllowBlocked` only for smoke checks that intentionally prove blocker detection.
+
 ## Fallback Posture
 
 `CatalogSourceMode=platform` is the normal production-like posture.
@@ -84,6 +97,8 @@ The summary emits machine-readable `certification-review-summary.json` and opera
 
 - fail validation, or
 - include explicit fallback authorization evidence and incident/release references.
+
+The certification run manifest also carries fallback posture through `reviewGate`, and the generated bundle repeats the certification run id, execution context, review gate, and fallback decision so reviewers do not have to reconcile separate files manually.
 
 ## Signed Artifact Verification Decision
 

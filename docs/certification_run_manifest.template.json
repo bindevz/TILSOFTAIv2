@@ -6,6 +6,14 @@
   "environment": "",
   "generatedAtUtc": "",
   "generatedBy": "",
+  "executionContext": {
+    "changeTicketId": "",
+    "tenantScopeRef": "",
+    "executionWindowId": "",
+    "operatorId": "",
+    "approverId": "",
+    "incidentRefs": []
+  },
   "reviewState": "draft",
   "freshnessWindowDays": 30,
   "fallbackPosture": {
@@ -15,6 +23,18 @@
     "fallbackAuthorized": false,
     "fallbackAuthorizationUri": "",
     "fallbackDecision": "unknown"
+  },
+  "reviewGate": {
+    "decision": "draft",
+    "acceptedForReleaseReview": false,
+    "decidedAtUtc": "",
+    "blockers": [],
+    "decisionInputs": {
+      "requiredEvidenceComplete": false,
+      "exampleEvidencePresent": false,
+      "fallbackAccepted": false,
+      "operatorSignoffPresent": false
+    }
   },
   "requiredEvidence": [
     {

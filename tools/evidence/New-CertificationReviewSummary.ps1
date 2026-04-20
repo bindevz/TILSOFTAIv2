@@ -38,9 +38,15 @@ $exampleEvidence = @($certification.requiredEvidence | Where-Object { $_.status 
 $fallbackBlocked = $certification.fallbackPosture.productionLike -and $certification.fallbackPosture.fallbackUsed -and $certification.fallbackPosture.fallbackDecision -ne "authorized_exception"
 $signoffMissing = $certification.signoff.required -and [string]::IsNullOrWhiteSpace([string]$certification.signoff.signoffUri)
 $staleEvidence = @()
+$missingFreshnessWindows = @()
 $now = [DateTimeOffset]::UtcNow
 
 foreach ($item in $certification.requiredEvidence) {
+    if ([int]$item.freshnessWindowDays -le 0) {
+        $missingFreshnessWindows += $item.evidenceKind
+        continue
+    }
+
     if ([string]::IsNullOrWhiteSpace([string]$item.collectedAtUtc)) {
         continue
     }
@@ -68,11 +74,23 @@ if ($signoffMissing) {
 if ($staleEvidence.Count -gt 0) {
     $blockers += "stale_evidence"
 }
+if ($missingFreshnessWindows.Count -gt 0) {
+    $blockers += "missing_freshness_window"
+}
 if ($packet.releaseId -ne $certification.releaseId -or $fallback.releaseId -ne $certification.releaseId -or $validation.releaseId -ne $certification.releaseId) {
     $blockers += "release_id_mismatch"
 }
 if ($bundleCertification.requiredEvidence.Count -ne $certification.requiredEvidence.Count) {
     $blockers += "bundle_certification_manifest_mismatch"
+}
+if ($bundleCertification.certificationRunId -ne $certification.certificationRunId) {
+    $blockers += "certification_run_id_mismatch"
+}
+if ($fallback.fallbackDecision -ne $certification.fallbackPosture.fallbackDecision) {
+    $blockers += "fallback_decision_mismatch"
+}
+if ($certification.reviewGate.acceptedForReleaseReview -and $certification.reviewState -ne "ready_for_review") {
+    $blockers += "review_gate_state_mismatch"
 }
 
 $reviewDecision = if ($blockers.Count -eq 0 -and $certification.reviewState -eq "ready_for_review") {
@@ -89,18 +107,26 @@ $summary = [ordered]@{
     certificationRunId = $certification.certificationRunId
     environment = $certification.environment
     generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+    executionContext = $certification.executionContext
     reviewDecision = $reviewDecision
     reviewState = $certification.reviewState
+    reviewGateDecision = $certification.reviewGate.decision
+    acceptedForReleaseReview = $certification.reviewGate.acceptedForReleaseReview
     fallbackDecision = $certification.fallbackPosture.fallbackDecision
+    catalogSourceMode = $certification.fallbackPosture.catalogSourceMode
+    productionLike = $certification.fallbackPosture.productionLike
     fallbackUsed = $certification.fallbackPosture.fallbackUsed
     fallbackAuthorized = $certification.fallbackPosture.fallbackAuthorized
+    fallbackAuthorizationUri = $certification.fallbackPosture.fallbackAuthorizationUri
     missingEvidenceKinds = @($missingEvidence | ForEach-Object { $_.evidenceKind })
     exampleEvidenceKinds = @($exampleEvidence | ForEach-Object { $_.evidenceKind })
     staleEvidenceKinds = $staleEvidence
+    missingFreshnessWindowKinds = $missingFreshnessWindows
     blockers = $blockers
     readinessPacket = "db-major-readiness-evidence-packet.json"
     certificationManifest = "certification-evidence-manifest.json"
     fallbackPosture = "fallback-posture.json"
+    certificationRunManifest = "certification-run-manifest.json"
 }
 
 $jsonPath = Join-Path $OutputRoot "certification-review-summary.json"
@@ -117,7 +143,9 @@ $lines = @(
     "| Environment | $($summary.environment) |",
     "| Decision | $($summary.reviewDecision) |",
     "| Review state | $($summary.reviewState) |",
+    "| Review gate | $($summary.reviewGateDecision) |",
     "| Fallback decision | $($summary.fallbackDecision) |",
+    "| Catalog source mode | $($summary.catalogSourceMode) |",
     "| Blockers | $(if ($blockers.Count -eq 0) { 'none' } else { $blockers -join ', ' }) |",
     "",
     "## Missing Evidence",
@@ -126,7 +154,13 @@ $lines = @(
     "",
     "## Stale Evidence",
     "",
-    "$(if ($staleEvidence.Count -eq 0) { 'None.' } else { ($staleEvidence | ForEach-Object { '- ' + $_ }) -join [Environment]::NewLine })"
+    "$(if ($staleEvidence.Count -eq 0) { 'None.' } else { ($staleEvidence | ForEach-Object { '- ' + $_ }) -join [Environment]::NewLine })",
+    "",
+    "## Execution Context",
+    "",
+    "- Change ticket: $(if ([string]::IsNullOrWhiteSpace([string]$certification.executionContext.changeTicketId)) { 'not supplied' } else { $certification.executionContext.changeTicketId })",
+    "- Tenant scope: $(if ([string]::IsNullOrWhiteSpace([string]$certification.executionContext.tenantScopeRef)) { 'not supplied' } else { $certification.executionContext.tenantScopeRef })",
+    "- Execution window: $(if ([string]::IsNullOrWhiteSpace([string]$certification.executionContext.executionWindowId)) { 'not supplied' } else { $certification.executionContext.executionWindowId })"
 )
 $lines | Set-Content -Path $mdPath -Encoding utf8
 
