@@ -14,6 +14,7 @@ param(
     [switch]$FallbackAuthorized,
     [string]$FallbackAuthorizationUri = "",
     [string]$CertificationRunPath = "",
+    [string]$CertificationAcceptancePath = "certification-acceptance.json",
     [string]$EvidenceRefsPath = "",
     [string]$UsageSummaryUri = "",
     [string]$RetirementReadinessUri = "",
@@ -203,6 +204,8 @@ $validationResults = [ordered]@{
     inventoryHashCaptured = -not [string]::IsNullOrWhiteSpace($inventoryHash)
     fallbackPostureCaptured = $true
     certificationRunPath = $CertificationRunPath
+    certificationAcceptancePath = $CertificationAcceptancePath
+    acceptedCertificationRequired = $productionLike
     evidenceRefsPath = $EvidenceRefsPath
 }
 

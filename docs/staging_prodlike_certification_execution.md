@@ -1,6 +1,6 @@
 # Staging And Prod-Like Certification Execution
 
-This guide is the Sprint 26 operator path for preparing a certification run. It does not replace real staging/prod-like execution; it makes the evidence preparation and review-gate flow repeatable.
+This guide is the Sprint 27 operator path for preparing a certification run and handing it to live-certification acceptance. It does not replace real staging/prod-like execution; it makes the evidence preparation, review gate, and acceptance handoff repeatable.
 
 ## 1. Gather Evidence References
 
@@ -93,6 +93,28 @@ Validate the generated review gate before presenting the package for release rev
 
 Use `-AllowBlocked` only in local/CI smoke checks where the purpose is to prove blocker detection, not to approve a release.
 
+## 7. Record Live Acceptance
+
+Only after the review summary validates without allowances, follow `docs/live_certification_acceptance.md`:
+
+```powershell
+./tools/evidence/New-CertificationAcceptance.ps1 `
+  -CertificationRunPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
+  -SummaryPath "release-evidence/release-2026-04-16/certification-review-summary.json" `
+  -BundlePath "release-evidence/release-2026-04-16" `
+  -AcceptedBy "operator@example.com" `
+  -ApprovedBy "release-approver@example.com"
+
+./tools/evidence/Test-CertificationAcceptance.ps1 `
+  -AcceptancePath "release-evidence/release-2026-04-16/certification-acceptance.json"
+
+./tools/evidence/New-CertificationAcceptanceSummary.ps1 `
+  -AcceptancePath "release-evidence/release-2026-04-16/certification-acceptance.json" `
+  -OutputRoot "release-evidence/release-2026-04-16"
+```
+
+The acceptance artifact is the release-governance handoff from review-ready certification to accepted live certification.
+
 ## Promotion Blockers
 
 Promotion is blocked when:
@@ -104,4 +126,5 @@ Promotion is blocked when:
 - freshness windows are absent or invalid,
 - production-like fallback was used without authorization,
 - release ids or certification run ids differ across certification manifest and bundle artifacts,
-- the certification manifest review gate is not `ready_for_review`.
+- the certification manifest review gate is not `ready_for_review`,
+- live acceptance is missing, blocked, expired, or based on dry-run/example evidence.

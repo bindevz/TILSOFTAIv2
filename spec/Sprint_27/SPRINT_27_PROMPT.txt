@@ -1,0 +1,215 @@
+You are the implementation agent for the repository TILSOFTAIv2.
+
+You are executing Sprint 27.
+
+Baseline repository reality (after Sprint 26, commit `928a15e9076a9bdb9492f57b586b78539a73c59b`):
+- The platform is already enterprise-grade and high-assurance.
+- The runtime is strongly Multi-Agent:
+  - Supervisor owns orchestration.
+  - Domain Agents own business-domain routing and policy.
+  - Tool Adapters / infrastructure own execution boundaries and provider integration.
+  - Platform Catalog owns governed production capability state.
+- Compatibility debt is bounded, observable, governed, and isolated.
+- Release evidence bundles are executable and validated.
+- Certification readiness is now much stronger:
+  - `docs/certification_run_manifest.template.json`
+  - `tools/evidence/New-CertificationRunManifest.ps1`
+  - `tools/evidence/Test-CertificationRunManifest.ps1`
+  - `tools/evidence/New-CertificationReviewSummary.ps1`
+  - `tools/evidence/Test-CertificationReviewSummary.ps1`
+  - executionContext placeholders
+  - reviewGate decision state
+  - stricter collectedAtUtc / freshness / fallback validation
+  - CI smoke checks for certification review summary validation
+- The repository is now much better at preparing and reviewing certification packages.
+- However, the most important practical blocker still remains:
+  - the catalog admin write path still needs real live staging/prod-like certification evidence
+- The current flow is still stronger at `ready_for_review` than at `accepted live certification`.
+
+Sprint 27 mission:
+Turn certification review readiness into live-certification acceptance readiness.
+
+Primary objective:
+1. Add a first-class certification acceptance artifact.
+2. Add machine-checkable acceptance validation.
+3. Add a generated acceptance summary / go-no-go output.
+4. Tie accepted certification more explicitly into release-evidence review.
+5. Add a focused operator path for live-certification acceptance.
+6. Add CI/tests for acceptance readiness.
+7. Keep Sprint 27 focused on practical enterprise rollout usage, not feature breadth.
+
+Architecture principles:
+1. `ISupervisorRuntime` remains the orchestration owner.
+2. Domain Agents remain business-domain routing/policy owners.
+3. Tool Adapters / infrastructure remain execution and provider owners.
+4. Platform Catalog remains the governed source of truth for production capability state.
+5. Certification review readiness is not the same as accepted live certification.
+6. Dry-run/example evidence must never be mistaken for accepted live certification.
+7. Fallback is emergency-only in production-like contexts and remains a first-class acceptance decision input.
+8. Acceptance artifacts should be machine-reviewable where practical and operator-usable where signoff still requires human judgment.
+9. Forward-looking repository language remains capability/catalog/adapter/domain-agent oriented.
+10. Do not turn Sprint 27 into a feature sprint.
+
+Primary Sprint 27 goals:
+
+A. Add a certification acceptance artifact
+- Introduce a structured acceptance artifact that records:
+  - certification run id
+  - release id
+  - environment
+  - acceptance status
+  - accepted by / approved by
+  - accepted at
+  - evidence bundle path/hash or reference
+  - fallback posture decision
+  - freshness / expiry window
+  - waiver or override notes if any
+- Keep it machine-readable and suitable for release review and audit.
+
+B. Add acceptance validation
+- Validate that acceptance:
+  - references a valid certification manifest/summary/bundle,
+  - only succeeds when review state is acceptable,
+  - fails when required evidence is missing or stale,
+  - fails when fallback posture is unacceptable,
+  - fails when evidence is example/dry-run only.
+- Keep validation strict and practical.
+
+C. Add an acceptance summary / go-no-go output
+- Generate a concise acceptance artifact that surfaces:
+  - accepted / blocked / expired / waived
+  - fallback posture
+  - signoff status
+  - freshness state
+  - environment/release scope
+  - remaining blockers
+- Make it directly usable during release-governance review.
+
+D. Tie accepted certification into release evidence
+- Ensure release evidence flow can reference accepted certification clearly.
+- Detect when a production-like review is missing accepted certification.
+- Keep the integration bounded and consistent with current evidence-bundle structure.
+
+E. Add focused operator docs for live-certification acceptance
+- Write the practical operator path for:
+  - completing a real staging/prod-like certification run
+  - generating review artifacts
+  - recording acceptance
+  - validating acceptance
+  - attaching accepted certification to release review
+- Keep the guidance procedural and aligned with repo scripts.
+
+F. Add CI/tests for acceptance readiness
+- Add tests or smoke checks for:
+  - acceptance artifact structure
+  - acceptance validator behavior
+  - blocked acceptance on dry-run/example evidence
+  - blocked acceptance on stale/missing evidence
+  - acceptance summary generation
+
+G. Clean low-risk repo-noise if safe
+- Review whether accumulated `spec/Sprint_*` planning artifacts should remain in the main repo path.
+- If retained, mark them clearly as non-runtime planning materials.
+- If safe, archive or relocate them to reduce operator/developer noise.
+- Keep this bounded and do not let it distract from the main sprint goal.
+
+Non-negotiable rules:
+1. Do not weaken enterprise-grade trust/governance/runtime controls.
+2. Do not reopen module-era ownership or compatibility sprawl.
+3. Do not treat dry-run/example evidence as accepted live certification.
+4. Do not pretend live certification has already happened unless real evidence exists.
+5. Do not assume DB-major rename should happen now.
+6. Do not leave certification acceptance as a purely manual narrative step if it can be artifactized.
+7. Prefer machine-reviewable acceptance artifacts.
+8. Prefer bounded operator flows over broad new systems.
+9. Keep the sprint narrow and practically focused.
+10. Do not turn Sprint 27 into a feature sprint.
+
+Explicitly in scope:
+- certification acceptance artifact design
+- acceptance validation
+- acceptance summary generation
+- release-evidence integration for accepted certification
+- operator docs for live-certification acceptance
+- CI/tests for acceptance readiness
+- bounded cleanup of non-runtime planning noise if safe
+
+Explicitly out of scope:
+- broad new product features
+- major UI work
+- planner runtime
+- graph orchestration
+- large domain-agent expansion
+- pretending live certification has already been executed
+- forced DB-major physical rename
+
+Recommended implementation order:
+1. Define certification acceptance artifact.
+2. Add acceptance validator.
+3. Add acceptance summary generator.
+4. Integrate accepted certification into release evidence flow.
+5. Add focused live-certification acceptance guide.
+6. Add CI/tests for acceptance readiness.
+7. Clean low-risk planning-noise residue if safe.
+8. Validate build/tests/docs behavior.
+
+Required architectural outcomes:
+1. Live-certification acceptance becomes a first-class artifact flow.
+2. Acceptance is stricter and more practical than current review readiness alone.
+3. Release review can consume accepted certification more directly.
+4. Fallback posture, freshness, and signoff remain first-class acceptance inputs.
+5. Enterprise-grade behavior remains intact.
+6. Multi-Agent remains the only future-facing ownership story.
+
+Definition of done:
+- A certification acceptance artifact exists.
+- Acceptance validation blocks dry-run/example/stale/incomplete certification.
+- An acceptance summary / go-no-go artifact can be generated.
+- Accepted certification is tied more explicitly into release review.
+- Operator docs provide one practical path for live-certification acceptance.
+- CI/tests protect the new acceptance readiness artifacts.
+- The repository is still enterprise-grade, still Multi-Agent, and materially closer to real accepted live-certification execution than after Sprint 26.
+
+Must-fail conditions:
+- live certification acceptance still depends on loose manual interpretation
+- dry-run/example evidence can still be confused with accepted live certification
+- accepted certification is not clearly tied into release review
+- Sprint 27 drifts into feature work instead of practical certification acceptance readiness
+
+Preferred implementation style:
+- machine-reviewable acceptance artifacts
+- operator-usable flows
+- explicit fallback/freshness/signoff posture
+- concise acceptance summaries
+- practical validation
+- no architecture theater
+
+Required deliverables:
+1. Certification acceptance artifact changes
+2. Acceptance validation changes
+3. Acceptance summary generation changes
+4. Release-governance integration changes
+5. Operator doc changes
+6. Validation / build / test updates
+
+Required reporting after implementation:
+1. Summary of Sprint 27 outcomes
+2. Exact files created
+3. Exact files modified
+4. Exact files deleted
+5. Certification acceptance artifact changes
+6. Acceptance validation changes
+7. Acceptance summary generation changes
+8. Release-governance integration changes
+9. Validation / build / test results
+10. Remaining blockers
+11. Recommended Sprint 28 priorities
+
+Final instruction:
+Sprint 27 is about making accepted live certification explicit, strict, and usable in real release governance.
+
+Do not spend Sprint 27 adding runtime novelty.
+Do not turn Sprint 27 into a feature sprint.
+Do not pretend live certification has happened unless real staging/prod-like evidence exists.
+
+Spend it on acceptance artifacts, acceptance validation, acceptance summaries, and clean release-governance integration.

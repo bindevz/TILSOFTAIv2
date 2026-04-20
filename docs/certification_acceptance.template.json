@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "artifactType": "live-certification-acceptance",
+  "releaseId": "",
+  "certificationRunId": "",
+  "environment": "",
+  "acceptanceStatus": "draft",
+  "acceptedBy": "",
+  "approvedBy": "",
+  "acceptedAtUtc": "",
+  "expiresAtUtc": "",
+  "freshnessWindowDays": 14,
+  "certificationRunManifest": {
+    "path": "",
+    "sha256": ""
+  },
+  "certificationReviewSummary": {
+    "path": "",
+    "sha256": "",
+    "reviewDecision": "",
+    "reviewState": "",
+    "reviewGateDecision": ""
+  },
+  "releaseEvidenceBundle": {
+    "path": "",
+    "sha256": "",
+    "artifactHashes": []
+  },
+  "fallbackPosture": {
+    "catalogSourceMode": "unknown",
+    "productionLike": false,
+    "fallbackUsed": false,
+    "fallbackAuthorized": false,
+    "fallbackAuthorizationUri": "",
+    "fallbackDecision": "unknown"
+  },
+  "signoff": {
+    "operatorSignoffUri": "",
+    "acceptedBy": "",
+    "approvedBy": ""
+  },
+  "decisionInputs": {
+    "requiredEvidenceComplete": false,
+    "exampleEvidencePresent": false,
+    "staleEvidencePresent": false,
+    "fallbackAccepted": false,
+    "reviewReady": false,
+    "signoffPresent": false,
+    "bundleHashCaptured": false
+  },
+  "waivers": [],
+  "blockers": []
+}

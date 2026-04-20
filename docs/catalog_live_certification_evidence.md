@@ -6,6 +6,8 @@ Use `tools/evidence/New-CertificationRunManifest.ps1` to create the first-class 
 
 After the manifest is valid, use `tools/evidence/New-ReleaseEvidenceBundle.ps1` to assemble the release evidence bundle, `tools/evidence/Test-ReleaseEvidenceBundle.ps1` to validate it, `tools/evidence/New-CertificationReviewSummary.ps1` to generate the review output, and `tools/evidence/Test-CertificationReviewSummary.ps1` to validate the final review gate before release review.
 
+When a real staging/prod-like certification package is review-ready, use `tools/evidence/New-CertificationAcceptance.ps1` to record accepted live certification, `tools/evidence/Test-CertificationAcceptance.ps1` to validate it, and `tools/evidence/New-CertificationAcceptanceSummary.ps1` to generate the go/no-go release-governance summary. Follow `docs/live_certification_acceptance.md` for the live acceptance path.
+
 ## Required Evidence Kinds
 
 | Evidence kind | Required proof |
@@ -60,4 +62,4 @@ Do not mark evidence as accepted unless it came from a real staging or prod-like
 
 ## Bundle Attachment
 
-For release review, follow `docs/staging_prodlike_certification_execution.md` and attach the generated bundle described in `docs/release_evidence_bundles.md`. The bundle captures required certification evidence references, compatibility inventory hash, compatibility readiness output references, fallback source-mode posture, rollback posture, validation output references, certification run id, execution context, review gate state, and the generated certification review summary.
+For release review, follow `docs/staging_prodlike_certification_execution.md` and attach the generated bundle described in `docs/release_evidence_bundles.md`. The bundle captures required certification evidence references, compatibility inventory hash, compatibility readiness output references, fallback source-mode posture, rollback posture, validation output references, certification run id, execution context, review gate state, generated certification review summary, accepted certification artifact, and acceptance go/no-go summary.

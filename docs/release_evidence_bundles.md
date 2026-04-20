@@ -18,6 +18,8 @@ Each bundle contains:
 | `certification-evidence-manifest.json` | Required certification evidence kinds and the artifact/ticket URI for each kind. |
 | `fallback-posture.json` | Platform catalog source mode, production-like flag, fallback usage, fallback authorization URI, and pass/fail posture. |
 | `validation-results.json` | Evidence-generation metadata and validation result references. |
+| `certification-acceptance.json` | Live-certification acceptance artifact generated after the package is review-ready. |
+| `certification-acceptance-summary.json` / `.md` | Go/no-go release-governance summary for accepted certification. |
 
 The generated bundle directory is intentionally ignored by git. Attach the completed bundle to the release record or publish it to the approved evidence store.
 
@@ -89,6 +91,36 @@ Validate the review gate:
 
 The validator fails unless the summary is `ready_for_release_review`. Use `-AllowBlocked` only for smoke checks that intentionally prove blocker detection.
 
+## Record Live Certification Acceptance
+
+After the review summary validates without allowances, record accepted live certification:
+
+```powershell
+./tools/evidence/New-CertificationAcceptance.ps1 `
+  -CertificationRunPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
+  -SummaryPath "release-evidence/release-2026-04-16/certification-review-summary.json" `
+  -BundlePath "release-evidence/release-2026-04-16" `
+  -AcceptedBy "operator@example.com" `
+  -ApprovedBy "release-approver@example.com"
+```
+
+Validate acceptance and emit the go/no-go summary:
+
+```powershell
+./tools/evidence/Test-CertificationAcceptance.ps1 `
+  -AcceptancePath "release-evidence/release-2026-04-16/certification-acceptance.json"
+
+./tools/evidence/New-CertificationAcceptanceSummary.ps1 `
+  -AcceptancePath "release-evidence/release-2026-04-16/certification-acceptance.json" `
+  -OutputRoot "release-evidence/release-2026-04-16"
+
+./tools/evidence/Test-ReleaseEvidenceBundle.ps1 `
+  -BundlePath "release-evidence/release-2026-04-16" `
+  -RequireAcceptedCertification
+```
+
+Use `docs/live_certification_acceptance.md` for the complete acceptance path.
+
 ## Fallback Posture
 
 `CatalogSourceMode=platform` is the normal production-like posture.
@@ -98,7 +130,7 @@ The validator fails unless the summary is `ready_for_release_review`. Use `-Allo
 - fail validation, or
 - include explicit fallback authorization evidence and incident/release references.
 
-The certification run manifest also carries fallback posture through `reviewGate`, and the generated bundle repeats the certification run id, execution context, review gate, and fallback decision so reviewers do not have to reconcile separate files manually.
+The certification run manifest also carries fallback posture through `reviewGate`, and the generated bundle repeats the certification run id, execution context, review gate, fallback decision, and expected certification acceptance path so reviewers do not have to reconcile separate files manually.
 
 ## Signed Artifact Verification Decision
 

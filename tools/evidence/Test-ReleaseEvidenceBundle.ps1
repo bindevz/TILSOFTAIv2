@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$BundlePath,
 
+    [switch]$RequireAcceptedCertification,
     [switch]$AllowMissingEvidence
 )
 
@@ -63,6 +64,25 @@ if ($fallback.productionLike -and $fallback.fallbackUsed -and -not $fallback.fal
 
 if (-not $validation.bundleGenerated) {
     $errors.Add("Validation artifact must confirm bundle generation.")
+}
+
+if ($RequireAcceptedCertification -and $fallback.productionLike) {
+    $acceptancePath = [string]$validation.certificationAcceptancePath
+    if ([string]::IsNullOrWhiteSpace($acceptancePath)) {
+        $errors.Add("Production-like release evidence requires certificationAcceptancePath.")
+    }
+    else {
+        $resolvedAcceptancePath = if ([System.IO.Path]::IsPathRooted($acceptancePath)) {
+            $acceptancePath
+        }
+        else {
+            Join-Path $BundlePath $acceptancePath
+        }
+
+        if (-not (Test-Path $resolvedAcceptancePath)) {
+            $errors.Add("Production-like release evidence is missing accepted certification artifact: $acceptancePath")
+        }
+    }
 }
 
 if ($errors.Count -gt 0) {

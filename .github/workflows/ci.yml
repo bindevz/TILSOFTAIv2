@@ -229,6 +229,71 @@ jobs:
           -AllowBlocked `
           -AllowExampleEvidence
 
+        Write-Host "Generating accepted live-certification smoke package..." -ForegroundColor Cyan
+        $acceptedRefs = @{
+          runbook_execution = "artifact://ci-acceptance-smoke/runbook-execution.json"
+          preview_failure_drill = "artifact://ci-acceptance-smoke/preview-failure-drill.json"
+          version_conflict_drill = "artifact://ci-acceptance-smoke/version-conflict-drill.json"
+          duplicate_submit_drill = "artifact://ci-acceptance-smoke/duplicate-submit-drill.json"
+          sql_apply_outage_drill = "artifact://ci-acceptance-smoke/sql-apply-outage-drill.json"
+          fallback_risk_drill = "artifact://ci-acceptance-smoke/fallback-risk-drill.json"
+          operator_signoff = "artifact://ci-acceptance-smoke/operator-signoff.json"
+        }
+        New-Item -ItemType Directory -Force -Path "artifacts/evidence-smoke/ci-acceptance-smoke" | Out-Null
+        $acceptedRefs | ConvertTo-Json -Depth 4 | Set-Content -Path "artifacts/evidence-smoke/ci-acceptance-smoke/evidence-refs.json" -Encoding utf8
+
+        ./tools/evidence/New-CertificationRunManifest.ps1 `
+          -ReleaseId "ci-acceptance-smoke" `
+          -Environment "staging" `
+          -OutputPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-run-manifest.json" `
+          -CatalogSourceMode "platform" `
+          -ChangeTicketId "TICKET-2700" `
+          -TenantScopeRef "artifact://ci-acceptance-smoke/tenant-scope.json" `
+          -ExecutionWindowId "ci-live-certification-window" `
+          -OperatorId "ci-operator" `
+          -ApproverId "ci-approver" `
+          -EvidenceRefsPath "artifacts/evidence-smoke/ci-acceptance-smoke/evidence-refs.json"
+
+        ./tools/evidence/Test-CertificationRunManifest.ps1 `
+          -ManifestPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-run-manifest.json"
+
+        ./tools/evidence/New-ReleaseEvidenceBundle.ps1 `
+          -ReleaseId "ci-acceptance-smoke" `
+          -Environment "staging" `
+          -OutputRoot "artifacts/evidence-smoke" `
+          -CertificationRunPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-run-manifest.json" `
+          -WindowStartUtc "2026-01-01T00:00:00Z" `
+          -UsageSummaryUri "artifact://ci-acceptance-smoke/usage-summary.json" `
+          -RetirementReadinessUri "artifact://ci-acceptance-smoke/readiness.json" `
+          -RollbackPlanUri "artifact://ci-acceptance-smoke/rollback.md" `
+          -OperatorCommunicationUri "artifact://ci-acceptance-smoke/operator-communication.md"
+
+        ./tools/evidence/New-CertificationReviewSummary.ps1 `
+          -CertificationRunPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-run-manifest.json" `
+          -BundlePath "artifacts/evidence-smoke/ci-acceptance-smoke" `
+          -OutputRoot "artifacts/evidence-smoke/ci-acceptance-smoke"
+
+        ./tools/evidence/Test-CertificationReviewSummary.ps1 `
+          -SummaryPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-review-summary.json"
+
+        ./tools/evidence/New-CertificationAcceptance.ps1 `
+          -CertificationRunPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-run-manifest.json" `
+          -SummaryPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-review-summary.json" `
+          -BundlePath "artifacts/evidence-smoke/ci-acceptance-smoke" `
+          -AcceptedBy "ci-operator" `
+          -ApprovedBy "ci-approver"
+
+        ./tools/evidence/Test-CertificationAcceptance.ps1 `
+          -AcceptancePath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-acceptance.json"
+
+        ./tools/evidence/New-CertificationAcceptanceSummary.ps1 `
+          -AcceptancePath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-acceptance.json" `
+          -OutputRoot "artifacts/evidence-smoke/ci-acceptance-smoke"
+
+        ./tools/evidence/Test-ReleaseEvidenceBundle.ps1 `
+          -BundlePath "artifacts/evidence-smoke/ci-acceptance-smoke" `
+          -RequireAcceptedCertification
+
         Write-Host "Certification and release evidence flow verified." -ForegroundColor Green
 
     # PATCH 31.02: Fixed secret scanning - now includes JSON and fails on detection
