@@ -64,10 +64,14 @@ $summary = [ordered]@{
     productionLike = $acceptance.fallbackPosture.productionLike
     fallbackUsed = $acceptance.fallbackPosture.fallbackUsed
     fallbackAuthorized = $acceptance.fallbackPosture.fallbackAuthorized
+    executionSessionId = $acceptance.certificationExecutionSession.sessionId
+    executionSessionState = $acceptance.certificationExecutionSession.executionState
+    executionSessionGoNoGo = $acceptance.certificationExecutionSession.goNoGo
     signoffPresent = $acceptance.decisionInputs.signoffPresent
     requiredEvidenceComplete = $acceptance.decisionInputs.requiredEvidenceComplete
     staleEvidencePresent = $acceptance.decisionInputs.staleEvidencePresent
     exampleEvidencePresent = $acceptance.decisionInputs.exampleEvidencePresent
+    executionSessionComplete = $acceptance.decisionInputs.executionSessionComplete
     bundleHash = $acceptance.releaseEvidenceBundle.sha256
     waivers = @($acceptance.waivers)
     blockers = @($acceptance.blockers)
@@ -92,6 +96,7 @@ $lines = @(
     "| Approved by | $($summary.approvedBy) |",
     "| Expires | $($summary.expiresAtUtc) |",
     "| Fallback decision | $($summary.fallbackDecision) |",
+    "| Execution session | $($summary.executionSessionId) / $($summary.executionSessionState) |",
     "| Bundle hash | $($summary.bundleHash) |",
     "| Blockers | $(if (@($summary.blockers).Count -eq 0) { 'none' } else { @($summary.blockers) -join ', ' }) |",
     "",

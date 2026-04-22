@@ -1,6 +1,8 @@
 # Live Certification Acceptance
 
-This guide is the Sprint 27 operator path for recording accepted staging/prod-like certification. It starts only after the certification run manifest, release evidence bundle, and certification review summary have been generated and validated with real, non-example evidence.
+This guide is the Sprint 29 operator path for recording accepted staging/prod-like certification. It starts only after the certification run manifest, execution session ledger, release evidence bundle, and certification review summary have been generated and validated with real, non-example evidence.
+
+Capture execution first by following `docs/live_certification_execution_capture.md`.
 
 ## 1. Confirm Review Readiness
 
@@ -19,13 +21,14 @@ The summary must be `ready_for_release_review`. Do not record live acceptance fo
 ./tools/evidence/New-CertificationAcceptance.ps1 `
   -CertificationRunPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
   -SummaryPath "release-evidence/release-2026-04-16/certification-review-summary.json" `
+  -ExecutionSessionPath "release-evidence/release-2026-04-16/certification-execution-session.json" `
   -BundlePath "release-evidence/release-2026-04-16" `
   -AcceptedBy "operator@example.com" `
   -ApprovedBy "release-approver@example.com" `
   -FreshnessWindowDays 14
 ```
 
-The generated `certification-acceptance.json` records release scope, environment, accepted-by and approved-by identities, certification run id, bundle hash, artifact hashes, fallback posture, signoff state, expiry, waivers, and blockers.
+The generated `certification-acceptance.json` records release scope, environment, accepted-by and approved-by identities, certification run id, execution session id/state, bundle hash, artifact hashes, fallback posture, signoff state, expiry, waivers, and blockers.
 
 ## 3. Validate Live Acceptance
 
@@ -34,7 +37,7 @@ The generated `certification-acceptance.json` records release scope, environment
   -AcceptancePath "release-evidence/release-2026-04-16/certification-acceptance.json"
 ```
 
-Validation fails when the artifact is blocked, expired, missing signoff, missing accepted/approved identities, using example or dry-run evidence, using stale evidence, or referencing bundle artifacts whose hashes no longer match.
+Validation fails when the artifact is blocked, expired, missing signoff, missing accepted/approved identities, using example or dry-run evidence, using stale evidence, referencing bundle artifacts whose hashes no longer match, or not grounded in a completed execution session.
 
 ## 4. Generate The Go/No-Go Summary
 

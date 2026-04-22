@@ -204,6 +204,19 @@ jobs:
           -ManifestPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-run-manifest.json" `
           -AllowExampleEvidence
 
+        ./tools/evidence/New-CertificationExecutionSession.ps1 `
+          -CertificationRunPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-run-manifest.json" `
+          -OutputPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-execution-session.json"
+
+        ./tools/evidence/Test-CertificationExecutionSession.ps1 `
+          -SessionPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-execution-session.json" `
+          -AllowBlocked `
+          -AllowExampleEvidence
+
+        ./tools/evidence/New-CertificationExecutionSummary.ps1 `
+          -SessionPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-execution-session.json" `
+          -OutputRoot "artifacts/evidence-smoke/ci-evidence-smoke"
+
         Write-Host "Generating release evidence smoke bundle..." -ForegroundColor Cyan
         ./tools/evidence/New-ReleaseEvidenceBundle.ps1 `
           -ReleaseId "ci-evidence-smoke" `
@@ -257,6 +270,17 @@ jobs:
         ./tools/evidence/Test-CertificationRunManifest.ps1 `
           -ManifestPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-run-manifest.json"
 
+        ./tools/evidence/New-CertificationExecutionSession.ps1 `
+          -CertificationRunPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-run-manifest.json" `
+          -OutputPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.json"
+
+        ./tools/evidence/Test-CertificationExecutionSession.ps1 `
+          -SessionPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.json"
+
+        ./tools/evidence/New-CertificationExecutionSummary.ps1 `
+          -SessionPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.json" `
+          -OutputRoot "artifacts/evidence-smoke/ci-acceptance-smoke"
+
         ./tools/evidence/New-ReleaseEvidenceBundle.ps1 `
           -ReleaseId "ci-acceptance-smoke" `
           -Environment "staging" `
@@ -279,6 +303,7 @@ jobs:
         ./tools/evidence/New-CertificationAcceptance.ps1 `
           -CertificationRunPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-run-manifest.json" `
           -SummaryPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-review-summary.json" `
+          -ExecutionSessionPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.json" `
           -BundlePath "artifacts/evidence-smoke/ci-acceptance-smoke" `
           -AcceptedBy "ci-operator" `
           -ApprovedBy "ci-approver"
@@ -293,6 +318,46 @@ jobs:
         ./tools/evidence/Test-ReleaseEvidenceBundle.ps1 `
           -BundlePath "artifacts/evidence-smoke/ci-acceptance-smoke" `
           -RequireAcceptedCertification
+
+        Write-Host "Verifying stale execution and acceptance dependency blocking..." -ForegroundColor Cyan
+        $staleSessionPath = "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.stale.json"
+        $staleSession = Get-Content "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.json" -Raw | ConvertFrom-Json
+        $staleDrill = $staleSession.drillLedger | Where-Object { $_.drillKind -eq "runbook_execution" } | Select-Object -First 1
+        $staleDrill.collectedAtUtc = "2000-01-01T00:00:00Z"
+        $staleSession.executionState = "blocked"
+        $staleSession.blockers = @("stale_evidence")
+        $staleSession.decisionInputs.staleEvidencePresent = $true
+        $staleSession.decisionInputs.requiredDrillsCompleted = $false
+        $staleSession | ConvertTo-Json -Depth 12 | Set-Content -Path $staleSessionPath -Encoding utf8
+
+        try {
+          ./tools/evidence/Test-CertificationExecutionSession.ps1 -SessionPath $staleSessionPath
+          throw "Expected stale execution session validation to fail."
+        } catch {
+          if ($_.Exception.Message -match "Expected stale execution session validation to fail") {
+            throw
+          }
+          Write-Host "Stale execution session failed validation as expected." -ForegroundColor Green
+        }
+
+        ./tools/evidence/New-CertificationAcceptance.ps1 `
+          -CertificationRunPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-run-manifest.json" `
+          -SummaryPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-review-summary.json" `
+          -ExecutionSessionPath $staleSessionPath `
+          -BundlePath "artifacts/evidence-smoke/ci-acceptance-smoke" `
+          -OutputPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-acceptance.stale.json" `
+          -AcceptedBy "ci-operator" `
+          -ApprovedBy "ci-approver"
+
+        try {
+          ./tools/evidence/Test-CertificationAcceptance.ps1 -AcceptancePath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-acceptance.stale.json"
+          throw "Expected acceptance validation to fail for incomplete execution session."
+        } catch {
+          if ($_.Exception.Message -match "Expected acceptance validation to fail") {
+            throw
+          }
+          Write-Host "Acceptance dependency on execution completeness enforced." -ForegroundColor Green
+        }
 
         Write-Host "Certification and release evidence flow verified." -ForegroundColor Green
 

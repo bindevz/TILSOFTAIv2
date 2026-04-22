@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "artifactType": "live-certification-execution-session",
+  "sessionId": "",
+  "releaseId": "",
+  "certificationRunId": "",
+  "environment": "",
+  "generatedAtUtc": "",
+  "sessionStartedAtUtc": "",
+  "sessionCompletedAtUtc": "",
+  "executionState": "draft",
+  "executionContext": {
+    "changeTicketId": "",
+    "tenantScopeRef": "",
+    "executionWindowId": "",
+    "operatorId": "",
+    "approverId": "",
+    "incidentRefs": []
+  },
+  "fallbackPosture": {
+    "catalogSourceMode": "unknown",
+    "productionLike": false,
+    "fallbackUsed": false,
+    "fallbackAuthorized": false,
+    "fallbackAuthorizationUri": "",
+    "fallbackDecision": "unknown"
+  },
+  "drillLedger": [
+    {
+      "drillKind": "runbook_execution",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 30,
+      "note": "",
+      "waiverRef": ""
+    },
+    {
+      "drillKind": "preview_failure_drill",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 30,
+      "note": "",
+      "waiverRef": ""
+    },
+    {
+      "drillKind": "version_conflict_drill",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 30,
+      "note": "",
+      "waiverRef": ""
+    },
+    {
+      "drillKind": "duplicate_submit_drill",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 30,
+      "note": "",
+      "waiverRef": ""
+    },
+    {
+      "drillKind": "sql_apply_outage_drill",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 30,
+      "note": "",
+      "waiverRef": ""
+    },
+    {
+      "drillKind": "fallback_risk_drill",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 30,
+      "note": "",
+      "waiverRef": ""
+    },
+    {
+      "drillKind": "operator_signoff",
+      "required": true,
+      "status": "missing",
+      "evidenceUri": "",
+      "collectedAtUtc": "",
+      "freshnessWindowDays": 14,
+      "note": "",
+      "waiverRef": ""
+    }
+  ],
+  "decisionInputs": {
+    "requiredDrillsPresent": false,
+    "requiredDrillsCompleted": false,
+    "exampleEvidencePresent": false,
+    "staleEvidencePresent": false,
+    "fallbackAccepted": false,
+    "operatorSignoffCompleted": false
+  },
+  "waivers": [],
+  "blockers": []
+}

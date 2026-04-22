@@ -4,9 +4,11 @@ The platform has a durable evidence path for staging and prod-like certification
 
 Use `tools/evidence/New-CertificationRunManifest.ps1` to create the first-class certification run artifact, then validate it with `tools/evidence/Test-CertificationRunManifest.ps1`. The manifest carries execution context placeholders, fallback posture, and a `reviewGate` decision so dry-run/example evidence cannot be mistaken for live certification.
 
-After the manifest is valid, use `tools/evidence/New-ReleaseEvidenceBundle.ps1` to assemble the release evidence bundle, `tools/evidence/Test-ReleaseEvidenceBundle.ps1` to validate it, `tools/evidence/New-CertificationReviewSummary.ps1` to generate the review output, and `tools/evidence/Test-CertificationReviewSummary.ps1` to validate the final review gate before release review.
+After the manifest is valid, generate a drill ledger with `tools/evidence/New-CertificationExecutionSession.ps1`, validate it with `tools/evidence/Test-CertificationExecutionSession.ps1`, and generate an operator report with `tools/evidence/New-CertificationExecutionSummary.ps1`.
 
-When a real staging/prod-like certification package is review-ready, use `tools/evidence/New-CertificationAcceptance.ps1` to record accepted live certification, `tools/evidence/Test-CertificationAcceptance.ps1` to validate it, and `tools/evidence/New-CertificationAcceptanceSummary.ps1` to generate the go/no-go release-governance summary. Follow `docs/live_certification_acceptance.md` for the live acceptance path.
+Then use `tools/evidence/New-ReleaseEvidenceBundle.ps1` to assemble the release evidence bundle, `tools/evidence/Test-ReleaseEvidenceBundle.ps1` to validate it, `tools/evidence/New-CertificationReviewSummary.ps1` to generate the review output, and `tools/evidence/Test-CertificationReviewSummary.ps1` to validate the final review gate before release review.
+
+When a real staging/prod-like certification package is review-ready, use `tools/evidence/New-CertificationAcceptance.ps1` to record accepted live certification, `tools/evidence/Test-CertificationAcceptance.ps1` to validate it, and `tools/evidence/New-CertificationAcceptanceSummary.ps1` to generate the go/no-go release-governance summary. Follow `docs/live_certification_execution_capture.md` and `docs/live_certification_acceptance.md` for the live execution and acceptance paths.
 
 ## Required Evidence Kinds
 
@@ -62,4 +64,4 @@ Do not mark evidence as accepted unless it came from a real staging or prod-like
 
 ## Bundle Attachment
 
-For release review, follow `docs/staging_prodlike_certification_execution.md` and attach the generated bundle described in `docs/release_evidence_bundles.md`. The bundle captures required certification evidence references, compatibility inventory hash, compatibility readiness output references, fallback source-mode posture, rollback posture, validation output references, certification run id, execution context, review gate state, generated certification review summary, accepted certification artifact, and acceptance go/no-go summary.
+For release review, follow `docs/staging_prodlike_certification_execution.md` and attach the generated bundle described in `docs/release_evidence_bundles.md`. The bundle captures required certification evidence references, compatibility inventory hash, compatibility readiness output references, fallback source-mode posture, rollback posture, validation output references, certification run id, execution context, execution session ledger, review gate state, generated certification review summary, accepted certification artifact, and acceptance go/no-go summary.

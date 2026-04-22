@@ -1,6 +1,6 @@
 # Staging And Prod-Like Certification Execution
 
-This guide is the Sprint 27 operator path for preparing a certification run and handing it to live-certification acceptance. It does not replace real staging/prod-like execution; it makes the evidence preparation, review gate, and acceptance handoff repeatable.
+This guide is the Sprint 29 operator path for preparing a certification run, capturing drill execution, and handing it to live-certification acceptance. It does not replace real staging/prod-like execution; it makes the evidence preparation, execution capture, review gate, and acceptance handoff repeatable.
 
 ## 1. Gather Evidence References
 
@@ -93,7 +93,26 @@ Validate the generated review gate before presenting the package for release rev
 
 Use `-AllowBlocked` only in local/CI smoke checks where the purpose is to prove blocker detection, not to approve a release.
 
-## 7. Record Live Acceptance
+## 7. Capture Execution Session
+
+After the manifest validates, record what actually ran:
+
+```powershell
+./tools/evidence/New-CertificationExecutionSession.ps1 `
+  -CertificationRunPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
+  -OutputPath "release-evidence/release-2026-04-16/certification-execution-session.json"
+
+./tools/evidence/Test-CertificationExecutionSession.ps1 `
+  -SessionPath "release-evidence/release-2026-04-16/certification-execution-session.json"
+
+./tools/evidence/New-CertificationExecutionSummary.ps1 `
+  -SessionPath "release-evidence/release-2026-04-16/certification-execution-session.json" `
+  -OutputRoot "release-evidence/release-2026-04-16"
+```
+
+Execution must be completed drill-by-drill before live acceptance.
+
+## 8. Record Live Acceptance
 
 Only after the review summary validates without allowances, follow `docs/live_certification_acceptance.md`:
 
@@ -101,6 +120,7 @@ Only after the review summary validates without allowances, follow `docs/live_ce
 ./tools/evidence/New-CertificationAcceptance.ps1 `
   -CertificationRunPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
   -SummaryPath "release-evidence/release-2026-04-16/certification-review-summary.json" `
+  -ExecutionSessionPath "release-evidence/release-2026-04-16/certification-execution-session.json" `
   -BundlePath "release-evidence/release-2026-04-16" `
   -AcceptedBy "operator@example.com" `
   -ApprovedBy "release-approver@example.com"
@@ -127,4 +147,5 @@ Promotion is blocked when:
 - production-like fallback was used without authorization,
 - release ids or certification run ids differ across certification manifest and bundle artifacts,
 - the certification manifest review gate is not `ready_for_review`,
+- required drill execution session is missing or incomplete,
 - live acceptance is missing, blocked, expired, or based on dry-run/example evidence.

@@ -21,6 +21,13 @@
     "reviewState": "",
     "reviewGateDecision": ""
   },
+  "certificationExecutionSession": {
+    "path": "",
+    "sha256": "",
+    "sessionId": "",
+    "executionState": "",
+    "goNoGo": ""
+  },
   "releaseEvidenceBundle": {
     "path": "",
     "sha256": "",
@@ -46,7 +53,8 @@
     "fallbackAccepted": false,
     "reviewReady": false,
     "signoffPresent": false,
-    "bundleHashCaptured": false
+    "bundleHashCaptured": false,
+    "executionSessionComplete": false
   },
   "waivers": [],
   "blockers": []

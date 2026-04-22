@@ -18,6 +18,8 @@ Each bundle contains:
 | `certification-evidence-manifest.json` | Required certification evidence kinds and the artifact/ticket URI for each kind. |
 | `fallback-posture.json` | Platform catalog source mode, production-like flag, fallback usage, fallback authorization URI, and pass/fail posture. |
 | `validation-results.json` | Evidence-generation metadata and validation result references. |
+| `certification-execution-session.json` | Drill-by-drill execution ledger for the live certification session. |
+| `certification-execution-summary.json` / `.md` | Operator/reviewer execution summary with drill completion and blocker state. |
 | `certification-acceptance.json` | Live-certification acceptance artifact generated after the package is review-ready. |
 | `certification-acceptance-summary.json` / `.md` | Go/no-go release-governance summary for accepted certification. |
 
@@ -47,6 +49,7 @@ Then generate the bundle from that manifest:
   -ReleaseId "release-2026-04-16" `
   -Environment "staging" `
   -CertificationRunPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
+  -CertificationExecutionSessionPath "certification-execution-session.json" `
   -WindowStartUtc "2026-04-01T00:00:00Z" `
   -WindowEndUtc "2026-04-16T00:00:00Z" `
   -UsageSummaryUri "artifact://release-evidence/release-2026-04-16/usage-summary.json" `
@@ -91,6 +94,23 @@ Validate the review gate:
 
 The validator fails unless the summary is `ready_for_release_review`. Use `-AllowBlocked` only for smoke checks that intentionally prove blocker detection.
 
+## Capture Execution Session
+
+Capture drill execution before acceptance:
+
+```powershell
+./tools/evidence/New-CertificationExecutionSession.ps1 `
+  -CertificationRunPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
+  -OutputPath "release-evidence/release-2026-04-16/certification-execution-session.json"
+
+./tools/evidence/Test-CertificationExecutionSession.ps1 `
+  -SessionPath "release-evidence/release-2026-04-16/certification-execution-session.json"
+
+./tools/evidence/New-CertificationExecutionSummary.ps1 `
+  -SessionPath "release-evidence/release-2026-04-16/certification-execution-session.json" `
+  -OutputRoot "release-evidence/release-2026-04-16"
+```
+
 ## Record Live Certification Acceptance
 
 After the review summary validates without allowances, record accepted live certification:
@@ -99,6 +119,7 @@ After the review summary validates without allowances, record accepted live cert
 ./tools/evidence/New-CertificationAcceptance.ps1 `
   -CertificationRunPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
   -SummaryPath "release-evidence/release-2026-04-16/certification-review-summary.json" `
+  -ExecutionSessionPath "release-evidence/release-2026-04-16/certification-execution-session.json" `
   -BundlePath "release-evidence/release-2026-04-16" `
   -AcceptedBy "operator@example.com" `
   -ApprovedBy "release-approver@example.com"
@@ -120,6 +141,7 @@ Validate acceptance and emit the go/no-go summary:
 ```
 
 Use `docs/live_certification_acceptance.md` for the complete acceptance path.
+Use `docs/live_certification_execution_capture.md` for the complete execution-capture path.
 
 ## Fallback Posture
 
@@ -130,7 +152,7 @@ Use `docs/live_certification_acceptance.md` for the complete acceptance path.
 - fail validation, or
 - include explicit fallback authorization evidence and incident/release references.
 
-The certification run manifest also carries fallback posture through `reviewGate`, and the generated bundle repeats the certification run id, execution context, review gate, fallback decision, and expected certification acceptance path so reviewers do not have to reconcile separate files manually.
+The certification run manifest also carries fallback posture through `reviewGate`, and the generated bundle repeats the certification run id, execution context, review gate, fallback decision, expected execution session path, and expected certification acceptance path so reviewers do not have to reconcile separate files manually.
 
 ## Signed Artifact Verification Decision
 

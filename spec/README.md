@@ -5,6 +5,7 @@ The `spec/Sprint_*` folders are non-runtime planning materials used to steer imp
 Authoritative operator paths live under `docs/`, especially:
 
 - `docs/staging_prodlike_certification_execution.md`
+- `docs/live_certification_execution_capture.md`
 - `docs/live_certification_acceptance.md`
 - `docs/release_evidence_bundles.md`
 

@@ -372,13 +372,18 @@ public sealed class ArchitectureResidueGuardTests
         var validator = Path.Combine(repositoryRoot, "tools", "evidence", "Test-ReleaseEvidenceBundle.ps1");
         var summaryGenerator = Path.Combine(repositoryRoot, "tools", "evidence", "New-CertificationReviewSummary.ps1");
         var summaryValidator = Path.Combine(repositoryRoot, "tools", "evidence", "Test-CertificationReviewSummary.ps1");
+        var executionSessionGenerator = Path.Combine(repositoryRoot, "tools", "evidence", "New-CertificationExecutionSession.ps1");
+        var executionSessionValidator = Path.Combine(repositoryRoot, "tools", "evidence", "Test-CertificationExecutionSession.ps1");
+        var executionSummaryGenerator = Path.Combine(repositoryRoot, "tools", "evidence", "New-CertificationExecutionSummary.ps1");
         var acceptanceGenerator = Path.Combine(repositoryRoot, "tools", "evidence", "New-CertificationAcceptance.ps1");
         var acceptanceValidator = Path.Combine(repositoryRoot, "tools", "evidence", "Test-CertificationAcceptance.ps1");
         var acceptanceSummaryGenerator = Path.Combine(repositoryRoot, "tools", "evidence", "New-CertificationAcceptanceSummary.ps1");
         var bundleDocs = Path.Combine(repositoryRoot, "docs", "release_evidence_bundles.md");
         var executionDocs = Path.Combine(repositoryRoot, "docs", "staging_prodlike_certification_execution.md");
+        var liveExecutionDocs = Path.Combine(repositoryRoot, "docs", "live_certification_execution_capture.md");
         var signingDecision = Path.Combine(repositoryRoot, "docs", "signed_artifact_verification_decision.md");
         var runTemplate = Path.Combine(repositoryRoot, "docs", "certification_run_manifest.template.json");
+        var executionTemplate = Path.Combine(repositoryRoot, "docs", "certification_execution_session.template.json");
         var acceptanceTemplate = Path.Combine(repositoryRoot, "docs", "certification_acceptance.template.json");
         var evidenceRefs = Path.Combine(repositoryRoot, "docs", "certification_evidence_refs.example.json");
 
@@ -388,13 +393,18 @@ public sealed class ArchitectureResidueGuardTests
         File.Exists(validator).Should().BeTrue("Sprint 24 requires generated evidence validation");
         File.Exists(summaryGenerator).Should().BeTrue("Sprint 26 requires a certification review summary generator");
         File.Exists(summaryValidator).Should().BeTrue("Sprint 26 requires a certification review summary gate validator");
+        File.Exists(executionSessionGenerator).Should().BeTrue("Sprint 29 requires a certification execution session generator");
+        File.Exists(executionSessionValidator).Should().BeTrue("Sprint 29 requires machine-checkable execution session validation");
+        File.Exists(executionSummaryGenerator).Should().BeTrue("Sprint 29 requires an execution drill summary generator");
         File.Exists(acceptanceGenerator).Should().BeTrue("Sprint 27 requires a live-certification acceptance generator");
         File.Exists(acceptanceValidator).Should().BeTrue("Sprint 27 requires machine-checkable acceptance validation");
         File.Exists(acceptanceSummaryGenerator).Should().BeTrue("Sprint 27 requires an acceptance go/no-go summary");
         File.Exists(bundleDocs).Should().BeTrue("operators need the bundle convention");
         File.Exists(executionDocs).Should().BeTrue("operators need one staging/prod-like certification execution path");
+        File.Exists(liveExecutionDocs).Should().BeTrue("operators need one focused live execution capture path");
         File.Exists(signingDecision).Should().BeTrue("signed artifact verification must be explicitly scoped or deferred");
         File.Exists(runTemplate).Should().BeTrue("certification run manifests should have a stable machine-readable template");
+        File.Exists(executionTemplate).Should().BeTrue("certification execution sessions should have a stable machine-readable template");
         File.Exists(acceptanceTemplate).Should().BeTrue("live certification acceptance should have a stable machine-readable template");
 
         var certificationGeneratorText = File.ReadAllText(certificationGenerator, Encoding.UTF8);
@@ -437,8 +447,25 @@ public sealed class ArchitectureResidueGuardTests
         summaryValidatorText.Should().Contain("AllowBlocked");
         summaryValidatorText.Should().Contain("example evidence");
 
+        var executionSessionGeneratorText = File.ReadAllText(executionSessionGenerator, Encoding.UTF8);
+        executionSessionGeneratorText.Should().Contain("certification_execution_session.template.json");
+        executionSessionGeneratorText.Should().Contain("drillLedger");
+        executionSessionGeneratorText.Should().Contain("operator_signoff_incomplete");
+
+        var executionSessionValidatorText = File.ReadAllText(executionSessionValidator, Encoding.UTF8);
+        executionSessionValidatorText.Should().Contain("Missing required drill");
+        executionSessionValidatorText.Should().Contain("Production-like fallback requires authorized_exception");
+        executionSessionValidatorText.Should().Contain("stale");
+
+        var executionSummaryGeneratorText = File.ReadAllText(executionSummaryGenerator, Encoding.UTF8);
+        executionSummaryGeneratorText.Should().Contain("certification-execution-summary.json");
+        executionSummaryGeneratorText.Should().Contain("Drill Ledger");
+        executionSummaryGeneratorText.Should().Contain("ready_for_acceptance");
+
         var acceptanceGeneratorText = File.ReadAllText(acceptanceGenerator, Encoding.UTF8);
         acceptanceGeneratorText.Should().Contain("certification_acceptance.template.json");
+        acceptanceGeneratorText.Should().Contain("ExecutionSessionPath");
+        acceptanceGeneratorText.Should().Contain("execution_session_incomplete");
         acceptanceGeneratorText.Should().Contain("example_or_dry_run_evidence");
         acceptanceGeneratorText.Should().Contain("releaseEvidenceBundle");
         acceptanceGeneratorText.Should().Contain("Get-BundleDigest");
@@ -447,6 +474,7 @@ public sealed class ArchitectureResidueGuardTests
         acceptanceValidatorText.Should().Contain("Dry-run/example evidence cannot be accepted as live certification");
         acceptanceValidatorText.Should().Contain("ready_for_release_review");
         acceptanceValidatorText.Should().Contain("Certification acceptance is expired");
+        acceptanceValidatorText.Should().Contain("completed certification execution session");
         acceptanceValidatorText.Should().Contain("operator signoff evidence");
 
         var acceptanceSummaryGeneratorText = File.ReadAllText(acceptanceSummaryGenerator, Encoding.UTF8);
@@ -462,12 +490,21 @@ public sealed class ArchitectureResidueGuardTests
         templateRoot.GetProperty("reviewGate").TryGetProperty("acceptedForReleaseReview", out _).Should().BeTrue();
         ReadEvidenceKinds(templateRoot.GetProperty("requiredEvidence")).Should().BeEquivalentTo(RequiredCertificationEvidenceKinds);
 
+        using var executionTemplateDocument = JsonDocument.Parse(File.ReadAllText(executionTemplate, Encoding.UTF8));
+        var executionRoot = executionTemplateDocument.RootElement;
+        executionRoot.GetProperty("artifactType").GetString().Should().Be("live-certification-execution-session");
+        executionRoot.GetProperty("executionContext").TryGetProperty("executionWindowId", out _).Should().BeTrue();
+        executionRoot.GetProperty("decisionInputs").TryGetProperty("requiredDrillsCompleted", out _).Should().BeTrue();
+        ReadExecutionDrills(executionRoot.GetProperty("drillLedger")).Should().BeEquivalentTo(RequiredCertificationEvidenceKinds);
+
         using var acceptanceTemplateDocument = JsonDocument.Parse(File.ReadAllText(acceptanceTemplate, Encoding.UTF8));
         var acceptanceRoot = acceptanceTemplateDocument.RootElement;
         acceptanceRoot.GetProperty("artifactType").GetString().Should().Be("live-certification-acceptance");
+        acceptanceRoot.GetProperty("certificationExecutionSession").TryGetProperty("sessionId", out _).Should().BeTrue();
         acceptanceRoot.GetProperty("releaseEvidenceBundle").TryGetProperty("sha256", out _).Should().BeTrue();
         acceptanceRoot.GetProperty("fallbackPosture").TryGetProperty("fallbackDecision", out _).Should().BeTrue();
         acceptanceRoot.GetProperty("decisionInputs").TryGetProperty("exampleEvidencePresent", out _).Should().BeTrue();
+        acceptanceRoot.GetProperty("decisionInputs").TryGetProperty("executionSessionComplete", out _).Should().BeTrue();
 
         using var refsDocument = JsonDocument.Parse(File.ReadAllText(evidenceRefs, Encoding.UTF8));
         var refsRoot = refsDocument.RootElement;
@@ -596,6 +633,14 @@ public sealed class ArchitectureResidueGuardTests
         return array
             .EnumerateArray()
             .Select(item => item.GetProperty("evidenceKind").GetString() ?? string.Empty)
+            .ToArray();
+    }
+
+    private static string[] ReadExecutionDrills(JsonElement array)
+    {
+        return array
+            .EnumerateArray()
+            .Select(item => item.GetProperty("drillKind").GetString() ?? string.Empty)
             .ToArray();
     }
 

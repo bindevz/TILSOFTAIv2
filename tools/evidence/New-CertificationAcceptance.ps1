@@ -6,6 +6,9 @@ param(
     [string]$SummaryPath,
 
     [Parameter(Mandatory = $true)]
+    [string]$ExecutionSessionPath,
+
+    [Parameter(Mandatory = $true)]
     [string]$BundlePath,
 
     [string]$OutputPath = "",
@@ -109,10 +112,12 @@ if (-not (Test-Path $templatePath)) {
 
 $resolvedCertificationRunPath = Resolve-ArtifactPath -Path $CertificationRunPath -RepoRoot $repoRoot
 $resolvedSummaryPath = Resolve-ArtifactPath -Path $SummaryPath -RepoRoot $repoRoot
+$resolvedExecutionSessionPath = Resolve-ArtifactPath -Path $ExecutionSessionPath -RepoRoot $repoRoot
 $resolvedBundlePath = Resolve-ArtifactPath -Path $BundlePath -RepoRoot $repoRoot
 
 $certification = Read-JsonFile -Path $resolvedCertificationRunPath
 $summary = Read-JsonFile -Path $resolvedSummaryPath
+$executionSession = Read-JsonFile -Path $resolvedExecutionSessionPath
 $bundleDigest = Get-BundleDigest -BundlePath $resolvedBundlePath
 
 if ($summary.releaseId -ne $certification.releaseId) {
@@ -127,6 +132,18 @@ if ($summary.environment -ne $certification.environment) {
     throw "Certification summary environment '$($summary.environment)' does not match certification run '$($certification.environment)'."
 }
 
+if ($executionSession.releaseId -ne $certification.releaseId) {
+    throw "Execution session releaseId '$($executionSession.releaseId)' does not match certification run '$($certification.releaseId)'."
+}
+
+if ($executionSession.certificationRunId -ne $certification.certificationRunId) {
+    throw "Execution session run id '$($executionSession.certificationRunId)' does not match certification run '$($certification.certificationRunId)'."
+}
+
+if ($executionSession.environment -ne $certification.environment) {
+    throw "Execution session environment '$($executionSession.environment)' does not match certification run '$($certification.environment)'."
+}
+
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $OutputPath = Join-Path $resolvedBundlePath "certification-acceptance.json"
 }
@@ -138,14 +155,18 @@ $now = (Get-Date).ToUniversalTime()
 $expiresAt = $now.AddDays($FreshnessWindowDays)
 $acceptance = Get-Content $templatePath -Raw | ConvertFrom-Json
 $summaryBlockers = @($summary.blockers)
+$executionBlockers = @($executionSession.blockers)
 $waivers = @($WaiverNotes | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 $exampleEvidencePresent = @($summary.exampleEvidenceKinds).Count -gt 0
-$staleEvidencePresent = @($summary.staleEvidenceKinds).Count -gt 0
+$staleEvidencePresent = @($summary.staleEvidenceKinds).Count -gt 0 -or [bool]$executionSession.decisionInputs.staleEvidencePresent
 $requiredEvidenceComplete = @($summary.missingEvidenceKinds).Count -eq 0
 $fallbackAccepted = -not ($summary.productionLike -and $summary.fallbackUsed -and $summary.fallbackDecision -ne "authorized_exception")
 $reviewReady = $summary.reviewDecision -eq "ready_for_release_review" -and $summary.reviewState -eq "ready_for_review"
+$signoffEntry = $executionSession.drillLedger | Where-Object { $_.drillKind -eq "operator_signoff" } | Select-Object -First 1
 $signoff = $certification.signoff
-$signoffPresent = -not [string]::IsNullOrWhiteSpace([string]$signoff.signoffUri)
+$signoffUri = if ($null -ne $signoffEntry -and -not [string]::IsNullOrWhiteSpace([string]$signoffEntry.evidenceUri)) { [string]$signoffEntry.evidenceUri } else { [string]$signoff.signoffUri }
+$signoffPresent = -not [string]::IsNullOrWhiteSpace($signoffUri)
+$executionSessionComplete = $executionSession.executionState -eq "completed" -and [bool]$executionSession.decisionInputs.requiredDrillsCompleted -and [bool]$executionSession.decisionInputs.fallbackAccepted -and [bool]$executionSession.decisionInputs.operatorSignoffCompleted -and -not [bool]$executionSession.decisionInputs.exampleEvidencePresent -and -not [bool]$executionSession.decisionInputs.staleEvidencePresent -and $executionBlockers.Count -eq 0
 $acceptedByPresent = -not [string]::IsNullOrWhiteSpace($AcceptedBy)
 $approvedByPresent = -not [string]::IsNullOrWhiteSpace($ApprovedBy)
 
@@ -168,11 +189,19 @@ if (-not $reviewReady) {
 if (-not $signoffPresent) {
     $blockers += "operator_signoff_missing"
 }
+if (-not $executionSessionComplete) {
+    $blockers += "execution_session_incomplete"
+}
 if (-not $acceptedByPresent) {
     $blockers += "accepted_by_missing"
 }
 if (-not $approvedByPresent) {
     $blockers += "approved_by_missing"
+}
+foreach ($executionBlocker in $executionBlockers) {
+    if ($blockers -notcontains $executionBlocker) {
+        $blockers += $executionBlocker
+    }
 }
 foreach ($summaryBlocker in $summaryBlockers) {
     if ($blockers -notcontains $summaryBlocker) {
@@ -207,6 +236,11 @@ $acceptance.certificationReviewSummary.sha256 = Get-FileHashText -Path $resolved
 $acceptance.certificationReviewSummary.reviewDecision = $summary.reviewDecision
 $acceptance.certificationReviewSummary.reviewState = $summary.reviewState
 $acceptance.certificationReviewSummary.reviewGateDecision = $summary.reviewGateDecision
+$acceptance.certificationExecutionSession.path = $ExecutionSessionPath
+$acceptance.certificationExecutionSession.sha256 = Get-FileHashText -Path $resolvedExecutionSessionPath
+$acceptance.certificationExecutionSession.sessionId = [string]$executionSession.sessionId
+$acceptance.certificationExecutionSession.executionState = [string]$executionSession.executionState
+$acceptance.certificationExecutionSession.goNoGo = $(if ($executionSessionComplete) { "ready_for_acceptance" } else { "blocked" })
 $acceptance.releaseEvidenceBundle.path = $BundlePath
 $acceptance.releaseEvidenceBundle.sha256 = $bundleDigest.sha256
 $acceptance.releaseEvidenceBundle.artifactHashes = @($bundleDigest.artifactHashes)
@@ -216,7 +250,7 @@ $acceptance.fallbackPosture.fallbackUsed = [bool]$summary.fallbackUsed
 $acceptance.fallbackPosture.fallbackAuthorized = [bool]$summary.fallbackAuthorized
 $acceptance.fallbackPosture.fallbackAuthorizationUri = $summary.fallbackAuthorizationUri
 $acceptance.fallbackPosture.fallbackDecision = $summary.fallbackDecision
-$acceptance.signoff.operatorSignoffUri = $signoff.signoffUri
+$acceptance.signoff.operatorSignoffUri = $signoffUri
 $acceptance.signoff.acceptedBy = $AcceptedBy
 $acceptance.signoff.approvedBy = $ApprovedBy
 $acceptance.decisionInputs.requiredEvidenceComplete = $requiredEvidenceComplete
@@ -226,6 +260,7 @@ $acceptance.decisionInputs.fallbackAccepted = $fallbackAccepted
 $acceptance.decisionInputs.reviewReady = $reviewReady
 $acceptance.decisionInputs.signoffPresent = $signoffPresent
 $acceptance.decisionInputs.bundleHashCaptured = -not [string]::IsNullOrWhiteSpace([string]$bundleDigest.sha256)
+$acceptance.decisionInputs.executionSessionComplete = $executionSessionComplete
 $acceptance.waivers = @($waivers)
 $acceptance.blockers = @($blockers | Sort-Object -Unique)
 

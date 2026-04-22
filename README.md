@@ -94,9 +94,11 @@ See `docs/compatibility_debt_report.md`, `docs/sql_compatibility_observability_r
 - `docs/compatibility_inventory.json`
 - `docs/db_major_readiness_evidence_packet.template.json`
 - `docs/certification_run_manifest.template.json`
+- `docs/certification_execution_session.template.json`
 - `docs/certification_acceptance.template.json`
 - `docs/release_evidence_bundles.md`
 - `docs/staging_prodlike_certification_execution.md`
+- `docs/live_certification_execution_capture.md`
 - `docs/live_certification_acceptance.md`
 - `docs/signed_artifact_verification_decision.md`
 - `docs/external_integration_governance.md`

@@ -67,6 +67,23 @@ if (-not $validation.bundleGenerated) {
 }
 
 if ($RequireAcceptedCertification -and $fallback.productionLike) {
+    $executionSessionPath = [string]$validation.certificationExecutionSessionPath
+    if ([string]::IsNullOrWhiteSpace($executionSessionPath)) {
+        $errors.Add("Production-like release evidence requires certificationExecutionSessionPath.")
+    }
+    else {
+        $resolvedExecutionSessionPath = if ([System.IO.Path]::IsPathRooted($executionSessionPath)) {
+            $executionSessionPath
+        }
+        else {
+            Join-Path $BundlePath $executionSessionPath
+        }
+
+        if (-not (Test-Path $resolvedExecutionSessionPath)) {
+            $errors.Add("Production-like release evidence is missing execution session artifact: $executionSessionPath")
+        }
+    }
+
     $acceptancePath = [string]$validation.certificationAcceptancePath
     if ([string]::IsNullOrWhiteSpace($acceptancePath)) {
         $errors.Add("Production-like release evidence requires certificationAcceptancePath.")
