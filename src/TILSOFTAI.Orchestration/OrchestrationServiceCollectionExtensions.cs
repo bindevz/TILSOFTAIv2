@@ -3,9 +3,15 @@ using TILSOFTAI.Agents;
 using TILSOFTAI.Agents.Abstractions;
 using TILSOFTAI.Agents.Domain;
 using TILSOFTAI.Approvals;
+using TILSOFTAI.Orchestration.Answering;
+using TILSOFTAI.Orchestration.AiRouting;
+using TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
+using TILSOFTAI.Orchestration.AiRouting.Tools;
 using TILSOFTAI.Orchestration.Analytics;
 using TILSOFTAI.Orchestration.Capabilities;
+using TILSOFTAI.Orchestration.Execution;
 using TILSOFTAI.Orchestration.Observability;
+using TILSOFTAI.Orchestration.Semantic;
 using TILSOFTAI.Supervisor;
 using TILSOFTAI.Supervisor.Classification;
 using TILSOFTAI.Tools.Abstractions;
@@ -19,6 +25,21 @@ public static class OrchestrationServiceCollectionExtensions
         // Supervisor runtime with intent classification
         services.AddSingleton<IIntentClassifier, KeywordIntentClassifier>();
         services.AddSingleton<RuntimeExecutionInstrumentation>();
+        services.AddSingleton<IHardSignalExtractor, HardSignalExtractor>();
+        services.AddSingleton<AgentRunOptionsFactory>();
+        services.AddSingleton<CapabilityToolDescriptionBuilder>();
+        services.AddSingleton<CapabilityParameterSchemaBuilder>();
+        services.AddSingleton<CapabilityArgumentMapper>();
+        services.AddSingleton<CapabilityExecutionPolicy>();
+        services.AddSingleton<ICapabilityExecutionFacade, CapabilityExecutionFacade>();
+        services.AddSingleton<ICompositeCapabilityExecutor, CompositeCapabilityExecutor>();
+        services.AddSingleton<IAgentFunctionToolFactory, DynamicFunctionToolFactory>();
+        services.AddSingleton<IAgentClientFactory, AgentClientFactory>();
+        services.AddSingleton<RawJsonAnswerComposer>();
+        services.AddSingleton<AiSummaryService>();
+        services.AddSingleton<IAnswerComposer, StructuredAnswerComposer>();
+        services.AddSingleton<ISemanticCapabilityRetriever, SemanticCapabilityRetriever>();
+        services.AddSingleton<IAgentToolRouter, NoOpAgentToolRouter>();
         services.AddSingleton<ISupervisorRuntime, SupervisorRuntime>();
 
         // Legacy bridge is fallback-only; native capability execution is owned by domain agents.

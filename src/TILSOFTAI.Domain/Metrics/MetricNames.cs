@@ -48,6 +48,15 @@ namespace TILSOFTAI.Domain.Metrics
         public const string RuntimeAdapterFailuresTotal = "tilsoftai_runtime_adapter_failures_total";
         public const string RuntimeExecutionDurationSeconds = "tilsoftai_runtime_execution_duration_seconds";
 
+        // Sprint 31 phase 8: Agent Framework routing rollout and evaluation observability
+        public const string AgentRoutingRequestsTotal = "tilsoftai_agent_routing_requests_total";
+        public const string AgentRoutingHandledTotal = "tilsoftai_agent_routing_handled_total";
+        public const string AgentRoutingFailuresTotal = "tilsoftai_agent_routing_failures_total";
+        public const string AgentRoutingClarificationsTotal = "tilsoftai_agent_routing_clarifications_total";
+        public const string AgentRoutingCandidateTools = "tilsoftai_agent_routing_candidate_tools";
+        public const string AgentRoutingLatencySeconds = "tilsoftai_agent_routing_latency_seconds";
+        public const string AgentRoutingStageLatencySeconds = "tilsoftai_agent_routing_stage_latency_seconds";
+
         // Sprint 10: platform catalog control-plane observability
         public const string PlatformCatalogSourceModeTotal = "tilsoftai_platform_catalog_source_mode_total";
         public const string PlatformCatalogMutationTotal = "tilsoftai_platform_catalog_mutations_total";

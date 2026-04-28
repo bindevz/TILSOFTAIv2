@@ -1,0 +1,4 @@
+{"utterance":"Tồn mã MADEIRA-BLK ở kho BD còn bao nhiêu?","locale":"vi-VN","expectedFunction":"warehouse_inventory_by_item","expectedArguments":{"item_no":"MADEIRA-BLK","warehouse_code":"BD"}}
+{"utterance":"Đơn mua mở của NCC ABC tháng trước","locale":"vi-VN","expectedFunction":"purchasing_open_purchase_orders_by_supplier","expectedArguments":{"supplier_code":"ABC","date_range":"previous_month"}}
+{"utterance":"Tạo PO cho supplier ABC item A123 số lượng 500","locale":"vi-VN","expectedFunction":"purchasing_po_create_preview","expectedArguments":{"supplier_code":"ABC","item_no":"A123","quantity":500},"requiresConfirmation":true}
+{"utterance":"Xem công nợ khách hàng","locale":"vi-VN","expectedFunction":"accounting_receivables_by_customer","expectedClarification":true,"missingArguments":["customer_code"]}

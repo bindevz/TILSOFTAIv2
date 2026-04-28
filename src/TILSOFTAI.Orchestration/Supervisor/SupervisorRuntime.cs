@@ -2,9 +2,13 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TILSOFTAI.Agents.Abstractions;
 using TILSOFTAI.Approvals;
+using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Orchestration.Answering;
+using TILSOFTAI.Orchestration.AiRouting;
 using TILSOFTAI.Orchestration.Capabilities;
 using TILSOFTAI.Orchestration.Observability;
 using TILSOFTAI.Supervisor.Classification;
@@ -20,6 +24,8 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
     private readonly IToolAdapterRegistry _toolAdapterRegistry;
     private readonly ILogger<SupervisorRuntime> _logger;
     private readonly RuntimeExecutionInstrumentation? _instrumentation;
+    private readonly IAgentToolRouter? _agentToolRouter;
+    private readonly AiRoutingOptions _aiRoutingOptions;
 
     public SupervisorRuntime(
         IIntentClassifier intentClassifier,
@@ -27,7 +33,9 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
         IApprovalEngine approvalEngine,
         IToolAdapterRegistry toolAdapterRegistry,
         ILogger<SupervisorRuntime> logger,
-        RuntimeExecutionInstrumentation? instrumentation = null)
+        RuntimeExecutionInstrumentation? instrumentation = null,
+        IAgentToolRouter? agentToolRouter = null,
+        IOptions<AiRoutingOptions>? aiRoutingOptions = null)
     {
         _intentClassifier = intentClassifier ?? throw new ArgumentNullException(nameof(intentClassifier));
         _agentRegistry = agentRegistry ?? throw new ArgumentNullException(nameof(agentRegistry));
@@ -35,6 +43,8 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
         _toolAdapterRegistry = toolAdapterRegistry ?? throw new ArgumentNullException(nameof(toolAdapterRegistry));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _instrumentation = instrumentation;
+        _agentToolRouter = agentToolRouter;
+        _aiRoutingOptions = aiRoutingOptions?.Value ?? new AiRoutingOptions();
     }
 
     public async Task<SupervisorResult> RunAsync(SupervisorRequest request, TilsoftExecutionContext ctx, CancellationToken ct)
@@ -47,6 +57,38 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
         if (string.IsNullOrWhiteSpace(request.Input))
         {
             return SupervisorResult.Fail("Input is required.");
+        }
+
+        if (_aiRoutingOptions.MicrosoftAgentFrameworkRoutingEnabled && IsAgentRoutingRolloutAllowed(ctx))
+        {
+            var routed = await TryRouteWithAgentToolRouterAsync(request, ctx, ct);
+            if (routed.Handled && routed.Answer is not null)
+            {
+                _logger.LogInformation(
+                    "AgentToolRoutingHandled | AnswerMode: {AnswerMode}",
+                    ResolveAnswerMode(request));
+
+                return SupervisorResult.FromAssistantAnswer(routed.Answer);
+            }
+
+            _logger.LogInformation(
+                "AgentToolRoutingNotHandled | FallbackToLegacyPipeline: {FallbackToLegacyPipeline} | FailureReason: {FailureReason}",
+                _aiRoutingOptions.FallbackToLegacyPipeline,
+                routed.FailureReason ?? "none");
+
+            if (!_aiRoutingOptions.FallbackToLegacyPipeline)
+            {
+                return SupervisorResult.Fail(
+                    routed.FailureReason ?? "Agent routing failed.",
+                    "AGENT_ROUTING_FAILED");
+            }
+        }
+        else if (_aiRoutingOptions.MicrosoftAgentFrameworkRoutingEnabled)
+        {
+            _logger.LogInformation(
+                "AgentToolRoutingSkippedByRollout | TenantId: {TenantId} | UserId: {UserId}",
+                string.IsNullOrWhiteSpace(ctx.TenantId) ? "unknown" : ctx.TenantId,
+                string.IsNullOrWhiteSpace(ctx.UserId) ? "unknown" : ctx.UserId);
         }
 
         var sw = Stopwatch.StartNew();
@@ -249,6 +291,99 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
         RequestPolicy = request.RequestPolicy,
         MessageHistory = request.MessageHistory
     };
+
+    private async Task<AgentToolRoutingResult> TryRouteWithAgentToolRouterAsync(
+        SupervisorRequest request,
+        TilsoftExecutionContext ctx,
+        CancellationToken ct)
+    {
+        if (_agentToolRouter is null)
+        {
+            _logger.LogWarning("AgentToolRoutingFailure | Reason: router_not_registered");
+            return new AgentToolRoutingResult
+            {
+                Handled = false,
+                FailureReason = "Agent routing is enabled, but no router is registered."
+            };
+        }
+
+        var routingRequest = new AgentToolRoutingRequest
+        {
+            Message = request.Input,
+            ExecutionContext = ctx,
+            Locale = ResolveLocale(ctx),
+            RequestedAnswerMode = ResolveAnswerMode(request),
+            Metadata = ToObjectMetadata(request.Metadata)
+        };
+
+        _logger.LogInformation(
+            "AgentToolRoutingAttempt | Locale: {Locale} | AnswerMode: {AnswerMode} | MaxTotalCandidateTools: {MaxTotalCandidateTools} | MaxToolCallsPerTurn: {MaxToolCallsPerTurn}",
+            routingRequest.Locale,
+            routingRequest.RequestedAnswerMode,
+            _aiRoutingOptions.MaxTotalCandidateTools,
+            _aiRoutingOptions.MaxToolCallsPerTurn);
+
+        try
+        {
+            return await _agentToolRouter.TryRouteAsync(routingRequest, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AgentToolRoutingFailure | Reason: exception");
+            return new AgentToolRoutingResult
+            {
+                Handled = false,
+                FailureReason = "Agent routing failed."
+            };
+        }
+    }
+
+    private static string ResolveLocale(TilsoftExecutionContext ctx) =>
+        string.IsNullOrWhiteSpace(ctx.Language) ? "vi-VN" : ctx.Language;
+
+    private static AnswerMode ResolveAnswerMode(SupervisorRequest request)
+    {
+        if (request.Metadata.TryGetValue("answerMode", out var answerMode)
+            && !string.IsNullOrWhiteSpace(answerMode)
+            && (string.Equals(answerMode, "raw", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(answerMode, "rawJson", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(answerMode, "json", StringComparison.OrdinalIgnoreCase)))
+        {
+            return AnswerMode.RawJson;
+        }
+
+        return AnswerMode.Structured;
+    }
+
+    private static IReadOnlyDictionary<string, object?> ToObjectMetadata(IReadOnlyDictionary<string, string?> metadata)
+    {
+        if (metadata.Count == 0)
+        {
+            return new Dictionary<string, object?>();
+        }
+
+        return metadata.ToDictionary(
+            pair => pair.Key,
+            pair => (object?)pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private bool IsAgentRoutingRolloutAllowed(TilsoftExecutionContext ctx)
+    {
+        var tenantGate = _aiRoutingOptions.EnabledTenantIds;
+        var userGate = _aiRoutingOptions.EnabledUserIds;
+
+        var tenantAllowed = tenantGate.Length == 0
+            || tenantGate.Contains(ctx.TenantId, StringComparer.OrdinalIgnoreCase);
+        var userAllowed = userGate.Length == 0
+            || userGate.Contains(ctx.UserId, StringComparer.OrdinalIgnoreCase);
+
+        return tenantAllowed && userAllowed;
+    }
 
     /// <summary>
     /// Sprint 5: Build a structured CapabilityRequestHint from request metadata and classification.

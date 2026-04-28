@@ -1,4 +1,5 @@
 using TILSOFTAI.Agents.Abstractions;
+using TILSOFTAI.Orchestration.Answering;
 
 namespace TILSOFTAI.Supervisor;
 
@@ -35,4 +36,12 @@ public sealed class SupervisorResult
         result.Success
             ? Ok(result.Output ?? string.Empty, selectedAgentId)
             : Fail(result.Error ?? "Agent execution failed.", result.Code, result.Detail, selectedAgentId);
+
+    public static SupervisorResult FromAssistantAnswer(AssistantAnswer answer) => new()
+    {
+        Success = true,
+        Output = answer.Content,
+        Detail = answer.Detail,
+        SelectedAgentId = answer.SelectedAgentId
+    };
 }

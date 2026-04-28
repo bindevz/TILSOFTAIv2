@@ -1,0 +1,5 @@
+{"caseId":"raw-json-sensitive-mask","mode":"RawJson","capabilityKey":"warehouse.inventory.by-item","rowCount":1,"expectedAnswerType":"raw_json","expectedBlocks":["raw_json"],"sensitivity":{"maskColumns":["Email"],"hiddenColumns":["SecretNote"]}}
+{"caseId":"structured-table-chart","mode":"Structured","capabilityKey":"warehouse.inventory.by-item","rowCount":3,"expectedAnswerType":"structured","expectedBlocks":["text","table","chart"],"expectedTruncated":true}
+{"caseId":"missing-argument-follow-up","mode":"Structured","capabilityKey":"accounting.receivables.by-customer","errorCode":"ARGUMENT_VALIDATION_FAILED","expectedAnswerType":"follow_up","expectedBlocks":["follow_up"]}
+{"caseId":"write-preview-confirmation","mode":"Structured","capabilityKey":"purchasing.po.create-preview","operation":"write_preview","expectedAnswerType":"confirmation","expectedBlocks":["confirmation"]}
+{"caseId":"composite-customer-360","mode":"Structured","capabilityKey":"sales.customer.360","resultType":"composite","expectedAnswerType":"composite","expectedBlocks":["text","table"]}

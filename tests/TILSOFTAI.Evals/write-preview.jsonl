@@ -1,0 +1,4 @@
+{"utterance":"Tạo PO cho supplier ABC item A123 số lượng 500","locale":"vi-VN","expectedDomain":"purchasing","expectedFunction":"purchasing_po_create_preview","requiresConfirmation":true,"shouldExecuteWriteImmediately":false}
+{"utterance":"Create a PO for supplier ABC item A123 quantity 500","locale":"en-US","expectedDomain":"purchasing","expectedFunction":"purchasing_po_create_preview","requiresConfirmation":true,"shouldExecuteWriteImmediately":false}
+{"utterance":"Cập nhật hạn thanh toán invoice INV-100 thành 2026-05-31","locale":"vi-VN","expectedDomain":"accounting","expectedFunction":"accounting_invoice_update_due_date_preview","requiresConfirmation":true,"shouldExecuteWriteImmediately":false}
+{"utterance":"Cancel sales order SO-100","locale":"en-US","expectedDomain":"sales","expectedFunction":"sales_order_cancel_preview","requiresConfirmation":true,"shouldExecuteWriteImmediately":false}

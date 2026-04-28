@@ -40,9 +40,12 @@ using TILSOFTAI.Infrastructure.Metadata;
 using TILSOFTAI.Infrastructure.Prompting;
 using TILSOFTAI.Infrastructure.Localization;
 using TILSOFTAI.Infrastructure.Sensitivity;
+using TILSOFTAI.Infrastructure.SemanticSql;
 using TILSOFTAI.Infrastructure.Sql;
 using TILSOFTAI.Infrastructure.Tools;
 using TILSOFTAI.Orchestration;
+using TILSOFTAI.Orchestration.AiRouting;
+using TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
 using TILSOFTAI.Approvals;
 using TILSOFTAI.Orchestration.Actions;
 using TILSOFTAI.Orchestration.Caching;
@@ -56,6 +59,7 @@ using TILSOFTAI.Orchestration.Atomic;
 using TILSOFTAI.Orchestration.Capabilities;
 using TILSOFTAI.Orchestration.Planning;
 using TILSOFTAI.Orchestration.Sql;
+using TILSOFTAI.Orchestration.Semantic;
 using TILSOFTAI.Orchestration.Tools;
 using TILSOFTAI.Modules.Core.Tools;
 using TILSOFTAI.Orchestration.Analytics;
@@ -226,6 +230,11 @@ public static class AddTilsoftAiExtensions
         services.AddHttpClient<OpenAiEmbeddingClient>();
         services.AddSingleton<IEmbeddingClient>(sp => sp.GetRequiredService<OpenAiEmbeddingClient>());
         services.AddSingleton<SqlVectorSemanticCache>();
+        services.AddSingleton<ISemanticKnowledgeRepository, SqlSemanticKnowledgeRepository>();
+        services.AddSingleton<ICapabilityMetadataRepository, SqlCapabilityMetadataRepository>();
+        services.AddSingleton<IEntityAliasRepository, SqlEntityAliasRepository>();
+        services.AddSingleton<IToolRoutingTraceStore, SqlToolRoutingTraceStore>();
+        services.AddSingleton<IAgentToolRouter, MicrosoftAgentToolRouter>();
         services.AddSingleton<ISemanticCache>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<SemanticCacheOptions>>().Value;
@@ -403,6 +412,16 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.JwksRefreshMaxBackoffSeconds >= options.JwksRefreshFailureBackoffSeconds,
                 "Auth:JwksRefreshMaxBackoffSeconds must be >= Auth:JwksRefreshFailureBackoffSeconds.")
             .Validate(options => options.JwksRequestTimeoutSeconds > 0, "Auth:JwksRequestTimeoutSeconds must be > 0.")
+            .ValidateOnStart();
+
+        services.AddOptions<AiRoutingOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.AiRouting))
+            .Validate(options => options.MaxCandidateDomains > 0, "AiRouting:MaxCandidateDomains must be > 0.")
+            .Validate(options => options.MaxCandidateToolsPerDomain > 0, "AiRouting:MaxCandidateToolsPerDomain must be > 0.")
+            .Validate(options => options.MaxTotalCandidateTools > 0, "AiRouting:MaxTotalCandidateTools must be > 0.")
+            .Validate(options => options.MaxToolCallsPerTurn > 0, "AiRouting:MaxToolCallsPerTurn must be > 0.")
+            .Validate(options => options.MaxTotalCandidateTools >= options.MaxCandidateToolsPerDomain,
+                "AiRouting:MaxTotalCandidateTools must be >= AiRouting:MaxCandidateToolsPerDomain.")
             .ValidateOnStart();
 
         services.AddOptions<ChatOptions>()
