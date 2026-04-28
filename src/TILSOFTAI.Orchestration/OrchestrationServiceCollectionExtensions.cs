@@ -31,18 +31,18 @@ public static class OrchestrationServiceCollectionExtensions
         services.AddSingleton<CapabilityToolDescriptionBuilder>();
         services.AddSingleton<CapabilityParameterSchemaBuilder>();
         services.AddSingleton<ICapabilityToolDescriptorFactory, CapabilityToolDescriptorFactory>();
-        services.AddSingleton<IOfficialAgentToolFactory, OfficialAgentToolFactory>();
         services.AddSingleton<CapabilityArgumentMapper>();
         services.AddSingleton<CapabilityExecutionPolicy>();
         services.AddSingleton<ICapabilityExecutionFacade, CapabilityExecutionFacade>();
         services.AddSingleton<ICompositeCapabilityExecutor, CompositeCapabilityExecutor>();
-        services.AddSingleton<IAgentFunctionToolFactory, DynamicFunctionToolFactory>();
+        services.AddSingleton<IOfficialAgentFunctionProvider, DynamicFunctionToolFactory>();
+        services.AddSingleton<IOfficialAgentProviderFactory, OfficialAgentProviderFactory>();
         services.AddSingleton<IOfficialMicrosoftAgentRuntime, OfficialMicrosoftAgentRuntime>();
-        services.AddSingleton<IAgentClientFactory, AgentClientFactory>();
         services.AddSingleton<RawJsonAnswerComposer>();
         services.AddSingleton<AiSummaryService>();
         services.AddSingleton<IAnswerComposer, StructuredAnswerComposer>();
         services.AddSingleton<ISemanticCapabilityRetriever, SemanticCapabilityRetriever>();
+        services.AddSingleton<ICapabilityCandidateSelector, SemanticCapabilityCandidateSelector>();
         services.AddSingleton<IAgentToolRouter, NoOpAgentToolRouter>();
         services.AddSingleton<ISupervisorRuntime, SupervisorRuntime>();
 

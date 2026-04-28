@@ -281,6 +281,7 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
             var result = await _approvalEngine!.ExecuteAsync(
                     approvedActionId,
                     ApprovalContext.FromExecutionContext(context, "microsoft-agent-router"),
+                    JsonSerializer.Serialize(procArgs, JsonOptions),
                     cancellationToken)
                 .ConfigureAwait(false);
 

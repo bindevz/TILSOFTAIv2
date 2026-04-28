@@ -10,7 +10,7 @@ using Xunit;
 
 namespace TILSOFTAI.Tests.AiRouting;
 
-public sealed class AgentFunctionToolFactoryTests
+public sealed class OfficialAgentFunctionProviderTests
 {
     [Fact]
     public void CapabilityToolDescriptorFactory_ShouldUseSqlBackedLocalizedText()
@@ -39,26 +39,20 @@ public sealed class AgentFunctionToolFactoryTests
     }
 
     [Fact]
-    public async Task OfficialAgentToolFactory_ShouldCreateOfficialFunctionAndDispatchThroughFacade()
+    public async Task OfficialAgentFunctionProvider_ShouldCreateOfficialFunctionAndDispatchThroughFacade()
     {
         var executionFacade = new StubCapabilityExecutionFacade();
         var dynamicFactory = new DynamicFunctionToolFactory(
             CreateDescriptorFactory(),
             executionFacade,
             new StubCompositeCapabilityExecutor());
-        var tools = await dynamicFactory.BuildToolsAsync(
+        var functions = await dynamicFactory.BuildFunctionsAsync(
             [Candidate("warehouse.inventory.by-item", "read", "read")],
             new TilsoftExecutionContext { CorrelationId = "corr-32-3" },
             "en-US",
             CancellationToken.None);
 
-        var invocations = new List<OfficialAgentToolInvocation>();
-        var officialTool = new OfficialAgentToolFactory()
-            .CreateTools(tools, invocations.Add)
-            .Should()
-            .ContainSingle()
-            .Subject;
-        var function = officialTool.Tool.Should().BeAssignableTo<AIFunction>().Subject;
+        var function = functions.Should().ContainSingle().Subject;
 
         var result = await function.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?>
@@ -71,22 +65,23 @@ public sealed class AgentFunctionToolFactoryTests
         function.Name.Should().Be("warehouse_inventory_by_item");
         function.Description.Should().Contain("Loaded from SQL metadata.");
         function.JsonSchema.GetProperty("properties").TryGetProperty("item_no", out _).Should().BeTrue();
-        invocations.Should().ContainSingle();
-        invocations[0].ModelFacingArguments["item_no"]!.GetValue<string>().Should().Be("CHAIR-001");
+        var invocation = function.Should().BeAssignableTo<ICapabilityBackedAIFunction>().Subject.LastInvocation;
+        invocation.Should().NotBeNull();
+        invocation!.ModelFacingArguments["item_no"]!.GetValue<string>().Should().Be("CHAIR-001");
         executionFacade.LastCapabilityKey.Should().Be("warehouse.inventory.by-item");
         executionFacade.LastArguments.Should().ContainKey("item").WhoseValue.Should().Be("CHAIR-001");
         executionFacade.LastArguments.Should().ContainKey("__functionName").WhoseValue.Should().Be("warehouse_inventory_by_item");
     }
 
     [Fact]
-    public async Task OfficialAgentToolFactory_ShouldAllowInvokingNonFirstCandidate()
+    public async Task OfficialAgentFunctionProvider_ShouldAllowInvokingNonFirstCandidate()
     {
         var executionFacade = new StubCapabilityExecutionFacade();
         var dynamicFactory = new DynamicFunctionToolFactory(
             CreateDescriptorFactory(),
             executionFacade,
             new StubCompositeCapabilityExecutor());
-        var tools = await dynamicFactory.BuildToolsAsync(
+        var functions = await dynamicFactory.BuildFunctionsAsync(
             [
                 Candidate("warehouse.inventory.by-item", "read", "read"),
                 Candidate("warehouse.stock.available", "read", "read")
@@ -95,10 +90,7 @@ public sealed class AgentFunctionToolFactoryTests
             "en-US",
             CancellationToken.None);
 
-        var invocations = new List<OfficialAgentToolInvocation>();
-        var officialTools = new OfficialAgentToolFactory()
-            .CreateTools(tools, invocations.Add);
-        var secondFunction = officialTools[1].Tool.Should().BeAssignableTo<AIFunction>().Subject;
+        var secondFunction = functions[1];
 
         var result = await secondFunction.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?>
@@ -108,15 +100,15 @@ public sealed class AgentFunctionToolFactoryTests
             CancellationToken.None);
 
         result.Should().BeOfType<CapabilityExecutionEnvelope>();
-        officialTools.Should().HaveCount(2);
+        functions.Should().HaveCount(2);
         secondFunction.Name.Should().Be("warehouse_stock_available");
-        invocations.Should().ContainSingle();
+        secondFunction.Should().BeAssignableTo<ICapabilityBackedAIFunction>().Subject.LastInvocation.Should().NotBeNull();
         executionFacade.LastCapabilityKey.Should().Be("warehouse.stock.available");
         executionFacade.LastArguments.Should().ContainKey("item").WhoseValue.Should().Be("TABLE-002");
     }
 
     [Fact]
-    public async Task BuildToolsAsync_ShouldExposeOnlyReadExecutionCapabilities()
+    public async Task BuildFunctionsAsync_ShouldExposeOnlyReadExecutionCapabilities()
     {
         var factory = CreateFactory();
         var candidates = new[]
@@ -125,24 +117,25 @@ public sealed class AgentFunctionToolFactoryTests
             Candidate("sales.order.cancel", "write", "write")
         };
 
-        var tools = await factory.BuildToolsAsync(
+        var functions = await factory.BuildFunctionsAsync(
             candidates,
             new TilsoftExecutionContext(),
             "en-US",
             CancellationToken.None);
 
-        tools.Should().ContainSingle();
-        tools[0].Name.Should().Be("warehouse_inventory_by_item");
-        tools[0].Capability.CapabilityKey.Should().Be("warehouse.inventory.by-item");
-        tools[0].ParameterSchema["properties"]!["item_no"].Should().NotBeNull();
-        tools[0].ModelToCapabilityArgumentMap["item_no"].Should().Be("item");
-        tools[0].Description.Should().Contain("Business domain: warehouse");
-        tools[0].Description.Should().Contain("Aliases: item");
-        tools[0].Description.Should().Contain("Examples: stock for CHAIR-001");
+        functions.Should().ContainSingle();
+        functions[0].Name.Should().Be("warehouse_inventory_by_item");
+        var capabilityFunction = functions[0].Should().BeAssignableTo<ICapabilityBackedAIFunction>().Subject;
+        capabilityFunction.Descriptor.Capability.CapabilityKey.Should().Be("warehouse.inventory.by-item");
+        capabilityFunction.Descriptor.ParameterSchema["properties"]!["item_no"].Should().NotBeNull();
+        capabilityFunction.Descriptor.ModelToCapabilityArgumentMap["item_no"].Should().Be("item");
+        functions[0].Description.Should().Contain("Business domain: warehouse");
+        functions[0].Description.Should().Contain("Aliases: item");
+        functions[0].Description.Should().Contain("Examples: stock for CHAIR-001");
     }
 
     [Fact]
-    public async Task BuildToolsAsync_ShouldExposeMutationAsPreviewOnlyWhenEnabled()
+    public async Task BuildFunctionsAsync_ShouldExposeMutationAsPreviewOnlyWhenEnabled()
     {
         var executionFacade = new StubCapabilityExecutionFacade();
         var factory = new DynamicFunctionToolFactory(
@@ -151,22 +144,42 @@ public sealed class AgentFunctionToolFactoryTests
             new StubCompositeCapabilityExecutor(),
             Options.Create(new AiRoutingOptions { EnableWritePreviewTools = true }));
 
-        var tools = await factory.BuildToolsAsync(
-            [Candidate("sales.order.cancel", "write", "write_execute")],
+        var functions = await factory.BuildFunctionsAsync(
+            [Candidate("sales.order.create-preview", "write_preview", "write_preview")],
             new TilsoftExecutionContext { CorrelationId = "corr-32-6" },
             "en-US",
             CancellationToken.None);
 
-        tools.Should().ContainSingle();
+        functions.Should().ContainSingle();
 
-        var result = await tools[0].InvokeAsync(
-            new Dictionary<string, object?> { ["item_no"] = "SO-001" },
+        var result = await functions[0].InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["item_no"] = "SO-001" }),
             CancellationToken.None);
 
-        result.Status.Should().Be("preview");
-        executionFacade.LastPreviewCapabilityKey.Should().Be("sales.order.cancel");
+        result.Should().BeOfType<CapabilityExecutionEnvelope>()
+            .Which.Status.Should().Be("preview");
+        executionFacade.LastPreviewCapabilityKey.Should().Be("sales.order.create-preview");
         executionFacade.LastApprovedWriteCapabilityKey.Should().BeNull("model-callable mutation tools must not execute final writes");
         executionFacade.LastArguments.Should().ContainKey("item").WhoseValue.Should().Be("SO-001");
+    }
+
+    [Fact]
+    public async Task BuildFunctionsAsync_ShouldNotExposeApprovedWriteToolEvenWhenPreviewToolsEnabled()
+    {
+        var executionFacade = new StubCapabilityExecutionFacade();
+        var factory = new DynamicFunctionToolFactory(
+            CreateDescriptorFactory(),
+            executionFacade,
+            new StubCompositeCapabilityExecutor(),
+            Options.Create(new AiRoutingOptions { EnableWritePreviewTools = true }));
+
+        var functions = await factory.BuildFunctionsAsync(
+            [Candidate("sales.order.create-execute", "write_execute", "write_execute")],
+            new TilsoftExecutionContext { CorrelationId = "corr-33-6" },
+            "en-US",
+            CancellationToken.None);
+
+        functions.Should().BeEmpty("the agent may prepare preview actions but must never see execute-write tools");
     }
 
     private static DynamicFunctionToolFactory CreateFactory() => new(

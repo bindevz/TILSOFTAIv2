@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Microsoft.Extensions.AI;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.AiRouting;
 using TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
@@ -40,18 +41,14 @@ public sealed class ToolRoutingTraceFactoryTests
             EntityCandidates = [],
             ContextChunks = []
         };
-        var tool = new AgentFunctionTool
+        var tool = new TraceFunction(new CapabilityToolDescriptor
         {
-            Descriptor = new CapabilityToolDescriptor
-            {
-                Name = "warehouse_inventory_by_item",
-                Description = "Check inventory.",
-                ParameterSchema = new JsonObject(),
-                Capability = metadata,
-                Arguments = []
-            },
-            InvokeAsync = (_, _) => Task.FromResult(CapabilityExecutionEnvelope.Succeeded(metadata.CapabilityKey, null))
-        };
+            Name = "warehouse_inventory_by_item",
+            Description = "Check inventory.",
+            ParameterSchema = new JsonObject(),
+            Capability = metadata,
+            Arguments = []
+        });
         var envelope = new CapabilityExecutionEnvelope
         {
             CapabilityKey = metadata.CapabilityKey,
@@ -112,4 +109,25 @@ public sealed class ToolRoutingTraceFactoryTests
         Operation = "execute_query",
         ExecutionMode = "read"
     };
+
+    private sealed class TraceFunction : AIFunction, ICapabilityBackedAIFunction
+    {
+        public TraceFunction(CapabilityToolDescriptor descriptor)
+        {
+            Descriptor = descriptor;
+        }
+
+        public CapabilityToolDescriptor Descriptor { get; }
+
+        public OfficialAgentFunctionInvocation? LastInvocation => null;
+
+        public override string Name => Descriptor.Name;
+
+        public override string Description => Descriptor.Description;
+
+        protected override ValueTask<object?> InvokeCoreAsync(
+            AIFunctionArguments arguments,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult<object?>(CapabilityExecutionEnvelope.Succeeded(Descriptor.Capability.CapabilityKey, null));
+    }
 }

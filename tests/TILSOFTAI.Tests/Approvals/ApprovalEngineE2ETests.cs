@@ -145,7 +145,7 @@ public sealed class ApprovalEngineE2ETests
         await _engine.ApproveAsync(created.ActionId, CreateContext(ApproverUserId), CancellationToken.None);
 
         var result = await _engine.ExecuteAsync(
-            created.ActionId, CreateContext(ApproverUserId), CancellationToken.None);
+            created.ActionId, CreateContext(), CancellationToken.None);
 
         result.Should().NotBeNull();
         result.Action.Status.Should().Be("Executed");
@@ -182,7 +182,7 @@ public sealed class ApprovalEngineE2ETests
     {
         var created = await _engine.CreateAsync(CreateAction(), CreateContext(), CancellationToken.None);
         await _engine.ApproveAsync(created.ActionId, CreateContext(ApproverUserId), CancellationToken.None);
-        await _engine.ExecuteAsync(created.ActionId, CreateContext(ApproverUserId), CancellationToken.None);
+        await _engine.ExecuteAsync(created.ActionId, CreateContext(), CancellationToken.None);
 
         // Attempting to execute again — status is now "Executed", not "Approved"
         var act = () => _engine.ExecuteAsync(
@@ -219,13 +219,42 @@ public sealed class ApprovalEngineE2ETests
         approved.Status.Should().Be("Approved");
 
         // Step 3: Execute
-        var result = await _engine.ExecuteAsync(created.ActionId, approveContext, CancellationToken.None);
+        var result = await _engine.ExecuteAsync(created.ActionId, context, CancellationToken.None);
         result.Action.Status.Should().Be("Executed");
         result.RawResult.Should().NotBeNullOrEmpty();
 
         // Step 4: Re-execute should fail
-        var reExec = () => _engine.ExecuteAsync(created.ActionId, approveContext, CancellationToken.None);
+        var reExec = () => _engine.ExecuteAsync(created.ActionId, context, CancellationToken.None);
         await reExec.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task Execute_ShouldFail_WhenConfirmedByDifferentUser()
+    {
+        var created = await _engine.CreateAsync(CreateAction(), CreateContext(), CancellationToken.None);
+        await _engine.ApproveAsync(created.ActionId, CreateContext(ApproverUserId), CancellationToken.None);
+
+        var act = () => _engine.ExecuteAsync(
+            created.ActionId, CreateContext(ApproverUserId), CancellationToken.None);
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("*requested the write preview*");
+    }
+
+    [Fact]
+    public async Task Execute_ShouldFail_WhenExpectedPayloadDiffersFromPreview()
+    {
+        var created = await _engine.CreateAsync(CreateAction(), CreateContext(), CancellationToken.None);
+        await _engine.ApproveAsync(created.ActionId, CreateContext(ApproverUserId), CancellationToken.None);
+
+        var act = () => _engine.ExecuteAsync(
+            created.ActionId,
+            CreateContext(),
+            """{"itemCode":"A001","quantity":999}""",
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*arguments do not match*");
     }
 
     /// <summary>

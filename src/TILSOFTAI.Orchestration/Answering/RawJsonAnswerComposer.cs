@@ -11,14 +11,16 @@ public sealed class RawJsonAnswerComposer
         ArgumentNullException.ThrowIfNull(request);
 
         var rows = AnswerDataSanitizer.ApplySensitivity(request.Rows, request.SensitivityPolicy);
+        var arguments = AnswerDataSanitizer.ApplySensitivity(request.Arguments, request.SensitivityPolicy);
         var result = request.Result is CompositeResultBundle bundle
-            ? SanitizeBundle(bundle, request.SensitivityPolicy)
-            : request.Result;
+            ? AnswerDataSanitizer.ApplySensitivity(bundle, request.SensitivityPolicy)
+            : AnswerDataSanitizer.ApplySensitivity(request.Result, request.SensitivityPolicy);
         var data = new
         {
+            mode = "raw_json",
             capabilityKey = request.CapabilityKey,
             procedureName = request.ProcedureName,
-            arguments = request.Arguments,
+            arguments,
             rowCount = request.RowCount,
             rows,
             result,
@@ -39,19 +41,6 @@ public sealed class RawJsonAnswerComposer
 
         return Task.FromResult(answer);
     }
-
-    private static CompositeResultBundle SanitizeBundle(
-        CompositeResultBundle bundle,
-        SensitivityPolicy policy) =>
-        bundle with
-        {
-            Sections = bundle.Sections
-                .Select(section => section with
-                {
-                    Rows = AnswerDataSanitizer.ApplySensitivity(section.Rows, policy)
-                })
-                .ToArray()
-        };
 
     private static AnswerProvenance CreateProvenance(AnswerComposerRequest request) => new()
     {

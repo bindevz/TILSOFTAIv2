@@ -152,6 +152,16 @@ public sealed class ApprovalEngine : IApprovalEngine
 
     public async Task<ActionExecutionResult> ExecuteAsync(string actionId, ApprovalContext context, CancellationToken ct)
     {
+        return await ExecuteAsync(actionId, context, expectedPayloadJson: null, ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<ActionExecutionResult> ExecuteAsync(
+        string actionId,
+        ApprovalContext context,
+        string? expectedPayloadJson,
+        CancellationToken ct)
+    {
         ArgumentNullException.ThrowIfNull(context);
         var sw = Stopwatch.StartNew();
         try
@@ -167,6 +177,16 @@ public sealed class ApprovalEngine : IApprovalEngine
             {
                 throw new InvalidOperationException(Resources.Ex_ActionRequestMustBeApproved);
             }
+
+            if (request.ExecutedAtUtc.HasValue)
+            {
+                throw new InvalidOperationException("Action request has already been executed.");
+            }
+
+            ValidateSameRequester(request, context);
+            ValidateSameConversation(request, context);
+            ValidateNotExpired(request);
+            ValidateExpectedPayload(request, expectedPayloadJson);
 
             var catalogEntry = await GetCatalogEntryAsync(context, request.ProposedSpName, ct);
             if (catalogEntry == null)
@@ -255,6 +275,119 @@ public sealed class ApprovalEngine : IApprovalEngine
             _instrumentation?.RecordApprovalExecution("execute", SqlAdapterType, sw.Elapsed, success: false);
             throw;
         }
+    }
+
+    private static void ValidateSameRequester(ActionRequestRecord request, ApprovalContext context)
+    {
+        if (string.IsNullOrWhiteSpace(request.RequestedByUserId)
+            || string.IsNullOrWhiteSpace(context.UserId)
+            || string.Equals(request.RequestedByUserId, context.UserId, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        throw new UnauthorizedAccessException("Only the user who requested the write preview can confirm execution.");
+    }
+
+    private static void ValidateSameConversation(ActionRequestRecord request, ApprovalContext context)
+    {
+        if (string.IsNullOrWhiteSpace(request.ConversationId)
+            || string.IsNullOrWhiteSpace(context.ConversationId)
+            || string.Equals(request.ConversationId, context.ConversationId, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        throw new UnauthorizedAccessException("Write confirmation must occur in the same conversation as the preview.");
+    }
+
+    private static void ValidateNotExpired(ActionRequestRecord request)
+    {
+        if (request.RequestedAtUtc == default)
+        {
+            return;
+        }
+
+        var requestedAt = DateTime.SpecifyKind(request.RequestedAtUtc, DateTimeKind.Utc);
+        if (DateTime.UtcNow - requestedAt <= TimeSpan.FromHours(24))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException("Action request has expired and must be previewed again.");
+    }
+
+    private static void ValidateExpectedPayload(ActionRequestRecord request, string? expectedPayloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(expectedPayloadJson))
+        {
+            return;
+        }
+
+        if (JsonPayloadEquals(request.ArgsJson, expectedPayloadJson))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException("Approved action arguments do not match the preview payload.");
+    }
+
+    private static bool JsonPayloadEquals(string? leftJson, string? rightJson)
+    {
+        try
+        {
+            using var left = JsonDocument.Parse(string.IsNullOrWhiteSpace(leftJson) ? "{}" : leftJson);
+            using var right = JsonDocument.Parse(string.IsNullOrWhiteSpace(rightJson) ? "{}" : rightJson);
+            return JsonElementEquals(left.RootElement, right.RootElement);
+        }
+        catch (JsonException)
+        {
+            return string.Equals(leftJson, rightJson, StringComparison.Ordinal);
+        }
+    }
+
+    private static bool JsonElementEquals(JsonElement left, JsonElement right)
+    {
+        if (left.ValueKind != right.ValueKind)
+        {
+            return false;
+        }
+
+        return left.ValueKind switch
+        {
+            JsonValueKind.Object => ObjectEquals(left, right),
+            JsonValueKind.Array => ArrayEquals(left, right),
+            JsonValueKind.String => string.Equals(left.GetString(), right.GetString(), StringComparison.Ordinal),
+            JsonValueKind.Number => left.GetRawText().Equals(right.GetRawText(), StringComparison.Ordinal),
+            JsonValueKind.True or JsonValueKind.False or JsonValueKind.Null => true,
+            _ => left.GetRawText().Equals(right.GetRawText(), StringComparison.Ordinal)
+        };
+    }
+
+    private static bool ObjectEquals(JsonElement left, JsonElement right)
+    {
+        var leftProperties = left.EnumerateObject().ToDictionary(
+            property => property.Name,
+            property => property.Value,
+            StringComparer.Ordinal);
+        var rightProperties = right.EnumerateObject().ToDictionary(
+            property => property.Name,
+            property => property.Value,
+            StringComparer.Ordinal);
+
+        return leftProperties.Count == rightProperties.Count
+            && leftProperties.All(pair =>
+                rightProperties.TryGetValue(pair.Key, out var rightValue)
+                && JsonElementEquals(pair.Value, rightValue));
+    }
+
+    private static bool ArrayEquals(JsonElement left, JsonElement right)
+    {
+        var leftItems = left.EnumerateArray().ToArray();
+        var rightItems = right.EnumerateArray().ToArray();
+
+        return leftItems.Length == rightItems.Length
+            && leftItems.Zip(rightItems).All(pair => JsonElementEquals(pair.First, pair.Second));
     }
 
     private async Task<CatalogEntry?> GetCatalogEntryAsync(ApprovalContext context, string spName, CancellationToken ct)

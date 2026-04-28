@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
@@ -91,6 +92,53 @@ public sealed class SemanticCapabilityRetrieverTests
         result.ContextChunks.Should().BeEmpty();
         knowledgeRepository.Requests.Should().ContainSingle();
         knowledgeRepository.Requests[0].Domains.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CandidateSelector_ShouldUseRetrieverAndEnforceConfiguredTotalToolLimit()
+    {
+        var knowledgeRepository = new StubSemanticKnowledgeRepository(
+            [
+                Chunk("warehouse.inventory.by-item", "warehouse", 0.95),
+                Chunk("warehouse.stock.available", "warehouse", 0.91),
+                Chunk("accounting.ar.balance", "accounting", 0.93),
+                Chunk("sales.order.status", "sales", 0.90)
+            ]);
+        var metadataRepository = new StubCapabilityMetadataRepository(
+            Metadata("warehouse.inventory.by-item", "warehouse"),
+            Metadata("warehouse.stock.available", "warehouse"),
+            Metadata("accounting.ar.balance", "accounting"),
+            Metadata("sales.order.status", "sales"));
+        var options = Options.Create(new AiRoutingOptions
+        {
+            MaxCandidateDomains = 2,
+            MaxCandidateToolsPerDomain = 2,
+            MaxTotalCandidateTools = 2
+        });
+        var retriever = new SemanticCapabilityRetriever(
+            knowledgeRepository,
+            metadataRepository,
+            new StubEntityAliasRepository(),
+            new DomainGate(),
+            options);
+        var selector = new SemanticCapabilityCandidateSelector(
+            retriever,
+            options,
+            NullLogger<SemanticCapabilityCandidateSelector>.Instance);
+
+        var candidates = await selector.SelectAsync(
+            "show me stock and balances",
+            new HardSignalSet(),
+            new TilsoftExecutionContext { TenantId = "tenant-33" },
+            "en-US",
+            CancellationToken.None);
+
+        candidates.Should().HaveCount(2);
+        candidates.Select(candidate => candidate.Metadata.CapabilityKey)
+            .Should()
+            .Equal("warehouse.inventory.by-item", "accounting.ar.balance");
+        knowledgeRepository.Requests.Should().HaveCount(2);
+        knowledgeRepository.Requests[1].Domains.Should().Equal("warehouse", "accounting");
     }
 
     private static SemanticCapabilityRetriever CreateRetriever(

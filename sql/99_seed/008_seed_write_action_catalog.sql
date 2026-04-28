@@ -58,3 +58,21 @@ BEGIN
     PRINT 'Seeded example write action: create_records_batch (disabled)';
 END;
 GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.WriteActionCatalog WHERE TenantId = 'demo' AND ActionName = 'sales_order_create')
+BEGIN
+    INSERT INTO dbo.WriteActionCatalog
+    (TenantId, ActionName, SpName, RequiredRoles, JsonSchema, Description, IsEnabled)
+    VALUES
+    (
+        'demo',
+        'sales_order_create',
+        'app_sales_order_create',
+        'sales_write,Admin',
+        '{"type":"object","properties":{"@Customer":{"type":"string","minLength":1},"@Item":{"type":"string","minLength":1},"@Quantity":{"type":"number","minimum":0.01},"@RequestedShipDate":{"type":"string","format":"date"}},"required":["@Customer","@Item","@Quantity"],"additionalProperties":false}',
+        'Create a sales order after explicit approval of a preview action.',
+        1
+    );
+    PRINT 'Seeded write action: sales_order_create';
+END;
+GO

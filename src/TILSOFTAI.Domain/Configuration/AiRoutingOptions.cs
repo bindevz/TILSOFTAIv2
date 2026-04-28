@@ -3,11 +3,14 @@ namespace TILSOFTAI.Domain.Configuration;
 public sealed class AiRoutingOptions
 {
     public bool MicrosoftAgentFrameworkRoutingEnabled { get; set; }
+    public bool UseOfficialMicrosoftAgentFramework { get; set; }
+    public string Provider { get; set; } = string.Empty;
+    public string Model { get; set; } = string.Empty;
     public bool FallbackToLegacyPipeline { get; set; } = true;
     public bool EnableDynamicToolDescriptions { get; set; } = true;
     public int MaxCandidateDomains { get; set; } = 2;
     public int MaxCandidateToolsPerDomain { get; set; } = 6;
-    public int MaxTotalCandidateTools { get; set; } = 12;
+    public int MaxTotalCandidateTools { get; set; } = 10;
     public int MaxToolCallsPerTurn { get; set; } = 3;
     public bool AllowParallelReadTools { get; set; } = true;
     public bool AllowParallelWriteTools { get; set; }

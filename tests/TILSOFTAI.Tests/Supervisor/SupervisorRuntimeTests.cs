@@ -282,6 +282,46 @@ public sealed class SupervisorRuntimeTests
     }
 
     [Fact]
+    public async Task RunAsync_ShouldFailClosedWhenOfficialRoutingDoesNotHandle()
+    {
+        var registry = new Mock<IAgentRegistry>();
+        var classifier = new Mock<IIntentClassifier>();
+        var approvalEngine = new Mock<IApprovalEngine>();
+        var adapterRegistry = new Mock<IToolAdapterRegistry>();
+        var logger = new Mock<ILogger<SupervisorRuntime>>();
+        var router = new Mock<IAgentToolRouter>();
+        router.Setup(x => x.TryRouteAsync(It.IsAny<AgentToolRoutingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AgentToolRoutingResult
+            {
+                Handled = false,
+                FailureReason = "official route failed"
+            });
+
+        var runtime = new SupervisorRuntime(
+            classifier.Object,
+            registry.Object,
+            approvalEngine.Object,
+            adapterRegistry.Object,
+            logger.Object,
+            agentToolRouter: router.Object,
+            aiRoutingOptions: Options.Create(new AiRoutingOptions
+            {
+                UseOfficialMicrosoftAgentFramework = true,
+                FallbackToLegacyPipeline = true
+            }));
+
+        var result = await runtime.RunAsync(
+            new SupervisorRequest { Input = "show receivables" },
+            new TilsoftExecutionContext(),
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Code.Should().Be("AGENT_ROUTING_FAILED");
+        result.Error.Should().Be("official route failed");
+        registry.Verify(x => x.ResolveCandidates(It.IsAny<AgentTask>()), Times.Never);
+    }
+
+    [Fact]
     public async Task RunAsync_WhenAgentRoutingTenantGateDoesNotMatch_ShouldUseLegacyPipeline()
     {
         var agent = new Mock<IDomainAgent>();
@@ -331,5 +371,45 @@ public sealed class SupervisorRuntimeTests
         router.Verify(
             x => x.TryRouteAsync(It.IsAny<AgentToolRoutingRequest>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenOfficialRoutingTenantGateDoesNotMatch_ShouldFailClosed()
+    {
+        var registry = new Mock<IAgentRegistry>();
+        var classifier = new Mock<IIntentClassifier>();
+        var approvalEngine = new Mock<IApprovalEngine>();
+        var adapterRegistry = new Mock<IToolAdapterRegistry>();
+        var logger = new Mock<ILogger<SupervisorRuntime>>();
+        var router = new Mock<IAgentToolRouter>();
+
+        var runtime = new SupervisorRuntime(
+            classifier.Object,
+            registry.Object,
+            approvalEngine.Object,
+            adapterRegistry.Object,
+            logger.Object,
+            agentToolRouter: router.Object,
+            aiRoutingOptions: Options.Create(new AiRoutingOptions
+            {
+                UseOfficialMicrosoftAgentFramework = true,
+                EnabledTenantIds = ["tenant-enabled"]
+            }));
+
+        var result = await runtime.RunAsync(
+            new SupervisorRequest
+            {
+                Input = "check inventory levels",
+                DomainHint = "warehouse"
+            },
+            new TilsoftExecutionContext { TenantId = "tenant-disabled", UserId = "user-a" },
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Code.Should().Be("AGENT_ROUTING_ROLLOUT_BLOCKED");
+        router.Verify(
+            x => x.TryRouteAsync(It.IsAny<AgentToolRoutingRequest>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        registry.Verify(x => x.ResolveCandidates(It.IsAny<AgentTask>()), Times.Never);
     }
 }

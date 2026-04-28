@@ -238,7 +238,8 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<ICapabilityMetadataRepository, SqlCapabilityMetadataRepository>();
         services.AddSingleton<IEntityAliasRepository, SqlEntityAliasRepository>();
         services.AddSingleton<IToolRoutingTraceStore, SqlToolRoutingTraceStore>();
-        services.AddSingleton<IAgentToolRouter, MicrosoftAgentToolRouter>();
+        services.AddSingleton<IOfficialAgentToolRouter, OfficialAgentToolRouter>();
+        services.AddSingleton<IAgentToolRouter>(sp => sp.GetRequiredService<IOfficialAgentToolRouter>());
         services.AddSingleton<ISemanticCache>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<SemanticCacheOptions>>().Value;
@@ -338,7 +339,8 @@ public static class AddTilsoftAiExtensions
             .AddCheck<CircuitBreakerHealthCheck>("circuits", tags: new[] { "ready", "resilience" })
             .AddCheck<ToolCatalogHealthCheck>("toolcatalog", tags: new[] { "ready", "runtime" })
             .AddCheck<PlatformCatalogHealthCheck>("platform-catalog", tags: new[] { "ready", "catalog" })
-            .AddCheck<NativeRuntimeHealthCheck>("native-runtime", tags: new[] { "ready", "runtime", "native" });
+            .AddCheck<NativeRuntimeHealthCheck>("native-runtime", tags: new[] { "ready", "runtime", "native" })
+            .AddCheck<OfficialAgentFrameworkHealthCheck>("official-agent-framework", tags: new[] { "ready", "runtime", "agent-framework" });
         
         if (redisEnabled)
         {
@@ -387,7 +389,7 @@ public static class AddTilsoftAiExtensions
 
     private static void RegisterOfficialAgentChatClient(IServiceCollection services, IConfiguration configuration)
     {
-        var provider = configuration.GetSection(ConfigurationSectionNames.Llm).GetValue<string>("Provider")?.Trim();
+        var provider = ResolveOfficialAgentProvider(configuration);
         if (string.Equals(provider, "AzureOpenAI", StringComparison.OrdinalIgnoreCase)
             || string.Equals(provider, "OpenAiCompatible", StringComparison.OrdinalIgnoreCase)
             || string.Equals(provider, "OpenAI", StringComparison.OrdinalIgnoreCase))
@@ -399,19 +401,21 @@ public static class AddTilsoftAiExtensions
     private static IChatClient CreateOfficialAgentChatClient(IServiceProvider services)
     {
         var options = services.GetRequiredService<IOptions<LlmOptions>>().Value;
-        var provider = options.Provider?.Trim() ?? string.Empty;
+        var aiRoutingOptions = services.GetRequiredService<IOptions<AiRoutingOptions>>().Value;
+        var provider = ResolveOfficialAgentProvider(aiRoutingOptions, options);
+        var model = ResolveOfficialAgentModel(aiRoutingOptions, options);
 
         if (string.Equals(provider, "AzureOpenAI", StringComparison.OrdinalIgnoreCase))
         {
             RequireLlmSetting(options.Endpoint, "Llm:Endpoint", provider);
             RequireLlmSetting(options.ApiKey, "Llm:ApiKey", provider);
-            RequireLlmSetting(options.Model, "Llm:Model", provider);
+            RequireLlmSetting(model, "AiRouting:Model or Llm:Model", provider);
 
             var azureClient = new AzureOpenAIClient(
                 new Uri(options.Endpoint),
                 new ApiKeyCredential(options.ApiKey));
 
-            return new ChatClientBuilder(azureClient.GetChatClient(options.Model).AsIChatClient())
+            return new ChatClientBuilder(azureClient.GetChatClient(model).AsIChatClient())
                 .UseFunctionInvocation()
                 .Build();
         }
@@ -420,7 +424,7 @@ public static class AddTilsoftAiExtensions
             || string.Equals(provider, "OpenAI", StringComparison.OrdinalIgnoreCase))
         {
             RequireLlmSetting(options.ApiKey, "Llm:ApiKey", provider);
-            RequireLlmSetting(options.Model, "Llm:Model", provider);
+            RequireLlmSetting(model, "AiRouting:Model or Llm:Model", provider);
 
             var clientOptions = new OpenAIClientOptions();
             if (!string.IsNullOrWhiteSpace(options.Endpoint))
@@ -429,7 +433,7 @@ public static class AddTilsoftAiExtensions
             }
 
             var chatClient = new OpenAI.Chat.ChatClient(
-                options.Model,
+                model,
                 new ApiKeyCredential(options.ApiKey),
                 clientOptions);
 
@@ -440,6 +444,38 @@ public static class AddTilsoftAiExtensions
 
         throw new InvalidOperationException(
             "AgentFramework mode requires Llm:Provider to be AzureOpenAI, OpenAI, OpenAiCompatible, or an explicitly registered Microsoft.Extensions.AI provider.");
+    }
+
+    private static string ResolveOfficialAgentProvider(IConfiguration configuration)
+    {
+        var aiRouting = configuration.GetSection(ConfigurationSectionNames.AiRouting);
+        var officialEnabled = aiRouting.GetValue<bool>("MicrosoftAgentFrameworkRoutingEnabled")
+            || aiRouting.GetValue<bool>("UseOfficialMicrosoftAgentFramework");
+        var aiRoutingProvider = aiRouting.GetValue<string>("Provider")?.Trim();
+        if (officialEnabled && !string.IsNullOrWhiteSpace(aiRoutingProvider))
+        {
+            return aiRoutingProvider;
+        }
+
+        return configuration.GetSection(ConfigurationSectionNames.Llm).GetValue<string>("Provider")?.Trim() ?? string.Empty;
+    }
+
+    private static string ResolveOfficialAgentProvider(AiRoutingOptions aiRoutingOptions, LlmOptions llmOptions)
+    {
+        var officialEnabled = aiRoutingOptions.MicrosoftAgentFrameworkRoutingEnabled
+            || aiRoutingOptions.UseOfficialMicrosoftAgentFramework;
+        return officialEnabled && !string.IsNullOrWhiteSpace(aiRoutingOptions.Provider)
+            ? aiRoutingOptions.Provider.Trim()
+            : llmOptions.Provider.Trim();
+    }
+
+    private static string ResolveOfficialAgentModel(AiRoutingOptions aiRoutingOptions, LlmOptions llmOptions)
+    {
+        var officialEnabled = aiRoutingOptions.MicrosoftAgentFrameworkRoutingEnabled
+            || aiRoutingOptions.UseOfficialMicrosoftAgentFramework;
+        return officialEnabled && !string.IsNullOrWhiteSpace(aiRoutingOptions.Model)
+            ? aiRoutingOptions.Model.Trim()
+            : llmOptions.Model.Trim();
     }
 
     private static void RequireLlmSetting(string value, string settingName, string provider)
@@ -492,6 +528,9 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.MaxToolCallsPerTurn > 0, "AiRouting:MaxToolCallsPerTurn must be > 0.")
             .Validate(options => options.MaxTotalCandidateTools >= options.MaxCandidateToolsPerDomain,
                 "AiRouting:MaxTotalCandidateTools must be >= AiRouting:MaxCandidateToolsPerDomain.")
+            .Validate(options => !(options.UseOfficialMicrosoftAgentFramework || options.MicrosoftAgentFrameworkRoutingEnabled)
+                    || OfficialAgentProviderFactory.IsAllowedProvider(options.Provider),
+                "AiRouting:Provider must be AzureOpenAI, OpenAI, or OllamaOfficialProviderForDevOnly when official Agent Framework routing is enabled.")
             .ValidateOnStart();
 
         services.AddOptions<TILSOFTAI.Domain.Configuration.ChatOptions>()

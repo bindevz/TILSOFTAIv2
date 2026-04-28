@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Approvals;
@@ -13,37 +14,40 @@ using TILSOFTAI.Orchestration.Semantic;
 
 namespace TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
 
-public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
+public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
 {
     private readonly IHardSignalExtractor _hardSignalExtractor;
-    private readonly ISemanticCapabilityRetriever _retriever;
-    private readonly IAgentFunctionToolFactory _toolFactory;
-    private readonly IAgentClientFactory _agentClientFactory;
+    private readonly ICapabilityCandidateSelector _candidateSelector;
+    private readonly IOfficialAgentFunctionProvider _functionProvider;
+    private readonly AgentRunOptionsFactory _agentRunOptionsFactory;
+    private readonly IOfficialMicrosoftAgentRuntime _agentRuntime;
     private readonly IAnswerComposer _answerComposer;
     private readonly IToolRoutingTraceStore _traceStore;
     private readonly ICapabilityExecutionFacade? _executionFacade;
     private readonly IApprovalEngine? _approvalEngine;
     private readonly AiRoutingOptions _options;
     private readonly IMetricsService? _metrics;
-    private readonly ILogger<MicrosoftAgentToolRouter> _logger;
+    private readonly ILogger<OfficialAgentToolRouter> _logger;
 
-    public MicrosoftAgentToolRouter(
+    public OfficialAgentToolRouter(
         IHardSignalExtractor hardSignalExtractor,
-        ISemanticCapabilityRetriever retriever,
-        IAgentFunctionToolFactory toolFactory,
-        IAgentClientFactory agentClientFactory,
+        ICapabilityCandidateSelector candidateSelector,
+        IOfficialAgentFunctionProvider functionProvider,
+        AgentRunOptionsFactory agentRunOptionsFactory,
+        IOfficialMicrosoftAgentRuntime agentRuntime,
         IAnswerComposer answerComposer,
         IToolRoutingTraceStore traceStore,
         IEnumerable<ICapabilityExecutionFacade> executionFacades,
         IEnumerable<IApprovalEngine> approvalEngines,
         IOptions<AiRoutingOptions> options,
         IEnumerable<IMetricsService> metricsServices,
-        ILogger<MicrosoftAgentToolRouter> logger)
+        ILogger<OfficialAgentToolRouter> logger)
     {
         _hardSignalExtractor = hardSignalExtractor ?? throw new ArgumentNullException(nameof(hardSignalExtractor));
-        _retriever = retriever ?? throw new ArgumentNullException(nameof(retriever));
-        _toolFactory = toolFactory ?? throw new ArgumentNullException(nameof(toolFactory));
-        _agentClientFactory = agentClientFactory ?? throw new ArgumentNullException(nameof(agentClientFactory));
+        _candidateSelector = candidateSelector ?? throw new ArgumentNullException(nameof(candidateSelector));
+        _functionProvider = functionProvider ?? throw new ArgumentNullException(nameof(functionProvider));
+        _agentRunOptionsFactory = agentRunOptionsFactory ?? throw new ArgumentNullException(nameof(agentRunOptionsFactory));
+        _agentRuntime = agentRuntime ?? throw new ArgumentNullException(nameof(agentRuntime));
         _answerComposer = answerComposer ?? throw new ArgumentNullException(nameof(answerComposer));
         _traceStore = traceStore ?? throw new ArgumentNullException(nameof(traceStore));
         _executionFacade = executionFacades?.FirstOrDefault();
@@ -62,7 +66,7 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
         var stageLatencyMs = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         HardSignalSet? hardSignals = null;
         CapabilityRetrievalResult? retrieval = null;
-        IReadOnlyList<AgentFunctionTool>? tools = null;
+        IReadOnlyList<AIFunction>? tools = null;
 
         RecordRequest(request);
 
@@ -87,18 +91,13 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
                     .ConfigureAwait(false);
             }
 
-            retrieval = await _retriever.RetrieveAsync(
+            var selectedCandidates = await _candidateSelector.SelectAsync(
                 request.Message,
                 hardSignals,
                 request.ExecutionContext,
                 request.Locale,
-                new CapabilityRetrievalOptions
-                {
-                    MaxDomainsPerRequest = _options.MaxCandidateDomains,
-                    MaxToolsPerDomain = _options.MaxCandidateToolsPerDomain,
-                    MaxTotalTools = _options.MaxTotalCandidateTools
-                },
                 cancellationToken);
+            retrieval = ToRetrievalResult(selectedCandidates);
             MarkStage(stageLatencyMs, "semantic_retrieval", ref stageStartedAt);
 
             if (retrieval.Capabilities.Count == 0)
@@ -120,7 +119,7 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
                 };
             }
 
-            tools = await _toolFactory.BuildToolsAsync(
+            tools = await _functionProvider.BuildFunctionsAsync(
                 retrieval.Capabilities,
                 request.ExecutionContext,
                 request.Locale,
@@ -148,16 +147,20 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
             }
 
             _logger.LogInformation(
-                "MicrosoftAgentToolRouterCandidates | DomainCount: {DomainCount} | CapabilityCount: {CapabilityCount} | ToolCount: {ToolCount}",
+                "OfficialAgentToolRouterCandidates | DomainCount: {DomainCount} | CapabilityCount: {CapabilityCount} | ToolCount: {ToolCount}",
                 retrieval.Domains.Count,
                 retrieval.Capabilities.Count,
                 tools.Count);
 
-            var agent = _agentClientFactory.CreateToolCallingAgent(
-                tools,
-                AgentInstructionsBuilder.Build(request, hardSignals, retrieval));
-
-            var agentResult = await agent.RunAsync(request.Message, cancellationToken);
+            var agentResult = await _agentRuntime.RunAsync(
+                    new OfficialMicrosoftAgentRunRequest(
+                        tools,
+                        AgentInstructionsBuilder.Build(request, hardSignals, retrieval),
+                        request.Message,
+                        request.ExecutionContext,
+                        _agentRunOptionsFactory.Create()),
+                    cancellationToken)
+                .ConfigureAwait(false);
             MarkStage(stageLatencyMs, "agent_tool_selection", ref stageStartedAt);
 
             var answerRequest = AgentToolCallResultMapper.ToAnswerComposerRequest(
@@ -186,7 +189,7 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "MicrosoftAgentToolRouterFailed");
+            _logger.LogWarning(ex, "OfficialAgentToolRouterFailed");
 
             try
             {
@@ -196,7 +199,7 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
             }
             catch (Exception traceEx)
             {
-                _logger.LogWarning(traceEx, "MicrosoftAgentToolRouterTraceFailed");
+                _logger.LogWarning(traceEx, "OfficialAgentToolRouterTraceFailed");
             }
 
             RecordFailure(request, ex.GetType().Name, startedAt, stageLatencyMs);
@@ -213,7 +216,7 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
         AgentToolRoutingRequest request,
         HardSignalSet? hardSignals,
         CapabilityRetrievalResult? retrieval,
-        IReadOnlyList<AgentFunctionTool>? tools,
+        IReadOnlyList<AIFunction>? tools,
         string reason,
         IReadOnlyDictionary<string, double> stageLatencyMs,
         long startedAt,
@@ -235,7 +238,7 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "MicrosoftAgentToolRouterTraceFailed");
+            _logger.LogWarning(ex, "OfficialAgentToolRouterTraceFailed");
         }
     }
 
@@ -378,7 +381,7 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
                     request,
                     hardSignals,
                     retrieval,
-                    Array.Empty<AgentFunctionTool>(),
+                    Array.Empty<AIFunction>(),
                     agentResult,
                     answer,
                     stageLatencyMs,
@@ -459,8 +462,26 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
         ContextChunks = Array.Empty<KnowledgeChunk>()
     };
 
+    private static CapabilityRetrievalResult ToRetrievalResult(IReadOnlyList<CapabilityCandidate> candidates) => new()
+    {
+        Domains = candidates
+            .GroupBy(candidate => candidate.Metadata.Domain, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new DomainCandidate
+            {
+                Domain = group.Key,
+                Score = group.Max(candidate => candidate.Score)
+            })
+            .OrderByDescending(domain => domain.Score)
+            .ThenBy(domain => domain.Domain, StringComparer.OrdinalIgnoreCase)
+            .ToArray(),
+        Capabilities = candidates,
+        EntityCandidates = Array.Empty<EntityCandidate>(),
+        ContextChunks = Array.Empty<KnowledgeChunk>()
+    };
+
     private sealed record WriteConfirmationTurn(
         string CapabilityKey,
         string ApprovedActionId,
         IReadOnlyDictionary<string, object?> Arguments);
+
 }

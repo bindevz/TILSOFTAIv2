@@ -156,6 +156,9 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
         var summary = IsVietnamese(request.Locale)
             ? $"Kiem tra truoc thao tac {request.CapabilityKey}."
             : $"Review the proposed {request.CapabilityKey} action.";
+        var draftAction = AnswerDataSanitizer.ApplySensitivity(
+            request.DraftAction ?? new Dictionary<string, object?>(request.Arguments, StringComparer.OrdinalIgnoreCase),
+            request.SensitivityPolicy);
 
         return new AssistantAnswer
         {
@@ -166,14 +169,15 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
                 new ConfirmationBlock(
                     title,
                     summary,
-                    request.DraftAction ?? new Dictionary<string, object?>(request.Arguments, StringComparer.OrdinalIgnoreCase))
+                    draftAction)
             ],
             Provenance = CreateProvenance(request),
             SelectedAgentId = "microsoft-agent-router",
             Detail = new
             {
                 request.CapabilityKey,
-                request.Arguments
+                Arguments = AnswerDataSanitizer.ApplySensitivity(request.Arguments, request.SensitivityPolicy),
+                DraftAction = draftAction
             }
         };
     }
@@ -216,7 +220,7 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
             Blocks = blocks,
             Provenance = CreateProvenance(request),
             SelectedAgentId = "microsoft-agent-router",
-            Detail = bundle
+            Detail = AnswerDataSanitizer.ApplySensitivity(bundle, request.SensitivityPolicy)
         };
     }
 
@@ -299,7 +303,9 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
     {
         var filters = request.Arguments.Count == 0
             ? string.Empty
-            : $" ({string.Join(", ", request.Arguments.Select(pair => $"{pair.Key}={pair.Value}"))})";
+            : $" ({string.Join(", ", AnswerDataSanitizer
+                .ApplySensitivity(request.Arguments, request.SensitivityPolicy)
+                .Select(pair => $"{pair.Key}={FormatValue(pair.Value, request.Locale)}"))})";
 
         return IsVietnamese(request.Locale)
             ? $"Khong tim thay du lieu cho {request.CapabilityKey}{filters}."
@@ -369,6 +375,27 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
 
 internal static class AnswerDataSanitizer
 {
+    public static IReadOnlyDictionary<string, object?> ApplySensitivity(
+        IReadOnlyDictionary<string, object?> values,
+        SensitivityPolicy policy)
+    {
+        var hidden = policy.HiddenColumns.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var masked = policy.MaskColumns.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var safe = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (key, value) in values)
+        {
+            if (hidden.Contains(key))
+            {
+                continue;
+            }
+
+            safe[key] = masked.Contains(key) ? policy.MaskValue : ApplySensitivity(value, policy);
+        }
+
+        return safe;
+    }
+
     public static IReadOnlyList<IReadOnlyDictionary<string, object?>> ApplySensitivity(
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
         SensitivityPolicy policy)
@@ -387,11 +414,63 @@ internal static class AnswerDataSanitizer
                         continue;
                     }
 
-                    safe[key] = masked.Contains(key) ? policy.MaskValue : value;
+                    safe[key] = masked.Contains(key) ? policy.MaskValue : ApplySensitivity(value, policy);
                 }
 
                 return (IReadOnlyDictionary<string, object?>)safe;
             })
             .ToArray();
+    }
+
+    public static CompositeResultBundle ApplySensitivity(
+        CompositeResultBundle bundle,
+        SensitivityPolicy policy) =>
+        bundle with
+        {
+            Sections = bundle.Sections
+                .Select(section => section with
+                {
+                    Rows = ApplySensitivity(section.Rows, policy)
+                })
+                .ToArray()
+        };
+
+    public static object? ApplySensitivity(object? value, SensitivityPolicy policy)
+    {
+        if (value is null || value is string)
+        {
+            return value;
+        }
+
+        if (value is CompositeResultBundle bundle)
+        {
+            return ApplySensitivity(bundle, policy);
+        }
+
+        if (value is IReadOnlyDictionary<string, object?> dictionary)
+        {
+            return ApplySensitivity(dictionary, policy);
+        }
+
+        if (value is IEnumerable<IReadOnlyDictionary<string, object?>> rows)
+        {
+            return ApplySensitivity(rows.ToArray(), policy);
+        }
+
+        if (value is System.Collections.IDictionary nonGenericDictionary)
+        {
+            var safeDictionary = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (System.Collections.DictionaryEntry entry in nonGenericDictionary)
+            {
+                if (entry.Key is string key)
+                {
+                    safeDictionary[key] = entry.Value;
+                }
+            }
+
+            return ApplySensitivity(safeDictionary, policy);
+        }
+
+        return value;
     }
 }

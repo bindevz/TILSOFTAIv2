@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Approvals;
@@ -15,26 +16,27 @@ using Xunit;
 
 namespace TILSOFTAI.Tests.AiRouting;
 
-public sealed class MicrosoftAgentToolRouterWriteConfirmationTests
+public sealed class OfficialAgentToolRouterWriteConfirmationTests
 {
     [Fact]
     public async Task TryRouteAsync_WhenApprovedActionMetadataPresent_ApprovesAndExecutesThroughFacadeWithoutModel()
     {
         var approval = new RecordingApprovalEngine();
         var facade = new RecordingExecutionFacade();
-        var agentFactory = new ThrowingAgentClientFactory();
-        var router = new MicrosoftAgentToolRouter(
+        var agentRuntime = new ThrowingOfficialMicrosoftAgentRuntime();
+        var router = new OfficialAgentToolRouter(
             new StubHardSignalExtractor(),
-            new ThrowingSemanticCapabilityRetriever(),
+            new ThrowingCapabilityCandidateSelector(),
             new ThrowingToolFactory(),
-            agentFactory,
+            new AgentRunOptionsFactory(Options.Create(new AiRoutingOptions())),
+            agentRuntime,
             new StructuredAnswerComposer(new RawJsonAnswerComposer(), new AiSummaryService()),
             new RecordingTraceStore(),
             [facade],
             [approval],
             Options.Create(new AiRoutingOptions { MicrosoftAgentFrameworkRoutingEnabled = true }),
             Array.Empty<IMetricsService>(),
-            NullLogger<MicrosoftAgentToolRouter>.Instance);
+            NullLogger<OfficialAgentToolRouter>.Instance);
 
         var result = await router.TryRouteAsync(
             new AgentToolRoutingRequest
@@ -66,7 +68,7 @@ public sealed class MicrosoftAgentToolRouterWriteConfirmationTests
         facade.LastCapabilityKey.Should().Be("sales.order.create-execute");
         facade.LastArguments.Should().ContainKey("customer_code");
         facade.LastArguments["customer_code"]!.ToString().Should().Be("C001");
-        agentFactory.CreateCalls.Should().Be(0);
+        agentRuntime.RunCalls.Should().Be(0);
     }
 
     private sealed class StubHardSignalExtractor : IHardSignalExtractor
@@ -74,21 +76,20 @@ public sealed class MicrosoftAgentToolRouterWriteConfirmationTests
         public HardSignalSet Extract(string message, string locale, TilsoftExecutionContext context) => new();
     }
 
-    private sealed class ThrowingSemanticCapabilityRetriever : ISemanticCapabilityRetriever
+    private sealed class ThrowingCapabilityCandidateSelector : ICapabilityCandidateSelector
     {
-        public Task<CapabilityRetrievalResult> RetrieveAsync(
+        public Task<IReadOnlyList<CapabilityCandidate>> SelectAsync(
             string userMessage,
             HardSignalSet hardSignals,
             TilsoftExecutionContext context,
             string locale,
-            CapabilityRetrievalOptions options,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Confirmation turns should not run semantic retrieval.");
     }
 
-    private sealed class ThrowingToolFactory : IAgentFunctionToolFactory
+    private sealed class ThrowingToolFactory : IOfficialAgentFunctionProvider
     {
-        public Task<IReadOnlyList<AgentFunctionTool>> BuildToolsAsync(
+        public Task<IReadOnlyList<AIFunction>> BuildFunctionsAsync(
             IReadOnlyList<CapabilityCandidate> candidates,
             TilsoftExecutionContext context,
             string locale,
@@ -96,15 +97,15 @@ public sealed class MicrosoftAgentToolRouterWriteConfirmationTests
             throw new InvalidOperationException("Confirmation turns should not build model tools.");
     }
 
-    private sealed class ThrowingAgentClientFactory : IAgentClientFactory
+    private sealed class ThrowingOfficialMicrosoftAgentRuntime : IOfficialMicrosoftAgentRuntime
     {
-        public int CreateCalls { get; private set; }
+        public int RunCalls { get; private set; }
 
-        public IToolCallingAgent CreateToolCallingAgent(
-            IReadOnlyList<AgentFunctionTool> tools,
-            string instructions)
+        public Task<AgentRunResult> RunAsync(
+            OfficialMicrosoftAgentRunRequest request,
+            CancellationToken cancellationToken)
         {
-            CreateCalls++;
+            RunCalls++;
             throw new InvalidOperationException("Confirmation turns should not invoke the model.");
         }
     }

@@ -145,6 +145,8 @@ public sealed class CapabilityExecutionFacadeTests
         result.Success.Should().BeTrue();
         result.Status.Should().Be("succeeded");
         approval.ExecutedActionIds.Should().ContainSingle().Which.Should().Be("action-1");
+        approval.ExpectedPayloadJson.Should().Contain("@CustomerCode");
+        approval.ExpectedPayloadJson.Should().Contain("C001");
         adapter.Calls.Should().Be(0);
     }
 
@@ -332,6 +334,7 @@ public sealed class CapabilityExecutionFacadeTests
     {
         public List<ProposedAction> CreatedActions { get; } = [];
         public List<string> ExecutedActionIds { get; } = [];
+        public string? ExpectedPayloadJson { get; private set; }
 
         public Task<ProposedActionRecord> CreateAsync(
             ProposedAction action,
@@ -382,6 +385,16 @@ public sealed class CapabilityExecutionFacadeTests
                 RawResult = """{"ok":true}""",
                 CompactedResult = """{"ok":true}"""
             });
+        }
+
+        public Task<ActionExecutionResult> ExecuteAsync(
+            string actionId,
+            ApprovalContext context,
+            string? expectedPayloadJson,
+            CancellationToken ct)
+        {
+            ExpectedPayloadJson = expectedPayloadJson;
+            return ExecuteAsync(actionId, context, ct);
         }
     }
 }

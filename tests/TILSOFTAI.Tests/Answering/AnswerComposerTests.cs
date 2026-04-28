@@ -37,6 +37,9 @@ public sealed class AnswerComposerTests
         answer.Text.Should().BeEmpty();
         answer.Blocks.Should().ContainSingle().Which.Should().BeOfType<RawJsonBlock>();
         var block = (RawJsonBlock)answer.Blocks[0];
+        block.Data!.GetType().GetProperty("mode")!.GetValue(block.Data).Should().Be("raw_json");
+        var argumentsProperty = block.Data.GetType().GetProperty("arguments")!.GetValue(block.Data);
+        argumentsProperty.Should().BeAssignableTo<IReadOnlyDictionary<string, object?>>();
         var rowsProperty = block.Data!.GetType().GetProperty("rows")!.GetValue(block.Data);
         rowsProperty.Should().BeAssignableTo<IReadOnlyList<IReadOnlyDictionary<string, object?>>>();
         var rows = (IReadOnlyList<IReadOnlyDictionary<string, object?>>)rowsProperty!;
@@ -185,7 +188,9 @@ public sealed class AnswerComposerTests
         tables[0].Rows.Should().ContainSingle();
         tables[0].Rows[0].Should().Contain("***");
         tables[0].Truncated.Should().BeTrue();
-        answer.Detail.Should().BeSameAs(bundle);
+        answer.Detail.Should().NotBeSameAs(bundle);
+        var safeBundle = answer.Detail.Should().BeOfType<CompositeResultBundle>().Subject;
+        safeBundle.Sections[0].Rows[0]["Email"].Should().Be("***");
     }
 
     [Fact]
@@ -202,7 +207,14 @@ public sealed class AnswerComposerTests
             DraftAction = new Dictionary<string, object?>
             {
                 ["actionId"] = "action-32-6",
-                ["capabilityKey"] = "sales.order.create-preview"
+                ["capabilityKey"] = "sales.order.create-preview",
+                ["Email"] = "buyer@example.test",
+                ["SecretNote"] = "internal"
+            },
+            SensitivityPolicy = new SensitivityPolicy
+            {
+                MaskColumns = ["Email"],
+                HiddenColumns = ["SecretNote"]
             }
         };
 
@@ -212,6 +224,8 @@ public sealed class AnswerComposerTests
         answer.Blocks.Should().ContainSingle().Which.Should().BeOfType<ConfirmationBlock>();
         var block = (ConfirmationBlock)answer.Blocks[0];
         block.DraftAction["actionId"].Should().Be("action-32-6");
+        block.DraftAction["Email"].Should().Be("***");
+        block.DraftAction.Should().NotContainKey("SecretNote");
     }
 
     private static StructuredAnswerComposer CreateComposer() =>

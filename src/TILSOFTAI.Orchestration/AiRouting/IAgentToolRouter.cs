@@ -6,3 +6,5 @@ public interface IAgentToolRouter
         AgentToolRoutingRequest request,
         CancellationToken cancellationToken);
 }
+
+public interface IOfficialAgentToolRouter : IAgentToolRouter;

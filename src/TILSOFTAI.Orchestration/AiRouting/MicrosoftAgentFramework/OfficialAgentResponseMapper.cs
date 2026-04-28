@@ -6,15 +6,15 @@ public static class OfficialAgentResponseMapper
 {
     public static AgentRunResult ToAgentRunResult(
         string? responseText,
-        OfficialAgentToolInvocation? invocation)
+        OfficialAgentFunctionInvocation? invocation)
     {
         if (invocation?.ToolResult is not null)
         {
             return new AgentRunResult
             {
                 Outcome = AgentRunOutcome.ToolExecution,
-                SelectedToolName = invocation.SourceTool.Name,
-                SelectedCapabilityKey = invocation.SourceTool.Capability.CapabilityKey,
+                SelectedToolName = invocation.Descriptor.Name,
+                SelectedCapabilityKey = invocation.Descriptor.Capability.CapabilityKey,
                 Arguments = invocation.ModelFacingArguments,
                 ToolResult = invocation.ToolResult,
                 RawText = responseText

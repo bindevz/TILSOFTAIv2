@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.AI;
 using TILSOFTAI.Orchestration.Answering;
 using TILSOFTAI.Orchestration.AiRouting.Tools;
 using TILSOFTAI.Orchestration.Semantic;
@@ -14,7 +15,7 @@ public static class ToolRoutingTraceFactory
         AgentToolRoutingRequest request,
         HardSignalSet hardSignals,
         CapabilityRetrievalResult retrieval,
-        IReadOnlyList<AgentFunctionTool> tools,
+        IReadOnlyList<AIFunction> tools,
         AgentRunResult agentResult,
         AssistantAnswer answer,
         IReadOnlyDictionary<string, double> stageLatencyMs,
@@ -34,13 +35,7 @@ public static class ToolRoutingTraceFactory
             candidate.Score
         })),
         HardSignalsJson = JsonSerializer.Serialize(hardSignals),
-        AdvertisedFunctionToolsJson = JsonSerializer.Serialize(tools.Select(tool => new
-        {
-            tool.Name,
-            tool.Capability.CapabilityKey,
-            tool.Capability.Domain,
-            tool.Capability.ExecutionMode
-        })),
+        AdvertisedFunctionToolsJson = JsonSerializer.Serialize(tools.Select(ToAdvertisedToolTrace)),
         SelectedTool = agentResult.SelectedCapabilityKey,
         SelectedFunction = agentResult.SelectedToolName,
         CandidateDomainCount = retrieval.Domains.Count,
@@ -70,7 +65,7 @@ public static class ToolRoutingTraceFactory
         AgentToolRoutingRequest request,
         HardSignalSet? hardSignals,
         CapabilityRetrievalResult? retrieval,
-        IReadOnlyList<AgentFunctionTool>? tools,
+        IReadOnlyList<AIFunction>? tools,
         string reason,
         IReadOnlyDictionary<string, double> stageLatencyMs,
         long startedAt) => new()
@@ -89,13 +84,7 @@ public static class ToolRoutingTraceFactory
             candidate.Score
         })),
         HardSignalsJson = hardSignals is null ? null : JsonSerializer.Serialize(hardSignals),
-        AdvertisedFunctionToolsJson = tools is null ? null : JsonSerializer.Serialize(tools.Select(tool => new
-        {
-            tool.Name,
-            tool.Capability.CapabilityKey,
-            tool.Capability.Domain,
-            tool.Capability.ExecutionMode
-        })),
+        AdvertisedFunctionToolsJson = tools is null ? null : JsonSerializer.Serialize(tools.Select(ToAdvertisedToolTrace)),
         CandidateDomainCount = retrieval?.Domains.Count,
         CandidateCapabilityCount = retrieval?.Capabilities.Count,
         AdvertisedToolCount = tools?.Count,
@@ -144,4 +133,26 @@ public static class ToolRoutingTraceFactory
 
     private static string Redact(string value) =>
         string.IsNullOrWhiteSpace(value) ? string.Empty : value.Length <= 512 ? value : value[..512];
+
+    private static object ToAdvertisedToolTrace(AIFunction function)
+    {
+        if (function is ICapabilityBackedAIFunction capabilityFunction)
+        {
+            return new
+            {
+                function.Name,
+                capabilityFunction.Descriptor.Capability.CapabilityKey,
+                capabilityFunction.Descriptor.Capability.Domain,
+                capabilityFunction.Descriptor.Capability.ExecutionMode
+            };
+        }
+
+        return new
+        {
+            function.Name,
+            CapabilityKey = (string?)null,
+            Domain = (string?)null,
+            ExecutionMode = (string?)null
+        };
+    }
 }

@@ -48,6 +48,16 @@ public sealed record CapabilitySemanticMetadata
     public IReadOnlyList<CapabilityArgumentMetadata> Arguments { get; init; } = Array.Empty<CapabilityArgumentMetadata>();
 }
 
+public interface ICapabilityCandidateSelector
+{
+    Task<IReadOnlyList<CapabilityCandidate>> SelectAsync(
+        string userMessage,
+        HardSignalSet hardSignals,
+        TILSOFTAI.Domain.ExecutionContext.TilsoftExecutionContext context,
+        string locale,
+        CancellationToken cancellationToken);
+}
+
 public sealed record CapabilityTextMetadata
 {
     public required string Locale { get; init; }

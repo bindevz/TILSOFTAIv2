@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using TILSOFTAI.Orchestration.AiRouting.Tools;
 using TILSOFTAI.Orchestration.Execution;
 
 namespace TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
@@ -20,16 +19,4 @@ public enum AgentRunOutcome
     ToolExecution,
     Clarification,
     NoTool
-}
-
-public interface IAgentClientFactory
-{
-    IToolCallingAgent CreateToolCallingAgent(
-        IReadOnlyList<AgentFunctionTool> tools,
-        string instructions);
-}
-
-public interface IToolCallingAgent
-{
-    Task<AgentRunResult> RunAsync(string message, CancellationToken cancellationToken);
 }

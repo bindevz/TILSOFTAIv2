@@ -59,7 +59,7 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
             return SupervisorResult.Fail("Input is required.");
         }
 
-        if (_aiRoutingOptions.MicrosoftAgentFrameworkRoutingEnabled && IsAgentRoutingRolloutAllowed(ctx))
+        if (IsOfficialAgentRoutingEnabled() && IsAgentRoutingRolloutAllowed(ctx))
         {
             var routed = await TryRouteWithAgentToolRouterAsync(request, ctx, ct);
             if (routed.Handled && routed.Answer is not null)
@@ -76,19 +76,26 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
                 _aiRoutingOptions.FallbackToLegacyPipeline,
                 routed.FailureReason ?? "none");
 
-            if (!_aiRoutingOptions.FallbackToLegacyPipeline)
+            if (MustFailClosedForOfficialRouting() || !_aiRoutingOptions.FallbackToLegacyPipeline)
             {
                 return SupervisorResult.Fail(
                     routed.FailureReason ?? "Agent routing failed.",
                     "AGENT_ROUTING_FAILED");
             }
         }
-        else if (_aiRoutingOptions.MicrosoftAgentFrameworkRoutingEnabled)
+        else if (IsOfficialAgentRoutingEnabled())
         {
             _logger.LogInformation(
                 "AgentToolRoutingSkippedByRollout | TenantId: {TenantId} | UserId: {UserId}",
                 string.IsNullOrWhiteSpace(ctx.TenantId) ? "unknown" : ctx.TenantId,
                 string.IsNullOrWhiteSpace(ctx.UserId) ? "unknown" : ctx.UserId);
+
+            if (MustFailClosedForOfficialRouting())
+            {
+                return SupervisorResult.Fail(
+                    "Official Agent Framework routing is enabled, but this tenant or user is outside the rollout gate.",
+                    "AGENT_ROUTING_ROLLOUT_BLOCKED");
+            }
         }
 
         var sw = Stopwatch.StartNew();
@@ -384,6 +391,13 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
 
         return tenantAllowed && userAllowed;
     }
+
+    private bool IsOfficialAgentRoutingEnabled() =>
+        _aiRoutingOptions.MicrosoftAgentFrameworkRoutingEnabled
+        || _aiRoutingOptions.UseOfficialMicrosoftAgentFramework;
+
+    private bool MustFailClosedForOfficialRouting() =>
+        _aiRoutingOptions.UseOfficialMicrosoftAgentFramework;
 
     /// <summary>
     /// Sprint 5: Build a structured CapabilityRequestHint from request metadata and classification.
