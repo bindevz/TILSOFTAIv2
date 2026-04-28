@@ -51,19 +51,16 @@ public static class OrchestrationServiceCollectionExtensions
         // Sprint 5: Capability resolver — structured resolution replacing string matching
         services.AddSingleton<ICapabilityResolver, StructuredCapabilityResolver>();
 
-        // Sprint 5: Capability sources — static fallbacks + configuration-driven
+        // Sprint 34: the active runtime is model-only. Non-model domains remain
+        // as historical source files, but are not registered as runtime sources.
         services.AddSingleton<ICapabilitySource>(
-            new StaticCapabilitySource("static-warehouse", WarehouseCapabilities.All));
-        services.AddSingleton<ICapabilitySource>(
-            new StaticCapabilitySource("static-accounting", AccountingCapabilities.All));
+            new StaticCapabilitySource("static-model", ModelCapabilities.All));
 
         // Sprint 5: Composite capability registry — loads from all ICapabilitySource instances
         services.AddSingleton<ICapabilityRegistry, CompositeCapabilityRegistry>();
 
         // Domain agents
-        services.AddSingleton<IDomainAgent, AccountingAgent>();   // Sprint 5: native capability path
-        services.AddSingleton<IDomainAgent, WarehouseAgent>();    // Sprint 4+5: native capability path
-        services.AddSingleton<IDomainAgent, GeneralChatAgent>();  // Sprint 7: supervisor-native general fallback
+        services.AddSingleton<IDomainAgent, GeneralChatAgent>();  // Supervisor-native general fallback.
 
         // Agent registry
         services.AddSingleton<IAgentRegistry, DomainAgentRegistry>();

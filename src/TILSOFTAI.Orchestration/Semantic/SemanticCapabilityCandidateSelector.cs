@@ -34,9 +34,12 @@ public sealed class SemanticCapabilityCandidateSelector : ICapabilityCandidateSe
 
         var options = new CapabilityRetrievalOptions
         {
-            MaxDomainsPerRequest = _options.MaxCandidateDomains,
-            MaxToolsPerDomain = _options.MaxCandidateToolsPerDomain,
-            MaxTotalTools = _options.MaxTotalCandidateTools
+            AllowedDomains = BuildAllowedDomainSet(_options.AllowedDomains),
+            MaxDomainsPerRequest = Math.Min(
+                _options.MaxCandidateDomains,
+                BuildAllowedDomainSet(_options.AllowedDomains).Count),
+            MaxToolsPerDomain = Math.Min(_options.MaxCandidateToolsPerDomain, EffectiveMaxCandidateTools()),
+            MaxTotalTools = EffectiveMaxCandidateTools()
         };
         var retrieval = await _retriever.RetrieveAsync(
                 userMessage,
@@ -56,10 +59,30 @@ public sealed class SemanticCapabilityCandidateSelector : ICapabilityCandidateSe
             "TextFallback",
             retrieval.Domains.Count,
             selected.Length,
-            _options.MaxTotalCandidateTools,
+            EffectiveMaxCandidateTools(),
             string.Join(",", retrieval.Domains.Select(domain => domain.Domain)),
             string.Join(",", selected.Select(candidate => $"{candidate.Metadata.CapabilityKey}:{candidate.Score:0.###}")));
 
         return selected;
+    }
+
+    private int EffectiveMaxCandidateTools()
+    {
+        var maxCandidateTools = _options.MaxCandidateTools > 0
+            ? _options.MaxCandidateTools
+            : _options.MaxTotalCandidateTools;
+        return Math.Max(0, Math.Min(maxCandidateTools, _options.MaxTotalCandidateTools));
+    }
+
+    private static IReadOnlySet<string> BuildAllowedDomainSet(IEnumerable<string>? domains)
+    {
+        var normalized = (domains ?? Array.Empty<string>())
+            .Where(domain => !string.IsNullOrWhiteSpace(domain))
+            .Select(DomainGate.NormalizeDomain)
+            .ToArray();
+
+        return normalized.Length == 0
+            ? DomainGate.DefaultAllowedDomains
+            : new HashSet<string>(normalized, StringComparer.OrdinalIgnoreCase);
     }
 }

@@ -17,15 +17,15 @@ public sealed class SemanticCapabilityRetrieverTests
 
         var domains = gate.SelectDomains(
             [
-                Chunk("warehouse.inventory.by-item", "warehouse", 0.72),
-                Chunk("accounting.ar.balance", "accounting", 0.96),
+                Chunk("model.overview.by-code", "model", 0.72),
+                Chunk("model.materials.by-code", "model", 0.96),
                 Chunk("warehouse.stock.available", "warehouse", 0.83),
                 Chunk("sales.order.status", "sales", 0.91)
             ],
-            new CapabilityRetrievalOptions { MaxDomainsPerRequest = 2 });
+            new CapabilityRetrievalOptions { MaxDomainsPerRequest = 2, AllowedDomains = ModelOnlyDomains() });
 
-        domains.Select(domain => domain.Domain).Should().Equal("accounting", "sales");
-        domains.Select(domain => domain.Score).Should().Equal(0.96, 0.91);
+        domains.Select(domain => domain.Domain).Should().Equal("model");
+        domains.Select(domain => domain.Score).Should().Equal(0.96);
     }
 
     [Fact]
@@ -33,15 +33,15 @@ public sealed class SemanticCapabilityRetrieverTests
     {
         var knowledgeRepository = new StubSemanticKnowledgeRepository(
             [
-                Chunk("warehouse.inventory.by-item", "warehouse", 0.95),
-                Chunk("warehouse.stock.available", "warehouse", 0.91),
-                Chunk("accounting.ar.balance", "accounting", 0.93),
+                Chunk("model.overview.by-code", "model", 0.95),
+                Chunk("model.materials.by-code", "model", 0.91),
+                Chunk("model.pieces.by-code", "model", 0.93),
                 Chunk("sales.order.status", "sales", 0.90)
             ]);
         var metadataRepository = new StubCapabilityMetadataRepository(
-            Metadata("warehouse.inventory.by-item", "warehouse"),
-            Metadata("warehouse.stock.available", "warehouse"),
-            Metadata("accounting.ar.balance", "accounting"),
+            Metadata("model.overview.by-code", "model"),
+            Metadata("model.materials.by-code", "model"),
+            Metadata("model.pieces.by-code", "model"),
             Metadata("sales.order.status", "sales"));
         var retriever = CreateRetriever(knowledgeRepository, metadataRepository);
 
@@ -58,17 +58,17 @@ public sealed class SemanticCapabilityRetrieverTests
             },
             CancellationToken.None);
 
-        result.Domains.Select(domain => domain.Domain).Should().Equal("warehouse", "accounting");
-        result.Capabilities.Should().HaveCount(2);
+        result.Domains.Select(domain => domain.Domain).Should().Equal("model");
+        result.Capabilities.Should().ContainSingle();
         result.Capabilities.Select(candidate => candidate.Metadata.Domain)
             .Should()
-            .BeSubsetOf(["warehouse", "accounting"]);
+            .BeSubsetOf(["model"]);
         result.Capabilities
             .GroupBy(candidate => candidate.Metadata.Domain)
             .Should()
             .OnlyContain(group => group.Count() <= 1);
         knowledgeRepository.Requests.Should().HaveCount(2);
-        knowledgeRepository.Requests[1].Domains.Should().Equal("warehouse", "accounting");
+        knowledgeRepository.Requests[1].Domains.Should().Equal("model");
     }
 
     [Fact]
@@ -99,21 +99,23 @@ public sealed class SemanticCapabilityRetrieverTests
     {
         var knowledgeRepository = new StubSemanticKnowledgeRepository(
             [
-                Chunk("warehouse.inventory.by-item", "warehouse", 0.95),
-                Chunk("warehouse.stock.available", "warehouse", 0.91),
-                Chunk("accounting.ar.balance", "accounting", 0.93),
+                Chunk("model.overview.by-code", "model", 0.95),
+                Chunk("model.materials.by-code", "model", 0.91),
+                Chunk("model.pieces.by-code", "model", 0.93),
                 Chunk("sales.order.status", "sales", 0.90)
             ]);
         var metadataRepository = new StubCapabilityMetadataRepository(
-            Metadata("warehouse.inventory.by-item", "warehouse"),
-            Metadata("warehouse.stock.available", "warehouse"),
-            Metadata("accounting.ar.balance", "accounting"),
+            Metadata("model.overview.by-code", "model"),
+            Metadata("model.materials.by-code", "model"),
+            Metadata("model.pieces.by-code", "model"),
             Metadata("sales.order.status", "sales"));
         var options = Options.Create(new AiRoutingOptions
         {
-            MaxCandidateDomains = 2,
+            AllowedDomains = ["model"],
+            MaxCandidateDomains = 1,
             MaxCandidateToolsPerDomain = 2,
-            MaxTotalCandidateTools = 2
+            MaxTotalCandidateTools = 2,
+            MaxCandidateTools = 2
         });
         var retriever = new SemanticCapabilityRetriever(
             knowledgeRepository,
@@ -136,9 +138,9 @@ public sealed class SemanticCapabilityRetrieverTests
         candidates.Should().HaveCount(2);
         candidates.Select(candidate => candidate.Metadata.CapabilityKey)
             .Should()
-            .Equal("warehouse.inventory.by-item", "accounting.ar.balance");
+            .Equal("model.overview.by-code", "model.pieces.by-code");
         knowledgeRepository.Requests.Should().HaveCount(2);
-        knowledgeRepository.Requests[1].Domains.Should().Equal("warehouse", "accounting");
+        knowledgeRepository.Requests[1].Domains.Should().Equal("model");
     }
 
     private static SemanticCapabilityRetriever CreateRetriever(
@@ -151,10 +153,14 @@ public sealed class SemanticCapabilityRetrieverTests
             new DomainGate(),
             Options.Create(new AiRoutingOptions
             {
-                MaxCandidateDomains = 2,
-                MaxCandidateToolsPerDomain = 1,
-                MaxTotalCandidateTools = 2
-            }));
+            MaxCandidateDomains = 2,
+            MaxCandidateToolsPerDomain = 1,
+            MaxTotalCandidateTools = 2,
+            MaxCandidateTools = 2
+        }));
+
+    private static IReadOnlySet<string> ModelOnlyDomains() =>
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "model" };
 
     private static KnowledgeChunk Chunk(string capabilityKey, string? domain, double score) => new()
     {

@@ -392,6 +392,7 @@ public static class AddTilsoftAiExtensions
         var provider = ResolveOfficialAgentProvider(configuration);
         if (string.Equals(provider, "AzureOpenAI", StringComparison.OrdinalIgnoreCase)
             || string.Equals(provider, "OpenAiCompatible", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(provider, "OpenAiCompatibleLocal", StringComparison.OrdinalIgnoreCase)
             || string.Equals(provider, "OpenAI", StringComparison.OrdinalIgnoreCase))
         {
             services.AddSingleton<IChatClient>(CreateOfficialAgentChatClient);
@@ -401,9 +402,10 @@ public static class AddTilsoftAiExtensions
     private static IChatClient CreateOfficialAgentChatClient(IServiceProvider services)
     {
         var options = services.GetRequiredService<IOptions<LlmOptions>>().Value;
+        var localAiOptions = services.GetRequiredService<IOptions<LocalAiOptions>>().Value;
         var aiRoutingOptions = services.GetRequiredService<IOptions<AiRoutingOptions>>().Value;
         var provider = ResolveOfficialAgentProvider(aiRoutingOptions, options);
-        var model = ResolveOfficialAgentModel(aiRoutingOptions, options);
+        var model = ResolveOfficialAgentModel(aiRoutingOptions, options, localAiOptions);
 
         if (string.Equals(provider, "AzureOpenAI", StringComparison.OrdinalIgnoreCase))
         {
@@ -421,20 +423,28 @@ public static class AddTilsoftAiExtensions
         }
 
         if (string.Equals(provider, "OpenAiCompatible", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(provider, "OpenAiCompatibleLocal", StringComparison.OrdinalIgnoreCase)
             || string.Equals(provider, "OpenAI", StringComparison.OrdinalIgnoreCase))
         {
-            RequireLlmSetting(options.ApiKey, "Llm:ApiKey", provider);
+            var endpoint = string.Equals(provider, "OpenAiCompatibleLocal", StringComparison.OrdinalIgnoreCase)
+                ? localAiOptions.BaseUrl
+                : options.Endpoint;
+            var apiKey = string.Equals(provider, "OpenAiCompatibleLocal", StringComparison.OrdinalIgnoreCase)
+                ? Environment.GetEnvironmentVariable(localAiOptions.ApiKeyEnvironmentVariable) ?? "local-ai-no-key"
+                : options.ApiKey;
+
+            RequireLlmSetting(apiKey, "Llm:ApiKey or LocalAi:ApiKeyEnvironmentVariable", provider);
             RequireLlmSetting(model, "AiRouting:Model or Llm:Model", provider);
 
             var clientOptions = new OpenAIClientOptions();
-            if (!string.IsNullOrWhiteSpace(options.Endpoint))
+            if (!string.IsNullOrWhiteSpace(endpoint))
             {
-                clientOptions.Endpoint = new Uri(options.Endpoint);
+                clientOptions.Endpoint = new Uri(endpoint);
             }
 
             var chatClient = new OpenAI.Chat.ChatClient(
                 model,
-                new ApiKeyCredential(options.ApiKey),
+                new ApiKeyCredential(apiKey),
                 clientOptions);
 
             return new ChatClientBuilder(chatClient.AsIChatClient())
@@ -443,7 +453,7 @@ public static class AddTilsoftAiExtensions
         }
 
         throw new InvalidOperationException(
-            "AgentFramework mode requires Llm:Provider to be AzureOpenAI, OpenAI, OpenAiCompatible, or an explicitly registered Microsoft.Extensions.AI provider.");
+            "AgentFramework mode requires Llm:Provider or AiRouting:Provider to be AzureOpenAI, OpenAI, OpenAiCompatible, OpenAiCompatibleLocal, or an explicitly registered Microsoft.Extensions.AI provider.");
     }
 
     private static string ResolveOfficialAgentProvider(IConfiguration configuration)
@@ -469,10 +479,18 @@ public static class AddTilsoftAiExtensions
             : llmOptions.Provider.Trim();
     }
 
-    private static string ResolveOfficialAgentModel(AiRoutingOptions aiRoutingOptions, LlmOptions llmOptions)
+    private static string ResolveOfficialAgentModel(AiRoutingOptions aiRoutingOptions, LlmOptions llmOptions, LocalAiOptions? localAiOptions = null)
     {
         var officialEnabled = aiRoutingOptions.MicrosoftAgentFrameworkRoutingEnabled
             || aiRoutingOptions.UseOfficialMicrosoftAgentFramework;
+        if (officialEnabled
+            && string.Equals(aiRoutingOptions.Provider, "OpenAiCompatibleLocal", StringComparison.OrdinalIgnoreCase)
+            && localAiOptions is not null
+            && !string.IsNullOrWhiteSpace(localAiOptions.Model))
+        {
+            return localAiOptions.Model.Trim();
+        }
+
         return officialEnabled && !string.IsNullOrWhiteSpace(aiRoutingOptions.Model)
             ? aiRoutingOptions.Model.Trim()
             : llmOptions.Model.Trim();
@@ -525,12 +543,21 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.MaxCandidateDomains > 0, "AiRouting:MaxCandidateDomains must be > 0.")
             .Validate(options => options.MaxCandidateToolsPerDomain > 0, "AiRouting:MaxCandidateToolsPerDomain must be > 0.")
             .Validate(options => options.MaxTotalCandidateTools > 0, "AiRouting:MaxTotalCandidateTools must be > 0.")
+            .Validate(options => options.MaxCandidateTools > 0, "AiRouting:MaxCandidateTools must be > 0.")
             .Validate(options => options.MaxToolCallsPerTurn > 0, "AiRouting:MaxToolCallsPerTurn must be > 0.")
             .Validate(options => options.MaxTotalCandidateTools >= options.MaxCandidateToolsPerDomain,
                 "AiRouting:MaxTotalCandidateTools must be >= AiRouting:MaxCandidateToolsPerDomain.")
+            .Validate(options => options.AllowedDomains.Length > 0
+                    && options.AllowedDomains.All(domain => string.Equals(domain, "model", StringComparison.OrdinalIgnoreCase)),
+                "AiRouting:AllowedDomains must be [\"model\"] for Sprint 34.")
             .Validate(options => !(options.UseOfficialMicrosoftAgentFramework || options.MicrosoftAgentFrameworkRoutingEnabled)
                     || OfficialAgentProviderFactory.IsAllowedProvider(options.Provider),
-                "AiRouting:Provider must be AzureOpenAI, OpenAI, or OllamaOfficialProviderForDevOnly when official Agent Framework routing is enabled.")
+                "AiRouting:Provider must be AzureOpenAI, OpenAI, OpenAiCompatibleLocal, or OllamaOfficialProviderForDevOnly when official Agent Framework routing is enabled.")
+            .ValidateOnStart();
+
+        services.AddOptions<LocalAiOptions>()
+            .Bind(configuration.GetSection(ConfigurationSectionNames.LocalAi))
+            .Validate(options => options.TimeoutSeconds > 0, "LocalAi:TimeoutSeconds must be > 0.")
             .ValidateOnStart();
 
         services.AddOptions<TILSOFTAI.Domain.Configuration.ChatOptions>()

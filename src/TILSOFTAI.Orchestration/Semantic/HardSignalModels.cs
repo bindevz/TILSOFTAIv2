@@ -30,6 +30,8 @@ public sealed record NumberSignal
 
 public sealed record CapabilityRetrievalOptions
 {
+    public IReadOnlySet<string> AllowedDomains { get; init; } =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "model" };
     public int MaxDomainsPerRequest { get; init; } = 2;
     public int MaxToolsPerDomain { get; init; } = 6;
     public int MaxTotalTools { get; init; } = 12;

@@ -15,6 +15,7 @@ public static class ConfigurationSectionNames
     public const string ErrorHandling = "ErrorHandling";
     public const string SemanticCache = "SemanticCache";
     public const string Llm = "Llm";
+    public const string LocalAi = "LocalAi";
     public const string Streaming = "Streaming";
     public const string Validation = "Validation";
     public const string Audit = "Audit";

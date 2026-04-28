@@ -55,7 +55,14 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
 
         var domains = _domainGate.SelectDomains(initialChunks, effectiveOptions);
 
-        var domainNames = domains.Select(domain => domain.Domain).ToArray();
+        var allowedDomains = effectiveOptions.AllowedDomains.Count == 0
+            ? DomainGate.DefaultAllowedDomains
+            : effectiveOptions.AllowedDomains;
+        var domainNames = domains
+            .Select(domain => DomainGate.NormalizeDomain(domain.Domain))
+            .Where(allowedDomains.Contains)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         if (domainNames.Length == 0)
         {
             var emptyEntityCandidates = await SearchEntityCandidatesAsync(
@@ -105,7 +112,8 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
                 locale,
                 cancellationToken);
 
-            if (metadata is null || !domainNames.Contains(metadata.Domain, StringComparer.OrdinalIgnoreCase))
+            var metadataDomain = DomainGate.NormalizeDomain(metadata?.Domain ?? string.Empty);
+            if (metadata is null || !domainNames.Contains(metadataDomain, StringComparer.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -174,10 +182,31 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
 
         return new CapabilityRetrievalOptions
         {
+            AllowedDomains = BuildAllowedDomainSet(_options.AllowedDomains),
             MaxDomainsPerRequest = EffectiveLimit(options.MaxDomainsPerRequest, _options.MaxCandidateDomains),
             MaxToolsPerDomain = EffectiveLimit(options.MaxToolsPerDomain, _options.MaxCandidateToolsPerDomain),
-            MaxTotalTools = EffectiveLimit(options.MaxTotalTools, _options.MaxTotalCandidateTools)
+            MaxTotalTools = EffectiveLimit(options.MaxTotalTools, EffectiveMaxCandidateTools())
         };
+    }
+
+    private int EffectiveMaxCandidateTools()
+    {
+        var maxCandidateTools = _options.MaxCandidateTools > 0
+            ? _options.MaxCandidateTools
+            : _options.MaxTotalCandidateTools;
+        return Math.Max(0, Math.Min(maxCandidateTools, _options.MaxTotalCandidateTools));
+    }
+
+    private static IReadOnlySet<string> BuildAllowedDomainSet(IEnumerable<string>? domains)
+    {
+        var normalized = (domains ?? Array.Empty<string>())
+            .Where(domain => !string.IsNullOrWhiteSpace(domain))
+            .Select(DomainGate.NormalizeDomain)
+            .ToArray();
+
+        return normalized.Length == 0
+            ? DomainGate.DefaultAllowedDomains
+            : new HashSet<string>(normalized, StringComparer.OrdinalIgnoreCase);
     }
 
     private static int EffectiveLimit(int requestLimit, int configuredLimit)

@@ -19,6 +19,7 @@ public sealed class OfficialAgentProviderFactory : IOfficialAgentProviderFactory
 {
     public const string AzureOpenAiProvider = "AzureOpenAI";
     public const string OpenAiProvider = "OpenAI";
+    public const string OpenAiCompatibleLocalProvider = "OpenAiCompatibleLocal";
     public const string OllamaDevProvider = "OllamaOfficialProviderForDevOnly";
 
     private readonly IChatClient? _chatClient;
@@ -93,6 +94,7 @@ public sealed class OfficialAgentProviderFactory : IOfficialAgentProviderFactory
     public static bool IsAllowedProvider(string provider) =>
         string.Equals(provider, AzureOpenAiProvider, StringComparison.OrdinalIgnoreCase)
         || string.Equals(provider, OpenAiProvider, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(provider, OpenAiCompatibleLocalProvider, StringComparison.OrdinalIgnoreCase)
         || string.Equals(provider, OllamaDevProvider, StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateProvider(string provider)
@@ -100,7 +102,7 @@ public sealed class OfficialAgentProviderFactory : IOfficialAgentProviderFactory
         if (!IsAllowedProvider(provider))
         {
             throw new InvalidOperationException(
-                "AiRouting:Provider must be AzureOpenAI, OpenAI, or OllamaOfficialProviderForDevOnly when official Microsoft Agent Framework routing is enabled.");
+                "AiRouting:Provider must be AzureOpenAI, OpenAI, OpenAiCompatibleLocal, or OllamaOfficialProviderForDevOnly when official Microsoft Agent Framework routing is enabled.");
         }
     }
 

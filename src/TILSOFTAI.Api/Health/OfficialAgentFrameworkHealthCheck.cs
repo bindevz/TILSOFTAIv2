@@ -13,15 +13,18 @@ public sealed class OfficialAgentFrameworkHealthCheck : IHealthCheck
 {
     private readonly AiRoutingOptions _aiRoutingOptions;
     private readonly LlmOptions _llmOptions;
+    private readonly LocalAiOptions _localAiOptions;
     private readonly IEnumerable<IChatClient> _chatClients;
 
     public OfficialAgentFrameworkHealthCheck(
         IOptions<AiRoutingOptions> aiRoutingOptions,
         IOptions<LlmOptions> llmOptions,
+        IOptions<LocalAiOptions> localAiOptions,
         IEnumerable<IChatClient> chatClients)
     {
         _aiRoutingOptions = aiRoutingOptions?.Value ?? throw new ArgumentNullException(nameof(aiRoutingOptions));
         _llmOptions = llmOptions?.Value ?? throw new ArgumentNullException(nameof(llmOptions));
+        _localAiOptions = localAiOptions?.Value ?? throw new ArgumentNullException(nameof(localAiOptions));
         _chatClients = chatClients ?? throw new ArgumentNullException(nameof(chatClients));
     }
 
@@ -30,7 +33,10 @@ public sealed class OfficialAgentFrameworkHealthCheck : IHealthCheck
         CancellationToken cancellationToken = default)
     {
         var provider = OfficialAgentProviderFactory.ResolveProviderName(_aiRoutingOptions, _llmOptions);
-        var model = OfficialAgentProviderFactory.ResolveModelName(_aiRoutingOptions, _llmOptions);
+        var model = string.Equals(provider, OfficialAgentProviderFactory.OpenAiCompatibleLocalProvider, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(_localAiOptions.Model)
+                ? _localAiOptions.Model
+                : OfficialAgentProviderFactory.ResolveModelName(_aiRoutingOptions, _llmOptions);
         var enabled = _aiRoutingOptions.MicrosoftAgentFrameworkRoutingEnabled
             || _aiRoutingOptions.UseOfficialMicrosoftAgentFramework;
         var hasChatClient = _chatClients.Any();
@@ -39,6 +45,13 @@ public sealed class OfficialAgentFrameworkHealthCheck : IHealthCheck
             ["enabled"] = enabled,
             ["provider"] = string.IsNullOrWhiteSpace(provider) ? "unspecified" : provider,
             ["model"] = string.IsNullOrWhiteSpace(model) ? "unspecified" : model,
+            ["allowed_domains"] = string.Join(",", _aiRoutingOptions.AllowedDomains),
+            ["max_candidate_tools"] = _aiRoutingOptions.MaxCandidateTools,
+            ["fallback_enabled"] = _aiRoutingOptions.FallbackToLegacyPipeline,
+            ["tool_calling_required"] = _aiRoutingOptions.ToolCallingRequired,
+            ["base_url_source"] = string.Equals(provider, OfficialAgentProviderFactory.OpenAiCompatibleLocalProvider, StringComparison.OrdinalIgnoreCase)
+                ? "LocalAi:BaseUrl"
+                : "Llm:Endpoint",
             ["chat_client_registered"] = hasChatClient
         };
 

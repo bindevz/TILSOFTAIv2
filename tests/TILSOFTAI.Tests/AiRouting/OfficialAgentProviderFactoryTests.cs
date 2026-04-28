@@ -68,6 +68,6 @@ public sealed class OfficialAgentProviderFactoryTests
             new TilsoftExecutionContext());
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*AzureOpenAI, OpenAI, or OllamaOfficialProviderForDevOnly*");
+            .WithMessage("*AzureOpenAI, OpenAI, OpenAiCompatibleLocal, or OllamaOfficialProviderForDevOnly*");
     }
 }
