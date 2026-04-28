@@ -14,6 +14,10 @@ BEGIN
         HardSignalsJson NVARCHAR(MAX) NULL,
         AdvertisedFunctionToolsJson NVARCHAR(MAX) NULL,
         SelectedTool NVARCHAR(200) NULL,
+        SelectedFunction NVARCHAR(200) NULL,
+        CandidateDomainCount INT NULL,
+        CandidateCapabilityCount INT NULL,
+        AdvertisedToolCount INT NULL,
         ArgumentsJson NVARCHAR(MAX) NULL,
         ArgumentsBeforeNormalizationJson NVARCHAR(MAX) NULL,
         ArgumentsAfterNormalizationJson NVARCHAR(MAX) NULL,
@@ -56,5 +60,13 @@ BEGIN
         ALTER TABLE ai.ToolRoutingTrace ADD LatencyByStageJson NVARCHAR(MAX) NULL;
     IF COL_LENGTH('ai.ToolRoutingTrace', 'ModelProvider') IS NULL
         ALTER TABLE ai.ToolRoutingTrace ADD ModelProvider NVARCHAR(100) NULL;
+    IF COL_LENGTH('ai.ToolRoutingTrace', 'SelectedFunction') IS NULL
+        ALTER TABLE ai.ToolRoutingTrace ADD SelectedFunction NVARCHAR(200) NULL;
+    IF COL_LENGTH('ai.ToolRoutingTrace', 'CandidateDomainCount') IS NULL
+        ALTER TABLE ai.ToolRoutingTrace ADD CandidateDomainCount INT NULL;
+    IF COL_LENGTH('ai.ToolRoutingTrace', 'CandidateCapabilityCount') IS NULL
+        ALTER TABLE ai.ToolRoutingTrace ADD CandidateCapabilityCount INT NULL;
+    IF COL_LENGTH('ai.ToolRoutingTrace', 'AdvertisedToolCount') IS NULL
+        ALTER TABLE ai.ToolRoutingTrace ADD AdvertisedToolCount INT NULL;
 END;
 GO

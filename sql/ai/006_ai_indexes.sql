@@ -33,6 +33,6 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ai_ToolRoutingTrace_Te
 BEGIN
     CREATE INDEX IX_ai_ToolRoutingTrace_TenantCreated
         ON ai.ToolRoutingTrace (TenantID, CreatedAt DESC)
-        INCLUDE (Success, SelectedTool, ErrorCode, AnswerMode);
+        INCLUDE (Success, SelectedTool, SelectedFunction, CandidateDomainCount, CandidateCapabilityCount, AdvertisedToolCount, ErrorCode, AnswerMode);
 END;
 GO

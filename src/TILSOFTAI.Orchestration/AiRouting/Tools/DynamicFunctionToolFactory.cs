@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Execution;
 using TILSOFTAI.Orchestration.Semantic;
@@ -6,21 +8,21 @@ namespace TILSOFTAI.Orchestration.AiRouting.Tools;
 
 public sealed class DynamicFunctionToolFactory : IAgentFunctionToolFactory
 {
-    private readonly CapabilityToolDescriptionBuilder _descriptionBuilder;
-    private readonly CapabilityParameterSchemaBuilder _schemaBuilder;
+    private readonly ICapabilityToolDescriptorFactory _descriptorFactory;
     private readonly ICapabilityExecutionFacade _executionFacade;
     private readonly ICompositeCapabilityExecutor _compositeExecutor;
+    private readonly AiRoutingOptions _options;
 
     public DynamicFunctionToolFactory(
-        CapabilityToolDescriptionBuilder descriptionBuilder,
-        CapabilityParameterSchemaBuilder schemaBuilder,
+        ICapabilityToolDescriptorFactory descriptorFactory,
         ICapabilityExecutionFacade executionFacade,
-        ICompositeCapabilityExecutor compositeExecutor)
+        ICompositeCapabilityExecutor compositeExecutor,
+        IOptions<AiRoutingOptions>? options = null)
     {
-        _descriptionBuilder = descriptionBuilder ?? throw new ArgumentNullException(nameof(descriptionBuilder));
-        _schemaBuilder = schemaBuilder ?? throw new ArgumentNullException(nameof(schemaBuilder));
+        _descriptorFactory = descriptorFactory ?? throw new ArgumentNullException(nameof(descriptorFactory));
         _executionFacade = executionFacade ?? throw new ArgumentNullException(nameof(executionFacade));
         _compositeExecutor = compositeExecutor ?? throw new ArgumentNullException(nameof(compositeExecutor));
+        _options = options?.Value ?? new AiRoutingOptions();
     }
 
     public Task<IReadOnlyList<AgentFunctionTool>> BuildToolsAsync(
@@ -30,7 +32,7 @@ public sealed class DynamicFunctionToolFactory : IAgentFunctionToolFactory
         CancellationToken cancellationToken)
     {
         var tools = candidates
-            .Where(candidate => IsModelCallable(candidate.Metadata))
+            .Where(candidate => IsModelCallable(candidate.Metadata, _options))
             .Select(candidate => BuildTool(candidate.Metadata, context, locale))
             .ToArray();
 
@@ -42,19 +44,19 @@ public sealed class DynamicFunctionToolFactory : IAgentFunctionToolFactory
         TilsoftExecutionContext context,
         string locale)
     {
-        var schema = _schemaBuilder.Build(capability.Arguments, out var argumentMap);
-        var name = CapabilityFunctionNameMapper.Map(capability.FunctionName, capability.CapabilityKey);
+        var descriptor = _descriptorFactory.Create(capability);
 
         return new AgentFunctionTool
         {
-            Name = name,
-            Capability = capability,
-            Description = _descriptionBuilder.Build(capability),
-            ParameterSchema = schema,
-            Arguments = capability.Arguments,
-            ModelToCapabilityArgumentMap = argumentMap,
+            Descriptor = descriptor,
             InvokeAsync = (modelFacingArguments, cancellationToken) =>
-                InvokeCapabilityAsync(capability, argumentMap, modelFacingArguments, context, locale, cancellationToken)
+                InvokeCapabilityAsync(
+                    descriptor.Capability,
+                    descriptor.ModelToCapabilityArgumentMap,
+                    modelFacingArguments,
+                    context,
+                    locale,
+                    cancellationToken)
         };
     }
 
@@ -80,7 +82,7 @@ public sealed class DynamicFunctionToolFactory : IAgentFunctionToolFactory
                 cancellationToken);
         }
 
-        if (IsWritePreviewMode(capability.ExecutionMode))
+        if (IsMutationMode(capability.ExecutionMode))
         {
             return await _executionFacade.PreviewWriteAsync(
                 capability.CapabilityKey,
@@ -114,9 +116,9 @@ public sealed class DynamicFunctionToolFactory : IAgentFunctionToolFactory
         return translated;
     }
 
-    private static bool IsModelCallable(CapabilitySemanticMetadata capability) =>
+    private static bool IsModelCallable(CapabilitySemanticMetadata capability, AiRoutingOptions options) =>
         IsReadMode(capability.ExecutionMode)
-        || IsWritePreviewMode(capability.ExecutionMode)
+        || options.EnableWritePreviewTools && IsMutationMode(capability.ExecutionMode)
         || capability.ExecutionMode.Equals("composite", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsReadMode(string executionMode) =>
@@ -125,4 +127,13 @@ public sealed class DynamicFunctionToolFactory : IAgentFunctionToolFactory
 
     private static bool IsWritePreviewMode(string executionMode) =>
         executionMode.Equals("write_preview", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsApprovedWriteMode(string executionMode) =>
+        executionMode.Equals("write", StringComparison.OrdinalIgnoreCase)
+        || executionMode.Equals("approved_write", StringComparison.OrdinalIgnoreCase)
+        || executionMode.Equals("execute_write", StringComparison.OrdinalIgnoreCase)
+        || executionMode.Equals("write_execute", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsMutationMode(string executionMode) =>
+        IsWritePreviewMode(executionMode) || IsApprovedWriteMode(executionMode);
 }

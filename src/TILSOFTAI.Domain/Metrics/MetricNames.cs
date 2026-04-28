@@ -56,6 +56,13 @@ namespace TILSOFTAI.Domain.Metrics
         public const string AgentRoutingCandidateTools = "tilsoftai_agent_routing_candidate_tools";
         public const string AgentRoutingLatencySeconds = "tilsoftai_agent_routing_latency_seconds";
         public const string AgentRoutingStageLatencySeconds = "tilsoftai_agent_routing_stage_latency_seconds";
+        public const string AgentRoutingFunctionSelectionAccuracy = "tilsoftai_agent_routing_function_selection_accuracy";
+        public const string AgentRoutingArgumentExtractionAccuracy = "tilsoftai_agent_routing_argument_extraction_accuracy";
+        public const string AgentRoutingMissingRequiredArgumentDetection = "tilsoftai_agent_routing_missing_required_argument_detection";
+        public const string AgentRoutingFalseWriteExecutionTotal = "tilsoftai_agent_routing_false_write_execution_total";
+        public const string AgentRoutingUnauthorizedExecutionTotal = "tilsoftai_agent_routing_unauthorized_execution_total";
+        public const string AgentRoutingOverExposedToolsTotal = "tilsoftai_agent_routing_over_exposed_tools_total";
+        public const string AgentRoutingEvalGateFailuresTotal = "tilsoftai_agent_routing_eval_gate_failures_total";
 
         // Sprint 10: platform catalog control-plane observability
         public const string PlatformCatalogSourceModeTotal = "tilsoftai_platform_catalog_source_mode_total";

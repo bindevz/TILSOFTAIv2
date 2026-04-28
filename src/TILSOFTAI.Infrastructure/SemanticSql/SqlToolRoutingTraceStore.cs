@@ -39,6 +39,10 @@ INSERT INTO ai.ToolRoutingTrace
     HardSignalsJson,
     AdvertisedFunctionToolsJson,
     SelectedTool,
+    SelectedFunction,
+    CandidateDomainCount,
+    CandidateCapabilityCount,
+    AdvertisedToolCount,
     ArgumentsJson,
     ArgumentsBeforeNormalizationJson,
     ArgumentsAfterNormalizationJson,
@@ -65,6 +69,10 @@ VALUES
     @HardSignalsJson,
     @AdvertisedFunctionToolsJson,
     @SelectedTool,
+    @SelectedFunction,
+    @CandidateDomainCount,
+    @CandidateCapabilityCount,
+    @AdvertisedToolCount,
     @ArgumentsJson,
     @ArgumentsBeforeNormalizationJson,
     @ArgumentsAfterNormalizationJson,
@@ -90,6 +98,10 @@ VALUES
         command.Parameters.Add(new SqlParameter("@HardSignalsJson", SqlDbType.NVarChar, -1) { Value = DbValue(trace.HardSignalsJson) });
         command.Parameters.Add(new SqlParameter("@AdvertisedFunctionToolsJson", SqlDbType.NVarChar, -1) { Value = DbValue(trace.AdvertisedFunctionToolsJson) });
         command.Parameters.Add(new SqlParameter("@SelectedTool", SqlDbType.NVarChar, 200) { Value = DbValue(trace.SelectedTool) });
+        command.Parameters.Add(new SqlParameter("@SelectedFunction", SqlDbType.NVarChar, 200) { Value = DbValue(trace.SelectedFunction) });
+        command.Parameters.Add(new SqlParameter("@CandidateDomainCount", SqlDbType.Int) { Value = trace.CandidateDomainCount ?? (object)DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@CandidateCapabilityCount", SqlDbType.Int) { Value = trace.CandidateCapabilityCount ?? (object)DBNull.Value });
+        command.Parameters.Add(new SqlParameter("@AdvertisedToolCount", SqlDbType.Int) { Value = trace.AdvertisedToolCount ?? (object)DBNull.Value });
         command.Parameters.Add(new SqlParameter("@ArgumentsJson", SqlDbType.NVarChar, -1) { Value = DbValue(trace.ArgumentsJson) });
         command.Parameters.Add(new SqlParameter("@ArgumentsBeforeNormalizationJson", SqlDbType.NVarChar, -1) { Value = DbValue(trace.ArgumentsBeforeNormalizationJson) });
         command.Parameters.Add(new SqlParameter("@ArgumentsAfterNormalizationJson", SqlDbType.NVarChar, -1) { Value = DbValue(trace.ArgumentsAfterNormalizationJson) });

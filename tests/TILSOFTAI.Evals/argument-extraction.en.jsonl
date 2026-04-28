@@ -1,4 +1,4 @@
-{"utterance":"Show open purchase orders for supplier ABC last month","locale":"en-US","expectedFunction":"purchasing_open_purchase_orders_by_supplier","expectedArguments":{"supplier_code":"ABC","date_range":"previous_month"}}
+{"utterance":"Show open purchase orders for supplier ABC last month","locale":"en-US","expectedFunction":"purchasing_open_po_by_supplier","expectedArguments":{"supplier_code":"ABC","date_range":"previous_month"}}
 {"utterance":"Inventory for MADEIRA-BLK in BD","locale":"en-US","expectedFunction":"warehouse_inventory_by_item","expectedArguments":{"item_no":"MADEIRA-BLK","warehouse_code":"BD"}}
 {"utterance":"Create a PO for supplier ABC item A123 quantity 500","locale":"en-US","expectedFunction":"purchasing_po_create_preview","expectedArguments":{"supplier_code":"ABC","item_no":"A123","quantity":500},"requiresConfirmation":true}
 {"utterance":"Show customer receivables","locale":"en-US","expectedFunction":"accounting_receivables_by_customer","expectedClarification":true,"missingArguments":["customer_code"]}

@@ -42,6 +42,10 @@ public static class ToolRoutingTraceFactory
             tool.Capability.ExecutionMode
         })),
         SelectedTool = agentResult.SelectedCapabilityKey,
+        SelectedFunction = agentResult.SelectedToolName,
+        CandidateDomainCount = retrieval.Domains.Count,
+        CandidateCapabilityCount = retrieval.Capabilities.Count,
+        AdvertisedToolCount = tools.Count,
         ArgumentsJson = agentResult.Arguments.ToJsonString(),
         ArgumentsBeforeNormalizationJson = agentResult.Arguments.ToJsonString(),
         ArgumentsAfterNormalizationJson = JsonSerializer.Serialize(agentResult.ToolResult?.Arguments),
@@ -92,6 +96,9 @@ public static class ToolRoutingTraceFactory
             tool.Capability.Domain,
             tool.Capability.ExecutionMode
         })),
+        CandidateDomainCount = retrieval?.Domains.Count,
+        CandidateCapabilityCount = retrieval?.Capabilities.Count,
+        AdvertisedToolCount = tools?.Count,
         ValidationResultJson = JsonSerializer.Serialize(new
         {
             routed = false,

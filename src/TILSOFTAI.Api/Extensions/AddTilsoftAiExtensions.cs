@@ -1,13 +1,17 @@
 using System.Diagnostics;
+using Azure.AI.OpenAI;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Configuration;
+using OpenAI;
 using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using System.ClientModel;
 using TILSOFTAI.Api.Auth;
 using TILSOFTAI.Api.Health;
 using TILSOFTAI.Api.Hubs;
@@ -263,6 +267,7 @@ public static class AddTilsoftAiExtensions
         services.AddHttpClient<OpenAiCompatibleLlmClient>()
             .AddHttpMessageHandler<CircuitBreakerDelegatingHandler>()
             .AddHttpMessageHandler<RetryDelegatingHandler>();
+        RegisterOfficialAgentChatClient(services, configuration);
 
         services.AddSingleton<ILlmClient>(sp =>
         {
@@ -380,6 +385,71 @@ public static class AddTilsoftAiExtensions
         return services;
     }
 
+    private static void RegisterOfficialAgentChatClient(IServiceCollection services, IConfiguration configuration)
+    {
+        var provider = configuration.GetSection(ConfigurationSectionNames.Llm).GetValue<string>("Provider")?.Trim();
+        if (string.Equals(provider, "AzureOpenAI", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(provider, "OpenAiCompatible", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(provider, "OpenAI", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddSingleton<IChatClient>(CreateOfficialAgentChatClient);
+        }
+    }
+
+    private static IChatClient CreateOfficialAgentChatClient(IServiceProvider services)
+    {
+        var options = services.GetRequiredService<IOptions<LlmOptions>>().Value;
+        var provider = options.Provider?.Trim() ?? string.Empty;
+
+        if (string.Equals(provider, "AzureOpenAI", StringComparison.OrdinalIgnoreCase))
+        {
+            RequireLlmSetting(options.Endpoint, "Llm:Endpoint", provider);
+            RequireLlmSetting(options.ApiKey, "Llm:ApiKey", provider);
+            RequireLlmSetting(options.Model, "Llm:Model", provider);
+
+            var azureClient = new AzureOpenAIClient(
+                new Uri(options.Endpoint),
+                new ApiKeyCredential(options.ApiKey));
+
+            return new ChatClientBuilder(azureClient.GetChatClient(options.Model).AsIChatClient())
+                .UseFunctionInvocation()
+                .Build();
+        }
+
+        if (string.Equals(provider, "OpenAiCompatible", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(provider, "OpenAI", StringComparison.OrdinalIgnoreCase))
+        {
+            RequireLlmSetting(options.ApiKey, "Llm:ApiKey", provider);
+            RequireLlmSetting(options.Model, "Llm:Model", provider);
+
+            var clientOptions = new OpenAIClientOptions();
+            if (!string.IsNullOrWhiteSpace(options.Endpoint))
+            {
+                clientOptions.Endpoint = new Uri(options.Endpoint);
+            }
+
+            var chatClient = new OpenAI.Chat.ChatClient(
+                options.Model,
+                new ApiKeyCredential(options.ApiKey),
+                clientOptions);
+
+            return new ChatClientBuilder(chatClient.AsIChatClient())
+                .UseFunctionInvocation()
+                .Build();
+        }
+
+        throw new InvalidOperationException(
+            "AgentFramework mode requires Llm:Provider to be AzureOpenAI, OpenAI, OpenAiCompatible, or an explicitly registered Microsoft.Extensions.AI provider.");
+    }
+
+    private static void RequireLlmSetting(string value, string settingName, string provider)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException($"{settingName} is required for {provider} Agent Framework provider setup.");
+        }
+    }
+
     private static void RegisterOptions(IServiceCollection services, IConfiguration configuration)
     {
         services.AddOptions<SqlOptions>()
@@ -424,7 +494,7 @@ public static class AddTilsoftAiExtensions
                 "AiRouting:MaxTotalCandidateTools must be >= AiRouting:MaxCandidateToolsPerDomain.")
             .ValidateOnStart();
 
-        services.AddOptions<ChatOptions>()
+        services.AddOptions<TILSOFTAI.Domain.Configuration.ChatOptions>()
             .Bind(configuration.GetSection(ConfigurationSectionNames.Chat))
             .Validate(options => options.MaxSteps > 0, "Chat:MaxSteps must be > 0.")
             .Validate(options => options.MaxTokens > 0, "Chat:MaxTokens must be > 0.")

@@ -42,11 +42,14 @@ public sealed class ToolRoutingTraceFactoryTests
         };
         var tool = new AgentFunctionTool
         {
-            Name = "warehouse_inventory_by_item",
-            Description = "Check inventory.",
-            ParameterSchema = new JsonObject(),
-            Capability = metadata,
-            Arguments = [],
+            Descriptor = new CapabilityToolDescriptor
+            {
+                Name = "warehouse_inventory_by_item",
+                Description = "Check inventory.",
+                ParameterSchema = new JsonObject(),
+                Capability = metadata,
+                Arguments = []
+            },
             InvokeAsync = (_, _) => Task.FromResult(CapabilityExecutionEnvelope.Succeeded(metadata.CapabilityKey, null))
         };
         var envelope = new CapabilityExecutionEnvelope
@@ -63,6 +66,7 @@ public sealed class ToolRoutingTraceFactoryTests
         };
         var agentResult = new AgentRunResult
         {
+            SelectedToolName = "warehouse_inventory_by_item",
             SelectedCapabilityKey = metadata.CapabilityKey,
             Arguments = new JsonObject { ["item_no"] = "MADEIRA-BLK" },
             ToolResult = envelope
@@ -87,6 +91,10 @@ public sealed class ToolRoutingTraceFactoryTests
 
         trace.HardSignalsJson.Should().Contain("MADEIRA-BLK");
         trace.AdvertisedFunctionToolsJson.Should().Contain("warehouse_inventory_by_item");
+        trace.SelectedFunction.Should().Be("warehouse_inventory_by_item");
+        trace.CandidateDomainCount.Should().Be(1);
+        trace.CandidateCapabilityCount.Should().Be(1);
+        trace.AdvertisedToolCount.Should().Be(1);
         trace.ArgumentsBeforeNormalizationJson.Should().Contain("item_no");
         trace.ArgumentsAfterNormalizationJson.Should().Contain("@ItemNo");
         trace.AdapterType.Should().Be("sql");

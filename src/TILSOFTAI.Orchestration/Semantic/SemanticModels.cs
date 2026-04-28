@@ -116,6 +116,10 @@ public sealed record ToolRoutingTrace
     public string? HardSignalsJson { get; init; }
     public string? AdvertisedFunctionToolsJson { get; init; }
     public string? SelectedTool { get; init; }
+    public string? SelectedFunction { get; init; }
+    public int? CandidateDomainCount { get; init; }
+    public int? CandidateCapabilityCount { get; init; }
+    public int? AdvertisedToolCount { get; init; }
     public string? ArgumentsJson { get; init; }
     public string? ArgumentsBeforeNormalizationJson { get; init; }
     public string? ArgumentsAfterNormalizationJson { get; init; }

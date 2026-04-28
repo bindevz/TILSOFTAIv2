@@ -26,14 +26,18 @@ public static class OrchestrationServiceCollectionExtensions
         services.AddSingleton<IIntentClassifier, KeywordIntentClassifier>();
         services.AddSingleton<RuntimeExecutionInstrumentation>();
         services.AddSingleton<IHardSignalExtractor, HardSignalExtractor>();
+        services.AddSingleton<IDomainGate, DomainGate>();
         services.AddSingleton<AgentRunOptionsFactory>();
         services.AddSingleton<CapabilityToolDescriptionBuilder>();
         services.AddSingleton<CapabilityParameterSchemaBuilder>();
+        services.AddSingleton<ICapabilityToolDescriptorFactory, CapabilityToolDescriptorFactory>();
+        services.AddSingleton<IOfficialAgentToolFactory, OfficialAgentToolFactory>();
         services.AddSingleton<CapabilityArgumentMapper>();
         services.AddSingleton<CapabilityExecutionPolicy>();
         services.AddSingleton<ICapabilityExecutionFacade, CapabilityExecutionFacade>();
         services.AddSingleton<ICompositeCapabilityExecutor, CompositeCapabilityExecutor>();
         services.AddSingleton<IAgentFunctionToolFactory, DynamicFunctionToolFactory>();
+        services.AddSingleton<IOfficialMicrosoftAgentRuntime, OfficialMicrosoftAgentRuntime>();
         services.AddSingleton<IAgentClientFactory, AgentClientFactory>();
         services.AddSingleton<RawJsonAnswerComposer>();
         services.AddSingleton<AiSummaryService>();

@@ -37,6 +37,13 @@ public interface IHardSignalExtractor
         TilsoftExecutionContext context);
 }
 
+public interface IDomainGate
+{
+    IReadOnlyList<DomainCandidate> SelectDomains(
+        IReadOnlyList<KnowledgeChunk> chunks,
+        CapabilityRetrievalOptions options);
+}
+
 public interface ISemanticCapabilityRetriever
 {
     Task<CapabilityRetrievalResult> RetrieveAsync(

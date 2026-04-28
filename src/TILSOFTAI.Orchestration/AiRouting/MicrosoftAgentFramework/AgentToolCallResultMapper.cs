@@ -16,8 +16,7 @@ public static class AgentToolCallResultMapper
             Mode = request.RequestedAnswerMode,
             CapabilityKey = envelope?.CapabilityKey
                 ?? agentResult.SelectedCapabilityKey
-                ?? retrieval.Capabilities.FirstOrDefault()?.Metadata.CapabilityKey
-                ?? "unknown",
+                ?? "agent.no-tool",
             ProcedureName = envelope?.ProcedureName,
             Arguments = envelope?.Arguments
                 ?? agentResult.Arguments.ToDictionary(

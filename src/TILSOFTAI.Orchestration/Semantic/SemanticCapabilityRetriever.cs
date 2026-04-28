@@ -10,17 +10,20 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
     private readonly ISemanticKnowledgeRepository _knowledgeRepository;
     private readonly ICapabilityMetadataRepository _capabilityMetadataRepository;
     private readonly IEntityAliasRepository _entityAliasRepository;
+    private readonly IDomainGate _domainGate;
     private readonly AiRoutingOptions _options;
 
     public SemanticCapabilityRetriever(
         ISemanticKnowledgeRepository knowledgeRepository,
         ICapabilityMetadataRepository capabilityMetadataRepository,
         IEntityAliasRepository entityAliasRepository,
+        IDomainGate domainGate,
         IOptions<AiRoutingOptions> options)
     {
         _knowledgeRepository = knowledgeRepository ?? throw new ArgumentNullException(nameof(knowledgeRepository));
         _capabilityMetadataRepository = capabilityMetadataRepository ?? throw new ArgumentNullException(nameof(capabilityMetadataRepository));
         _entityAliasRepository = entityAliasRepository ?? throw new ArgumentNullException(nameof(entityAliasRepository));
+        _domainGate = domainGate ?? throw new ArgumentNullException(nameof(domainGate));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
     }
 
@@ -32,12 +35,7 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
         CapabilityRetrievalOptions options,
         CancellationToken cancellationToken)
     {
-        var effectiveOptions = new CapabilityRetrievalOptions
-        {
-            MaxDomainsPerRequest = _options.MaxCandidateDomains,
-            MaxToolsPerDomain = _options.MaxCandidateToolsPerDomain,
-            MaxTotalTools = _options.MaxTotalCandidateTools
-        };
+        var effectiveOptions = ResolveOptions(options);
 
         var signalText = hardSignals.BusinessKeywords
             .Concat(hardSignals.Codes.Select(code => code.Text))
@@ -55,20 +53,26 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
             },
             cancellationToken);
 
-        var domains = initialChunks
-            .Where(chunk => !string.IsNullOrWhiteSpace(chunk.Domain))
-            .GroupBy(chunk => chunk.Domain!, StringComparer.OrdinalIgnoreCase)
-            .Select(group => new DomainCandidate
-            {
-                Domain = group.Key,
-                Score = group.Max(chunk => chunk.Score)
-            })
-            .OrderByDescending(domain => domain.Score)
-            .ThenBy(domain => domain.Domain, StringComparer.OrdinalIgnoreCase)
-            .Take(effectiveOptions.MaxDomainsPerRequest)
-            .ToArray();
+        var domains = _domainGate.SelectDomains(initialChunks, effectiveOptions);
 
         var domainNames = domains.Select(domain => domain.Domain).ToArray();
+        if (domainNames.Length == 0)
+        {
+            var emptyEntityCandidates = await SearchEntityCandidatesAsync(
+                userMessage,
+                context,
+                locale,
+                cancellationToken);
+
+            return new CapabilityRetrievalResult
+            {
+                Domains = domains,
+                Capabilities = Array.Empty<CapabilityCandidate>(),
+                EntityCandidates = emptyEntityCandidates,
+                ContextChunks = Array.Empty<KnowledgeChunk>()
+            };
+        }
+
         var contextChunks = await _knowledgeRepository.SearchChunksAsync(
             new SemanticSearchRequest
             {
@@ -81,14 +85,10 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
             },
             cancellationToken);
 
-        var entityCandidates = await _entityAliasRepository.SearchAliasesAsync(
-            new EntityAliasSearchRequest
-            {
-                Text = userMessage,
-                TenantId = context.TenantId,
-                Locale = locale,
-                TopK = 10
-            },
+        var entityCandidates = await SearchEntityCandidatesAsync(
+            userMessage,
+            context,
+            locale,
             cancellationToken);
 
         var capabilityKeys = contextChunks
@@ -167,4 +167,41 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
             return null;
         }
     }
+
+    private CapabilityRetrievalOptions ResolveOptions(CapabilityRetrievalOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        return new CapabilityRetrievalOptions
+        {
+            MaxDomainsPerRequest = EffectiveLimit(options.MaxDomainsPerRequest, _options.MaxCandidateDomains),
+            MaxToolsPerDomain = EffectiveLimit(options.MaxToolsPerDomain, _options.MaxCandidateToolsPerDomain),
+            MaxTotalTools = EffectiveLimit(options.MaxTotalTools, _options.MaxTotalCandidateTools)
+        };
+    }
+
+    private static int EffectiveLimit(int requestLimit, int configuredLimit)
+    {
+        if (configuredLimit <= 0 || requestLimit <= 0)
+        {
+            return 0;
+        }
+
+        return Math.Min(requestLimit, configuredLimit);
+    }
+
+    private Task<IReadOnlyList<EntityCandidate>> SearchEntityCandidatesAsync(
+        string userMessage,
+        TilsoftExecutionContext context,
+        string locale,
+        CancellationToken cancellationToken) =>
+        _entityAliasRepository.SearchAliasesAsync(
+            new EntityAliasSearchRequest
+            {
+                Text = userMessage,
+                TenantId = context.TenantId,
+                Locale = locale,
+                TopK = 10
+            },
+            cancellationToken);
 }

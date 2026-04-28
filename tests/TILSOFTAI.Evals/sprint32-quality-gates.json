@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "sprint": "Sprint 32",
+  "gates": {
+    "function_selection_accuracy": { "operator": ">=", "target": 0.90 },
+    "argument_extraction_accuracy": { "operator": ">=", "target": 0.85 },
+    "missing_required_argument_detection": { "operator": ">=", "target": 0.95 },
+    "over_exposed_tools": { "operator": "=", "target": 0 },
+    "fake_first_tool_selection": { "operator": "=", "target": 0 },
+    "regex_only_extraction": { "operator": "=", "target": 0 },
+    "false_write_execution": { "operator": "=", "target": 0 },
+    "unauthorized_execution": { "operator": "=", "target": 0 }
+  },
+  "requiredRegressionTypes": [
+    "first_tool_selection",
+    "regex_only_extraction",
+    "over_exposed_tools",
+    "write_safety"
+  ],
+  "telemetryFields": [
+    "candidate_domains",
+    "candidate_tools",
+    "advertised_function_tools",
+    "selected_function",
+    "arguments_before_normalization",
+    "arguments_after_normalization",
+    "latency_by_stage",
+    "model_provider",
+    "answer_mode"
+  ]
+}

@@ -1,4 +1,4 @@
 {"utterance":"Tồn mã MADEIRA-BLK ở kho BD còn bao nhiêu?","locale":"vi-VN","expectedDomain":"warehouse","expectedFunction":"warehouse_inventory_by_item","expectedArguments":{"item_no":"MADEIRA-BLK","warehouse_code":"BD"},"shouldExecute":true}
 {"utterance":"Xem công nợ khách hàng ABC","locale":"vi-VN","expectedDomain":"accounting","expectedFunction":"accounting_receivables_by_customer","expectedArguments":{"customer_code":"ABC"},"shouldExecute":true}
-{"utterance":"Đơn bán mở của khách hàng CUS-001 tháng trước","locale":"vi-VN","expectedDomain":"sales","expectedFunction":"sales_open_sales_orders_by_customer","expectedArguments":{"customer_code":"CUS-001","date_range":"previous_month"},"shouldExecute":true}
+{"utterance":"Đơn bán mở của khách hàng CUS-001 tháng trước","locale":"vi-VN","expectedDomain":"sales","expectedFunction":"sales_orders_by_customer","expectedArguments":{"customer_code":"CUS-001","date_range":"previous_month"},"shouldExecute":true}
 {"utterance":"Xem công nợ khách hàng","locale":"vi-VN","expectedDomain":"accounting","expectedFunction":"accounting_receivables_by_customer","shouldExecute":false,"expectedClarification":true}

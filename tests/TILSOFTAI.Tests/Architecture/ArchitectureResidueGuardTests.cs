@@ -245,6 +245,243 @@ public sealed class ArchitectureResidueGuardTests
     }
 
     [Fact]
+    public void AgentFrameworkRuntime_ShouldNotContainFakeCandidateGatedRouting()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var runtimeRoot = Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "AiRouting", "MicrosoftAgentFramework");
+        var forbidden = new[]
+        {
+            "CandidateGatedToolCallingAgent",
+            "_tools.FirstOrDefault()",
+            "_tools[0]",
+            "ExtractArgumentValue("
+        };
+
+        var offenders = Directory
+            .EnumerateFiles(runtimeRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(ShouldScan)
+            .SelectMany(path => forbidden
+                .Where(token => File.ReadAllText(path, Encoding.UTF8).Contains(token, StringComparison.Ordinal))
+                .Select(token => $"{Path.GetRelativePath(repositoryRoot, path)} contains {token}"))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        offenders.Should().BeEmpty("Phase 32.0 removes fake first-candidate routing and regex-only argument binding from Agent Framework runtime");
+    }
+
+    [Fact]
+    public void AgentFrameworkRuntime_ShouldInvokeOfficialMicrosoftAgent()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var runtimePath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "TILSOFTAI.Orchestration",
+            "AiRouting",
+            "MicrosoftAgentFramework",
+            "OfficialMicrosoftAgentRuntime.cs");
+        var contents = File.ReadAllText(runtimePath, Encoding.UTF8);
+        var toolFactory = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "AiRouting", "Tools", "OfficialAgentToolFactory.cs"),
+            Encoding.UTF8);
+
+        contents.Should().Contain("ChatClientAgent", "AgentFramework mode must route through the official Microsoft Agent Framework runtime");
+        contents.Should().Contain("IOfficialAgentToolFactory", "official tool conversion should be separated from agent invocation");
+        toolFactory.Should().Contain(": AIFunction", "candidate tools must be converted to official Microsoft.Extensions.AI function types before model selection");
+        toolFactory.Should().Contain("JsonSchema", "official tools should expose SQL-backed parameter schemas to the model");
+        contents.Should().Contain(".RunAsync(", "production routing must invoke the official agent before any tool result can be selected");
+    }
+
+    [Fact]
+    public void AgentFrameworkSetup_ShouldUseOfficialPackagesAndAvoidLocalImpostorTypes()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var orchestrationProject = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "TILSOFTAI.Orchestration.csproj"),
+            Encoding.UTF8);
+        var apiProject = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Api", "TILSOFTAI.Api.csproj"),
+            Encoding.UTF8);
+
+        orchestrationProject.Should().Contain("Microsoft.Agents.AI");
+        orchestrationProject.Should().Contain("Microsoft.Extensions.AI");
+        apiProject.Should().Contain("Microsoft.Extensions.AI.OpenAI");
+        apiProject.Should().Contain("Azure.AI.OpenAI");
+
+        var sourceFiles = Directory
+            .EnumerateFiles(Path.Combine(repositoryRoot, "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(ShouldScan);
+        var forbiddenDeclarations = new[]
+        {
+            "class AIAgent",
+            "record AIAgent",
+            "class AIFunction",
+            "record AIFunction",
+            "class AgentResponse",
+            "record AgentResponse"
+        };
+
+        var offenders = sourceFiles
+            .SelectMany(path => forbiddenDeclarations
+                .Where(token => File.ReadAllText(path, Encoding.UTF8).Contains(token, StringComparison.Ordinal))
+                .Select(token => $"{Path.GetRelativePath(repositoryRoot, path)} declares local {token}"))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        offenders.Should().BeEmpty("Phase 32.1 requires official Microsoft Agent Framework types, not local stand-ins");
+    }
+
+    [Fact]
+    public void DynamicToolDescriptors_ShouldBeSqlBackedAndLocalized()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var metadataRepository = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Infrastructure", "SemanticSql", "SqlCapabilityMetadataRepository.cs"),
+            Encoding.UTF8);
+        var descriptorFactory = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "AiRouting", "Tools", "CapabilityToolDescriptor.cs"),
+            Encoding.UTF8);
+        var toolFactory = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "AiRouting", "Tools", "DynamicFunctionToolFactory.cs"),
+            Encoding.UTF8);
+
+        metadataRepository.Should().Contain("ai.CapabilityText");
+        metadataRepository.Should().Contain("ai.ArgumentText");
+        metadataRepository.Should().Contain("Aliases");
+        metadataRepository.Should().Contain("Examples");
+        descriptorFactory.Should().Contain("CapabilityToolDescriptor");
+        descriptorFactory.Should().Contain("_descriptionBuilder.Build(capability)");
+        descriptorFactory.Should().Contain("_schemaBuilder.Build(capability.Arguments");
+        toolFactory.Should().Contain("ICapabilityToolDescriptorFactory");
+        toolFactory.Should().NotContain("Loaded from SQL", "production model-facing tool descriptions must come from SQL KB metadata, not hardcoded examples");
+    }
+
+    [Fact]
+    public void OfficialAgentToolFactory_ShouldUseOfficialToolsAndAvoidDirectSqlCallbacks()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var factoryPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "TILSOFTAI.Orchestration",
+            "AiRouting",
+            "Tools",
+            "OfficialAgentToolFactory.cs");
+        var registrationPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "TILSOFTAI.Orchestration",
+            "OrchestrationServiceCollectionExtensions.cs");
+        var factory = File.ReadAllText(factoryPath, Encoding.UTF8);
+        var registrations = File.ReadAllText(registrationPath, Encoding.UTF8);
+
+        factory.Should().Contain("IOfficialAgentToolFactory");
+        factory.Should().Contain(": AIFunction");
+        factory.Should().Contain("JsonSchema");
+        factory.Should().Contain("_tool.InvokeAsync", "official callbacks should dispatch through the facade-backed dynamic tool callback");
+        factory.Should().NotContain("SqlConnection", "official agent tool callbacks must not call SQL directly");
+        factory.Should().NotContain("ISqlExecutor", "official agent tool callbacks must not bypass CapabilityExecutionFacade");
+        registrations.Should().Contain("IOfficialAgentToolFactory, OfficialAgentToolFactory");
+    }
+
+    [Fact]
+    public void SemanticRetrieval_ShouldUseDomainGateAndCandidateCaps()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var semanticRoot = Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "Semantic");
+        var retriever = File.ReadAllText(Path.Combine(semanticRoot, "SemanticCapabilityRetriever.cs"), Encoding.UTF8);
+        var gate = File.ReadAllText(Path.Combine(semanticRoot, "DomainGate.cs"), Encoding.UTF8);
+        var registrations = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "OrchestrationServiceCollectionExtensions.cs"),
+            Encoding.UTF8);
+
+        retriever.Should().Contain("IDomainGate", "Phase 32.4 requires a first-class domain gate before candidate tool retrieval");
+        retriever.Should().Contain("ResolveOptions(options)", "request-level caps should be applied rather than ignored");
+        retriever.Should().Contain("domainNames.Length == 0", "an empty domain gate must fail closed instead of running an unrestricted capability search");
+        retriever.Should().Contain("Domains = domainNames", "candidate capability retrieval must be scoped to gated domains");
+        gate.Should().Contain("Take(options.MaxDomainsPerRequest)", "domain candidate limits must be enforced in the gate");
+        registrations.Should().Contain("IDomainGate, DomainGate");
+    }
+
+    [Fact]
+    public void OfficialAgentResponseMapping_ShouldRouteThroughAnswerComposer()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var runtimeRoot = Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "AiRouting", "MicrosoftAgentFramework");
+        var runtime = File.ReadAllText(Path.Combine(runtimeRoot, "OfficialMicrosoftAgentRuntime.cs"), Encoding.UTF8);
+        var responseMapper = File.ReadAllText(Path.Combine(runtimeRoot, "OfficialAgentResponseMapper.cs"), Encoding.UTF8);
+        var composerMapper = File.ReadAllText(Path.Combine(runtimeRoot, "AgentToolCallResultMapper.cs"), Encoding.UTF8);
+
+        runtime.Should().Contain("OfficialAgentResponseMapper.ToAgentRunResult");
+        responseMapper.Should().Contain("AgentRunOutcome.ToolExecution");
+        responseMapper.Should().Contain("AgentRunOutcome.Clarification");
+        responseMapper.Should().Contain("ToolResult = invocation.ToolResult");
+        composerMapper.Should().Contain("Mode = request.RequestedAnswerMode");
+        composerMapper.Should().Contain("agent.no-tool", "no-tool and clarification turns must not be attributed to the first candidate capability");
+        composerMapper.Should().NotContain("retrieval.Capabilities.FirstOrDefault()?.Metadata.CapabilityKey");
+    }
+
+    [Fact]
+    public void WriteTools_ShouldRequirePreviewAndConfirmationFlow()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var toolFactory = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "AiRouting", "Tools", "DynamicFunctionToolFactory.cs"),
+            Encoding.UTF8);
+        var router = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "AiRouting", "MicrosoftAgentFramework", "MicrosoftAgentToolRouter.cs"),
+            Encoding.UTF8);
+        var facade = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "Execution", "CapabilityExecutionFacade.cs"),
+            Encoding.UTF8);
+        var composer = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "Answering", "StructuredAnswerComposer.cs"),
+            Encoding.UTF8);
+
+        toolFactory.Should().Contain("EnableWritePreviewTools", "mutation tools must be explicitly enabled for model exposure");
+        toolFactory.Should().Contain("_executionFacade.PreviewWriteAsync");
+        toolFactory.Should().NotContain("_executionFacade.ExecuteApprovedWriteAsync", "model-callable tools must never directly execute mutations");
+        router.Should().Contain("TryCreateConfirmationTurn");
+        router.Should().Contain("_approvalEngine.ApproveAsync");
+        router.Should().Contain("_executionFacade.ExecuteApprovedWriteAsync");
+        facade.Should().Contain("string approvedActionId");
+        facade.Should().Contain("Write operations require an approved action ID.");
+        composer.Should().Contain("ConfirmationBlock");
+    }
+
+    [Fact]
+    public void Sprint32EvalsAndTelemetry_ShouldGuardAgentFrameworkRegressions()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var evalRoot = Path.Combine(repositoryRoot, "tests", "TILSOFTAI.Evals");
+        var regressionDataset = File.ReadAllText(Path.Combine(evalRoot, "sprint32-agent-framework-regressions.jsonl"), Encoding.UTF8);
+        var qualityGates = File.ReadAllText(Path.Combine(evalRoot, "sprint32-quality-gates.json"), Encoding.UTF8);
+        var traceModel = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "Semantic", "SemanticModels.cs"),
+            Encoding.UTF8);
+        var traceStore = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Infrastructure", "SemanticSql", "SqlToolRoutingTraceStore.cs"),
+            Encoding.UTF8);
+        var metrics = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Domain", "Metrics", "MetricNames.cs"),
+            Encoding.UTF8);
+
+        regressionDataset.Should().Contain("first_tool_selection");
+        regressionDataset.Should().Contain("regex_only_extraction");
+        regressionDataset.Should().Contain("over_exposed_tools");
+        regressionDataset.Should().Contain("write_safety");
+        qualityGates.Should().Contain("function_selection_accuracy");
+        qualityGates.Should().Contain("fake_first_tool_selection");
+        qualityGates.Should().Contain("false_write_execution");
+        traceModel.Should().Contain("SelectedFunction");
+        traceModel.Should().Contain("AdvertisedToolCount");
+        traceStore.Should().Contain("@SelectedFunction");
+        traceStore.Should().Contain("@AdvertisedToolCount");
+        metrics.Should().Contain("AgentRoutingFunctionSelectionAccuracy");
+        metrics.Should().Contain("AgentRoutingOverExposedToolsTotal");
+    }
+
+    [Fact]
     public void SqlCompatibilityObservability_ShouldRemainAvailable()
     {
         var repositoryRoot = FindRepositoryRoot();

@@ -1,10 +1,14 @@
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TILSOFTAI.Approvals;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Metrics;
 using TILSOFTAI.Orchestration.Answering;
 using TILSOFTAI.Orchestration.AiRouting.Tools;
+using TILSOFTAI.Orchestration.Execution;
 using TILSOFTAI.Orchestration.Semantic;
 
 namespace TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
@@ -17,6 +21,8 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
     private readonly IAgentClientFactory _agentClientFactory;
     private readonly IAnswerComposer _answerComposer;
     private readonly IToolRoutingTraceStore _traceStore;
+    private readonly ICapabilityExecutionFacade? _executionFacade;
+    private readonly IApprovalEngine? _approvalEngine;
     private readonly AiRoutingOptions _options;
     private readonly IMetricsService? _metrics;
     private readonly ILogger<MicrosoftAgentToolRouter> _logger;
@@ -28,6 +34,8 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
         IAgentClientFactory agentClientFactory,
         IAnswerComposer answerComposer,
         IToolRoutingTraceStore traceStore,
+        IEnumerable<ICapabilityExecutionFacade> executionFacades,
+        IEnumerable<IApprovalEngine> approvalEngines,
         IOptions<AiRoutingOptions> options,
         IEnumerable<IMetricsService> metricsServices,
         ILogger<MicrosoftAgentToolRouter> logger)
@@ -38,6 +46,8 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
         _agentClientFactory = agentClientFactory ?? throw new ArgumentNullException(nameof(agentClientFactory));
         _answerComposer = answerComposer ?? throw new ArgumentNullException(nameof(answerComposer));
         _traceStore = traceStore ?? throw new ArgumentNullException(nameof(traceStore));
+        _executionFacade = executionFacades?.FirstOrDefault();
+        _approvalEngine = approvalEngines?.FirstOrDefault();
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _metrics = metricsServices?.FirstOrDefault();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -63,6 +73,19 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
                 request.Locale,
                 request.ExecutionContext);
             MarkStage(stageLatencyMs, "hard_signal_extraction", ref stageStartedAt);
+
+            var confirmation = TryCreateConfirmationTurn(request);
+            if (confirmation is not null)
+            {
+                return await HandleConfirmationTurnAsync(
+                        request,
+                        confirmation,
+                        hardSignals,
+                        stageLatencyMs,
+                        startedAt,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
 
             retrieval = await _retriever.RetrieveAsync(
                 request.Message,
@@ -300,4 +323,144 @@ public sealed class MicrosoftAgentToolRouter : IAgentToolRouter
 
     private static string NormalizeLabel(string? value) =>
         string.IsNullOrWhiteSpace(value) ? "unknown" : value.Trim().ToLowerInvariant();
+
+    private async Task<AgentToolRoutingResult> HandleConfirmationTurnAsync(
+        AgentToolRoutingRequest request,
+        WriteConfirmationTurn confirmation,
+        HardSignalSet hardSignals,
+        Dictionary<string, double> stageLatencyMs,
+        long startedAt,
+        CancellationToken cancellationToken)
+    {
+        var stageStartedAt = Stopwatch.GetTimestamp();
+        if (_executionFacade is null || _approvalEngine is null)
+        {
+            return new AgentToolRoutingResult
+            {
+                Handled = false,
+                FailureReason = "Write confirmation requires approval and execution services."
+            };
+        }
+
+        await _approvalEngine.ApproveAsync(
+                confirmation.ApprovedActionId,
+                ApprovalContext.FromExecutionContext(request.ExecutionContext, "microsoft-agent-router"),
+                cancellationToken)
+            .ConfigureAwait(false);
+        MarkStage(stageLatencyMs, "write_confirmation_approval", ref stageStartedAt);
+
+        var envelope = await _executionFacade.ExecuteApprovedWriteAsync(
+                confirmation.CapabilityKey,
+                confirmation.ApprovedActionId,
+                confirmation.Arguments,
+                cancellationToken)
+            .ConfigureAwait(false);
+        MarkStage(stageLatencyMs, "write_confirmation_execution", ref stageStartedAt);
+
+        var agentResult = new AgentRunResult
+        {
+            Outcome = AgentRunOutcome.ToolExecution,
+            SelectedCapabilityKey = confirmation.CapabilityKey,
+            Arguments = ToJsonObject(confirmation.Arguments),
+            ToolResult = envelope
+        };
+        var retrieval = EmptyRetrieval();
+        var answerRequest = AgentToolCallResultMapper.ToAnswerComposerRequest(
+            agentResult,
+            request,
+            retrieval);
+        var answer = await _answerComposer.ComposeAsync(answerRequest, cancellationToken)
+            .ConfigureAwait(false);
+        MarkStage(stageLatencyMs, "answer_composition", ref stageStartedAt);
+
+        await _traceStore.SaveAsync(
+                ToolRoutingTraceFactory.FromSuccess(
+                    request,
+                    hardSignals,
+                    retrieval,
+                    Array.Empty<AgentFunctionTool>(),
+                    agentResult,
+                    answer,
+                    stageLatencyMs,
+                    startedAt),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        RecordHandled(request, agentResult, startedAt, stageLatencyMs);
+
+        return new AgentToolRoutingResult
+        {
+            Handled = true,
+            Answer = answer
+        };
+    }
+
+    private static WriteConfirmationTurn? TryCreateConfirmationTurn(AgentToolRoutingRequest request)
+    {
+        var approvedActionId = ReadMetadataString(request.Metadata, "approvedActionId")
+            ?? ReadMetadataString(request.Metadata, "actionId");
+        if (string.IsNullOrWhiteSpace(approvedActionId))
+        {
+            return null;
+        }
+
+        var capabilityKey = ReadMetadataString(request.Metadata, "capabilityKey");
+        if (string.IsNullOrWhiteSpace(capabilityKey))
+        {
+            return null;
+        }
+
+        return new WriteConfirmationTurn(
+            capabilityKey,
+            approvedActionId,
+            ReadArguments(request.Metadata));
+    }
+
+    private static string? ReadMetadataString(IReadOnlyDictionary<string, object?> metadata, string key)
+    {
+        return metadata.TryGetValue(key, out var value) ? value?.ToString() : null;
+    }
+
+    private static IReadOnlyDictionary<string, object?> ReadArguments(IReadOnlyDictionary<string, object?> metadata)
+    {
+        if (metadata.TryGetValue("arguments", out var arguments)
+            && arguments is IReadOnlyDictionary<string, object?> objectArguments)
+        {
+            return new Dictionary<string, object?>(objectArguments, StringComparer.OrdinalIgnoreCase);
+        }
+
+        var argumentsJson = ReadMetadataString(metadata, "argumentsJson");
+        if (string.IsNullOrWhiteSpace(argumentsJson))
+        {
+            return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, object?>>(argumentsJson);
+            return parsed is null
+                ? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, object?>(parsed, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private static JsonObject ToJsonObject(IReadOnlyDictionary<string, object?> arguments) =>
+        JsonSerializer.SerializeToNode(arguments)?.AsObject() ?? new JsonObject();
+
+    private static CapabilityRetrievalResult EmptyRetrieval() => new()
+    {
+        Domains = Array.Empty<DomainCandidate>(),
+        Capabilities = Array.Empty<CapabilityCandidate>(),
+        EntityCandidates = Array.Empty<EntityCandidate>(),
+        ContextChunks = Array.Empty<KnowledgeChunk>()
+    };
+
+    private sealed record WriteConfirmationTurn(
+        string CapabilityKey,
+        string ApprovedActionId,
+        IReadOnlyDictionary<string, object?> Arguments);
 }

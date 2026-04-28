@@ -188,6 +188,32 @@ public sealed class AnswerComposerTests
         answer.Detail.Should().BeSameAs(bundle);
     }
 
+    [Fact]
+    public async Task StructuredMode_WhenWritePreview_ShouldReturnConfirmationBlock()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            ExecutionMetadata = new ExecutionMetadata
+            {
+                CorrelationId = "corr-1",
+                Operation = "write_preview"
+            },
+            DraftAction = new Dictionary<string, object?>
+            {
+                ["actionId"] = "action-32-6",
+                ["capabilityKey"] = "sales.order.create-preview"
+            }
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        answer.AnswerType.Should().Be("confirmation");
+        answer.Blocks.Should().ContainSingle().Which.Should().BeOfType<ConfirmationBlock>();
+        var block = (ConfirmationBlock)answer.Blocks[0];
+        block.DraftAction["actionId"].Should().Be("action-32-6");
+    }
+
     private static StructuredAnswerComposer CreateComposer() =>
         new(new RawJsonAnswerComposer(), new AiSummaryService());
 
