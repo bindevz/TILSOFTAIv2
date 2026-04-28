@@ -1,6 +1,6 @@
 # Live Certification Acceptance
 
-This guide is the Sprint 29 operator path for recording accepted staging/prod-like certification. It starts only after the certification run manifest, execution session ledger, release evidence bundle, and certification review summary have been generated and validated with real, non-example evidence.
+This guide is the Sprint 30 operator path for recording accepted staging/prod-like certification. It starts only after the certification run manifest, execution session ledger, release evidence bundle, certification review summary, and trusted evidence policy checks have been generated and validated with real, non-example evidence.
 
 Capture execution first by following `docs/live_certification_execution_capture.md`.
 
@@ -28,7 +28,7 @@ The summary must be `ready_for_release_review`. Do not record live acceptance fo
   -FreshnessWindowDays 14
 ```
 
-The generated `certification-acceptance.json` records release scope, environment, accepted-by and approved-by identities, certification run id, execution session id/state, bundle hash, artifact hashes, fallback posture, signoff state, expiry, waivers, and blockers.
+The generated `certification-acceptance.json` records release scope, environment, accepted-by and approved-by identities, certification run id, execution session id/state, bundle hash, artifact hashes, fallback posture, signoff state, trust decision inputs, expiry, governed waivers, and blockers.
 
 ## 3. Validate Live Acceptance
 
@@ -37,7 +37,7 @@ The generated `certification-acceptance.json` records release scope, environment
   -AcceptancePath "release-evidence/release-2026-04-16/certification-acceptance.json"
 ```
 
-Validation fails when the artifact is blocked, expired, missing signoff, missing accepted/approved identities, using example or dry-run evidence, using stale evidence, referencing bundle artifacts whose hashes no longer match, or not grounded in a completed execution session.
+Validation fails when the artifact is blocked, expired, missing signoff, missing accepted/approved identities, using example or dry-run evidence, using stale evidence, referencing bundle artifacts whose hashes no longer match, not grounded in a completed execution session, or carrying incomplete trusted evidence semantics.
 
 ## 4. Generate The Go/No-Go Summary
 
@@ -65,4 +65,4 @@ When `expiresAtUtc` passes before release review completes, regenerate the certi
 
 ## Waivers
 
-Waiver notes can document bounded release-authority exceptions, but dry-run/example evidence, missing signoff, missing acceptor/approver identity, and unacceptable production-like fallback remain non-waivable live-certification blockers.
+Waivers must be governed objects (id, authority, scope, reason, expiry, linked drills). Dry-run/example evidence, missing signoff, missing acceptor/approver identity, unacceptable production-like fallback, invalid waiver objects, and trusted-evidence policy violations remain non-waivable live-certification blockers.

@@ -46,7 +46,9 @@ foreach ($entry in $session.drillLedger) {
 
 $waivedDrills = @($session.drillLedger | Where-Object { $_.status -eq "waived" } | ForEach-Object { [string]$_.drillKind })
 $completedDrills = @($session.drillLedger | Where-Object { $_.status -eq "completed" } | ForEach-Object { [string]$_.drillKind })
-$goNoGo = if ($session.executionState -eq "completed" -and $missingDrills.Count -eq 0 -and $exampleDrills.Count -eq 0 -and $staleDrills.Count -eq 0) {
+$trustedAcceptedDrills = @($session.drillLedger | Where-Object { $_.status -eq "completed" -and [string]$_.trustDecision -eq "accepted" } | ForEach-Object { [string]$_.drillKind })
+$trustedBlockedDrills = @($session.drillLedger | Where-Object { $_.status -eq "completed" -and [string]$_.trustDecision -ne "accepted" } | ForEach-Object { [string]$_.drillKind })
+$goNoGo = if ($session.executionState -eq "completed" -and $missingDrills.Count -eq 0 -and $exampleDrills.Count -eq 0 -and $staleDrills.Count -eq 0 -and [bool]$session.decisionInputs.trustedEvidenceReady) {
     "ready_for_acceptance"
 }
 else {
@@ -75,6 +77,10 @@ $summary = [ordered]@{
     missingRequiredDrills = $missingDrills
     staleDrills = $staleDrills
     exampleDrills = $exampleDrills
+    trustedAcceptedDrills = $trustedAcceptedDrills
+    trustedBlockedDrills = $trustedBlockedDrills
+    trustedEvidenceReady = [bool]$session.decisionInputs.trustedEvidenceReady
+    trustPolicy = $session.trustPolicy
     blockers = @($session.blockers)
     waivers = @($session.waivers)
     executionSessionArtifact = "certification-execution-session.json"
@@ -86,7 +92,7 @@ $summary | ConvertTo-Json -Depth 8 | Set-Content -Path $jsonPath -Encoding utf8
 
 $drillLines = @()
 foreach ($entry in $session.drillLedger) {
-    $drillLines += "| $($entry.drillKind) | $($entry.status) | $($entry.evidenceUri) | $($entry.collectedAtUtc) | $($entry.freshnessWindowDays) |"
+    $drillLines += "| $($entry.drillKind) | $($entry.status) | $($entry.trustDecision) | $($entry.evidenceRecordId) | $($entry.verifierClass)/$($entry.trustTier) | $($entry.evidenceUri) | $($entry.collectedAtUtc) | $($entry.freshnessWindowDays) |"
 }
 
 $lines = @(
@@ -101,12 +107,15 @@ $lines = @(
     "| Execution state | $($summary.executionState) |",
     "| Decision | $($summary.goNoGo) |",
     "| Fallback decision | $($summary.fallbackDecision) |",
+    "| Trusted evidence ready | $($summary.trustedEvidenceReady) |",
+    "| Trusted accepted drills | $(@($summary.trustedAcceptedDrills).Count) |",
+    "| Trusted blocked drills | $(@($summary.trustedBlockedDrills).Count) |",
     "| Blockers | $(if (@($summary.blockers).Count -eq 0) { 'none' } else { @($summary.blockers) -join ', ' }) |",
     "",
     "## Drill Ledger",
     "",
-    "| Drill | Status | Evidence | Collected At | Freshness (days) |",
-    "|------|--------|----------|--------------|------------------|"
+    "| Drill | Status | Trust Decision | Evidence Record | Verifier/Tier | Evidence URI | Collected At | Freshness (days) |",
+    "|------|--------|----------------|-----------------|---------------|--------------|--------------|------------------|"
 )
 
 $lines += $drillLines

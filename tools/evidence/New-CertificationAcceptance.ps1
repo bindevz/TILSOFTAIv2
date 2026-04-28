@@ -15,7 +15,8 @@ param(
     [string]$AcceptedBy = "",
     [string]$ApprovedBy = "",
     [int]$FreshnessWindowDays = 14,
-    [string[]]$WaiverNotes = @()
+    [string[]]$WaiverNotes = @(),
+    [string]$WaiverPath = ""
 )
 
 Set-StrictMode -Version Latest
@@ -104,6 +105,52 @@ function Get-BundleDigest {
     }
 }
 
+function Normalize-WaiverEntries {
+    param(
+        [object]$WaiverDocument,
+        [DateTimeOffset]$UtcNow
+    )
+
+    $entries = @()
+    foreach ($waiver in @($WaiverDocument)) {
+        if ($null -eq $waiver) {
+            continue
+        }
+
+        $waiverId = [string]$waiver.waiverId
+        if ([string]::IsNullOrWhiteSpace($waiverId)) {
+            $waiverId = "waiver://generated/$([guid]::NewGuid().ToString('N'))"
+        }
+
+        $linkedDrills = @($waiver.linkedDrills | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        $status = "active"
+        $expiresAtUtc = [string]$waiver.expiresAtUtc
+        $expiry = [DateTimeOffset]::MinValue
+        if ([string]::IsNullOrWhiteSpace([string]$waiver.authority) -or [string]::IsNullOrWhiteSpace([string]$waiver.reason) -or $linkedDrills.Count -eq 0) {
+            $status = "invalid"
+        }
+        elseif (-not [DateTimeOffset]::TryParse($expiresAtUtc, [ref]$expiry)) {
+            $status = "invalid"
+        }
+        elseif ($expiry -le $UtcNow) {
+            $status = "expired"
+        }
+
+        $entries += [ordered]@{
+            waiverId = $waiverId
+            authority = [string]$waiver.authority
+            scope = if ([string]::IsNullOrWhiteSpace([string]$waiver.scope)) { "drill" } else { [string]$waiver.scope }
+            reason = [string]$waiver.reason
+            expiresAtUtc = $expiresAtUtc
+            linkedDrills = @($linkedDrills)
+            nonWaivable = [bool]$waiver.nonWaivable
+            status = $status
+        }
+    }
+
+    return @($entries)
+}
+
 $repoRoot = Resolve-RepoRoot
 $templatePath = Join-Path $repoRoot "docs/certification_acceptance.template.json"
 if (-not (Test-Path $templatePath)) {
@@ -156,7 +203,26 @@ $expiresAt = $now.AddDays($FreshnessWindowDays)
 $acceptance = Get-Content $templatePath -Raw | ConvertFrom-Json
 $summaryBlockers = @($summary.blockers)
 $executionBlockers = @($executionSession.blockers)
-$waivers = @($WaiverNotes | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+$waivers = @()
+$waiverNotes = @($WaiverNotes | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+foreach ($waiverNote in $waiverNotes) {
+    $waivers += [ordered]@{
+        waiverId = "waiver://note/$([guid]::NewGuid().ToString('N'))"
+        authority = "release_authority"
+        scope = "acceptance"
+        reason = [string]$waiverNote
+        expiresAtUtc = $now.AddDays(7).ToString("o")
+        linkedDrills = @()
+        nonWaivable = $false
+        status = "active"
+    }
+}
+if (-not [string]::IsNullOrWhiteSpace($WaiverPath)) {
+    $resolvedWaiverPath = Resolve-ArtifactPath -Path $WaiverPath -RepoRoot $repoRoot
+    $waivers += Normalize-WaiverEntries -WaiverDocument (Read-JsonFile -Path $resolvedWaiverPath) -UtcNow $now
+}
+$invalidWaiverPresent = @($waivers | Where-Object { $_.status -ne "active" }).Count -gt 0
+$activeWaivers = @($waivers | Where-Object { $_.status -eq "active" })
 $exampleEvidencePresent = @($summary.exampleEvidenceKinds).Count -gt 0
 $staleEvidencePresent = @($summary.staleEvidenceKinds).Count -gt 0 -or [bool]$executionSession.decisionInputs.staleEvidencePresent
 $requiredEvidenceComplete = @($summary.missingEvidenceKinds).Count -eq 0
@@ -167,6 +233,8 @@ $signoff = $certification.signoff
 $signoffUri = if ($null -ne $signoffEntry -and -not [string]::IsNullOrWhiteSpace([string]$signoffEntry.evidenceUri)) { [string]$signoffEntry.evidenceUri } else { [string]$signoff.signoffUri }
 $signoffPresent = -not [string]::IsNullOrWhiteSpace($signoffUri)
 $executionSessionComplete = $executionSession.executionState -eq "completed" -and [bool]$executionSession.decisionInputs.requiredDrillsCompleted -and [bool]$executionSession.decisionInputs.fallbackAccepted -and [bool]$executionSession.decisionInputs.operatorSignoffCompleted -and -not [bool]$executionSession.decisionInputs.exampleEvidencePresent -and -not [bool]$executionSession.decisionInputs.staleEvidencePresent -and $executionBlockers.Count -eq 0
+$trustedEvidenceReady = [bool]$executionSession.decisionInputs.trustedEvidenceReady
+$trustedEvidencePolicySatisfied = [bool]$executionSession.decisionInputs.trustedEvidencePolicySatisfied
 $acceptedByPresent = -not [string]::IsNullOrWhiteSpace($AcceptedBy)
 $approvedByPresent = -not [string]::IsNullOrWhiteSpace($ApprovedBy)
 
@@ -192,6 +260,15 @@ if (-not $signoffPresent) {
 if (-not $executionSessionComplete) {
     $blockers += "execution_session_incomplete"
 }
+if (-not $trustedEvidenceReady) {
+    $blockers += "trusted_evidence_incomplete"
+}
+if (-not $trustedEvidencePolicySatisfied) {
+    $blockers += "trusted_evidence_policy_violation"
+}
+if ($invalidWaiverPresent) {
+    $blockers += "invalid_waiver"
+}
 if (-not $acceptedByPresent) {
     $blockers += "accepted_by_missing"
 }
@@ -209,11 +286,11 @@ foreach ($summaryBlocker in $summaryBlockers) {
     }
 }
 
-$nonWaivableBlockers = @($blockers | Where-Object { $_ -in @("example_or_dry_run_evidence", "fallback_authorization_gap", "operator_signoff_missing", "accepted_by_missing", "approved_by_missing") })
+$nonWaivableBlockers = @($blockers | Where-Object { $_ -in @("example_or_dry_run_evidence", "fallback_authorization_gap", "operator_signoff_missing", "accepted_by_missing", "approved_by_missing", "trusted_evidence_incomplete", "trusted_evidence_policy_violation", "invalid_waiver") })
 $acceptanceStatus = if ($blockers.Count -eq 0) {
     "accepted"
 }
-elseif ($waivers.Count -gt 0 -and $nonWaivableBlockers.Count -eq 0) {
+elseif ($activeWaivers.Count -gt 0 -and $nonWaivableBlockers.Count -eq 0) {
     "waived"
 }
 else {
@@ -261,6 +338,8 @@ $acceptance.decisionInputs.reviewReady = $reviewReady
 $acceptance.decisionInputs.signoffPresent = $signoffPresent
 $acceptance.decisionInputs.bundleHashCaptured = -not [string]::IsNullOrWhiteSpace([string]$bundleDigest.sha256)
 $acceptance.decisionInputs.executionSessionComplete = $executionSessionComplete
+$acceptance.decisionInputs.trustedEvidenceReady = $trustedEvidenceReady
+$acceptance.decisionInputs.trustedEvidencePolicySatisfied = $trustedEvidencePolicySatisfied
 $acceptance.waivers = @($waivers)
 $acceptance.blockers = @($blockers | Sort-Object -Unique)
 

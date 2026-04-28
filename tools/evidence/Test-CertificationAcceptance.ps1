@@ -84,7 +84,7 @@ $acceptance = Read-JsonFile -Path $resolvedAcceptancePath
 $errors = New-Object System.Collections.Generic.List[string]
 $allowedStatuses = @("draft", "accepted", "blocked", "waived", "expired")
 $nonLiveStatuses = @("draft", "blocked", "expired")
-$nonWaivableBlockers = @("example_or_dry_run_evidence", "fallback_authorization_gap", "operator_signoff_missing", "accepted_by_missing", "approved_by_missing", "execution_session_incomplete")
+$nonWaivableBlockers = @("example_or_dry_run_evidence", "fallback_authorization_gap", "operator_signoff_missing", "accepted_by_missing", "approved_by_missing", "execution_session_incomplete", "trusted_evidence_incomplete", "trusted_evidence_policy_violation", "invalid_waiver")
 
 if ($acceptance.schemaVersion -ne 1) {
     $errors.Add("Certification acceptance schemaVersion must be 1.")
@@ -120,8 +120,22 @@ if (@($acceptance.blockers | Where-Object { $nonWaivableBlockers -contains $_ })
     $errors.Add("Certification acceptance contains non-waivable live-certification blockers.")
 }
 
-if (@($acceptance.waivers).Count -gt 0 -and $acceptance.acceptanceStatus -ne "waived") {
-    $errors.Add("Waiver notes require acceptanceStatus waived.")
+if (@($acceptance.waivers).Count -gt 0) {
+    foreach ($waiver in @($acceptance.waivers)) {
+        foreach ($field in @("waiverId", "authority", "scope", "reason", "expiresAtUtc", "linkedDrills", "nonWaivable", "status")) {
+            if (-not (Test-JsonProperty -InputObject $waiver -Name $field)) {
+                $errors.Add("Acceptance waiver is missing required field '$field'.")
+            }
+        }
+
+        if ([string]$waiver.status -ne "active") {
+            $errors.Add("Acceptance waiver '$([string]$waiver.waiverId)' must be active.")
+        }
+    }
+
+    if ($acceptance.acceptanceStatus -ne "waived") {
+        $errors.Add("Waivers require acceptanceStatus waived.")
+    }
 }
 
 foreach ($field in @("certificationRunManifest", "certificationReviewSummary", "certificationExecutionSession", "releaseEvidenceBundle", "fallbackPosture", "signoff", "decisionInputs")) {
@@ -241,6 +255,14 @@ if (-not [bool]$acceptance.decisionInputs.bundleHashCaptured -or [string]::IsNul
 
 if (-not [bool]$acceptance.decisionInputs.executionSessionComplete) {
     $errors.Add("Acceptance requires decisionInputs.executionSessionComplete to be true.")
+}
+
+if (-not (Test-JsonProperty -InputObject $acceptance.decisionInputs -Name "trustedEvidenceReady") -or -not [bool]$acceptance.decisionInputs.trustedEvidenceReady) {
+    $errors.Add("Acceptance requires trustedEvidenceReady.")
+}
+
+if (-not (Test-JsonProperty -InputObject $acceptance.decisionInputs -Name "trustedEvidencePolicySatisfied") -or -not [bool]$acceptance.decisionInputs.trustedEvidencePolicySatisfied) {
+    $errors.Add("Acceptance requires trustedEvidencePolicySatisfied.")
 }
 
 if ($errors.Count -gt 0) {

@@ -1,6 +1,6 @@
 # Live Certification Execution Capture
 
-This guide is the Sprint 29 operator path for capturing what actually ran during a live staging/prod-like certification session. It turns drill execution from narrative notes into a machine-reviewable session ledger.
+This guide is the Sprint 30 operator path for capturing what actually ran during a live staging/prod-like certification session. It turns drill execution from narrative notes into a machine-reviewable session ledger with trusted evidence provenance per drill.
 
 ## 1. Prepare The Certification Run Manifest
 
@@ -31,10 +31,12 @@ Create a first-class execution session from the manifest:
 ./tools/evidence/New-CertificationExecutionSession.ps1 `
   -CertificationRunPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
   -OutputPath "release-evidence/release-2026-04-16/certification-execution-session.json" `
+  -TrustedEvidencePath "release-evidence/release-2026-04-16/trusted-evidence-refs.json" `
+  -TrustPolicyPath "docs/certification_execution_trust_policy.template.json" `
   -SessionId "release-2026-04-16-staging-execution"
 ```
 
-The session artifact records drill-by-drill status, evidence refs, timestamps, freshness windows, waivers, fallback posture, execution context, and completion blockers.
+The session artifact records drill-by-drill status, evidence refs, trusted evidence identity, artifact hash, verification status, trust tier, provider provenance proof, timestamps, governed waivers, fallback posture, execution context, and completion blockers.
 
 ## 3. Validate Execution Completeness
 
@@ -44,6 +46,7 @@ The session artifact records drill-by-drill status, evidence refs, timestamps, f
 ```
 
 Validation blocks incomplete execution when required drills are missing, stale, dry-run/example, or missing signoff.
+Validation also blocks sessions when trusted evidence provenance is incomplete or fails trust policy.
 
 ## 4. Generate The Execution Summary
 
@@ -55,7 +58,19 @@ Validation blocks incomplete execution when required drills are missing, stale, 
 
 Reviewers can start from `certification-execution-summary.md` and `certification-execution-summary.json` to inspect the full drill ledger and blocker state.
 
-## 5. Hand Off To Review And Acceptance
+## 5. Generate Release Authority Packet
+
+```powershell
+./tools/evidence/New-CertificationReleaseAuthorityPacket.ps1 `
+  -SessionPath "release-evidence/release-2026-04-16/certification-execution-session.json" `
+  -ReviewSummaryPath "release-evidence/release-2026-04-16/certification-review-summary.json" `
+  -AcceptancePath "release-evidence/release-2026-04-16/certification-acceptance.json" `
+  -OutputRoot "release-evidence/release-2026-04-16"
+```
+
+Release authority can use `certification-release-authority-packet.json` and `certification-release-authority-packet.md` as a concise trust-and-governance decision artifact.
+
+## 6. Hand Off To Review And Acceptance
 
 After execution validation passes:
 

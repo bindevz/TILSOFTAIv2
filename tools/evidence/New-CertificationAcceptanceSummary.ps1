@@ -72,6 +72,8 @@ $summary = [ordered]@{
     staleEvidencePresent = $acceptance.decisionInputs.staleEvidencePresent
     exampleEvidencePresent = $acceptance.decisionInputs.exampleEvidencePresent
     executionSessionComplete = $acceptance.decisionInputs.executionSessionComplete
+    trustedEvidenceReady = $acceptance.decisionInputs.trustedEvidenceReady
+    trustedEvidencePolicySatisfied = $acceptance.decisionInputs.trustedEvidencePolicySatisfied
     bundleHash = $acceptance.releaseEvidenceBundle.sha256
     waivers = @($acceptance.waivers)
     blockers = @($acceptance.blockers)
@@ -97,12 +99,14 @@ $lines = @(
     "| Expires | $($summary.expiresAtUtc) |",
     "| Fallback decision | $($summary.fallbackDecision) |",
     "| Execution session | $($summary.executionSessionId) / $($summary.executionSessionState) |",
+    "| Trusted evidence ready | $($summary.trustedEvidenceReady) |",
+    "| Trusted evidence policy | $($summary.trustedEvidencePolicySatisfied) |",
     "| Bundle hash | $($summary.bundleHash) |",
     "| Blockers | $(if (@($summary.blockers).Count -eq 0) { 'none' } else { @($summary.blockers) -join ', ' }) |",
     "",
     "## Waivers",
     "",
-    "$(if (@($summary.waivers).Count -eq 0) { 'None.' } else { (@($summary.waivers) | ForEach-Object { '- ' + $_ }) -join [Environment]::NewLine })"
+    "$(if (@($summary.waivers).Count -eq 0) { 'None.' } else { (@($summary.waivers) | ForEach-Object { '- ' + $_.waiverId + ' (' + $_.authority + ', ' + $_.status + ')' }) -join [Environment]::NewLine })"
 )
 $lines | Set-Content -Path $mdPath -Encoding utf8
 

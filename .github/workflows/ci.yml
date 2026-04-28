@@ -199,6 +199,7 @@ jobs:
           -OperatorId "ci" `
           -EvidenceRefsPath "docs/certification_evidence_refs.example.json" `
           -AllowExampleEvidence
+        Copy-Item "docs/certification_trusted_evidence_refs.example.json" "artifacts/evidence-smoke/ci-evidence-smoke/trusted-evidence-refs.json" -Force
 
         ./tools/evidence/Test-CertificationRunManifest.ps1 `
           -ManifestPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-run-manifest.json" `
@@ -206,7 +207,9 @@ jobs:
 
         ./tools/evidence/New-CertificationExecutionSession.ps1 `
           -CertificationRunPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-run-manifest.json" `
-          -OutputPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-execution-session.json"
+          -OutputPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-execution-session.json" `
+          -TrustedEvidencePath "artifacts/evidence-smoke/ci-evidence-smoke/trusted-evidence-refs.json" `
+          -TrustPolicyPath "docs/certification_execution_trust_policy.template.json"
 
         ./tools/evidence/Test-CertificationExecutionSession.ps1 `
           -SessionPath "artifacts/evidence-smoke/ci-evidence-smoke/certification-execution-session.json" `
@@ -254,6 +257,7 @@ jobs:
         }
         New-Item -ItemType Directory -Force -Path "artifacts/evidence-smoke/ci-acceptance-smoke" | Out-Null
         $acceptedRefs | ConvertTo-Json -Depth 4 | Set-Content -Path "artifacts/evidence-smoke/ci-acceptance-smoke/evidence-refs.json" -Encoding utf8
+        Copy-Item "docs/certification_trusted_evidence_refs.example.json" "artifacts/evidence-smoke/ci-acceptance-smoke/trusted-evidence-refs.json" -Force
 
         ./tools/evidence/New-CertificationRunManifest.ps1 `
           -ReleaseId "ci-acceptance-smoke" `
@@ -272,7 +276,9 @@ jobs:
 
         ./tools/evidence/New-CertificationExecutionSession.ps1 `
           -CertificationRunPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-run-manifest.json" `
-          -OutputPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.json"
+          -OutputPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.json" `
+          -TrustedEvidencePath "artifacts/evidence-smoke/ci-acceptance-smoke/trusted-evidence-refs.json" `
+          -TrustPolicyPath "docs/certification_execution_trust_policy.template.json"
 
         ./tools/evidence/Test-CertificationExecutionSession.ps1 `
           -SessionPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.json"
@@ -315,11 +321,40 @@ jobs:
           -AcceptancePath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-acceptance.json" `
           -OutputRoot "artifacts/evidence-smoke/ci-acceptance-smoke"
 
+        ./tools/evidence/New-CertificationReleaseAuthorityPacket.ps1 `
+          -SessionPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.json" `
+          -ReviewSummaryPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-review-summary.json" `
+          -AcceptancePath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-acceptance.json" `
+          -OutputRoot "artifacts/evidence-smoke/ci-acceptance-smoke"
+
         ./tools/evidence/Test-ReleaseEvidenceBundle.ps1 `
           -BundlePath "artifacts/evidence-smoke/ci-acceptance-smoke" `
           -RequireAcceptedCertification
 
         Write-Host "Verifying stale execution and acceptance dependency blocking..." -ForegroundColor Cyan
+        function Assert-ExpectedFailure {
+          param(
+            [scriptblock]$Action,
+            [string]$FailureMessage,
+            [string]$SuccessMessage
+          )
+
+          try {
+            & $Action
+            throw $FailureMessage
+          } catch {
+            if ($_.Exception.Message -match $FailureMessage) {
+              throw
+            }
+
+            Write-Host $SuccessMessage -ForegroundColor Green
+          }
+        }
+
+        $baseSessionPath = "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.json"
+        $baseSession = Get-Content $baseSessionPath -Raw | ConvertFrom-Json
+        $baseRunbookDrill = $baseSession.drillLedger | Where-Object { $_.drillKind -eq "runbook_execution" } | Select-Object -First 1
+
         $staleSessionPath = "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.stale.json"
         $staleSession = Get-Content "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.json" -Raw | ConvertFrom-Json
         $staleDrill = $staleSession.drillLedger | Where-Object { $_.drillKind -eq "runbook_execution" } | Select-Object -First 1
@@ -330,15 +365,97 @@ jobs:
         $staleSession.decisionInputs.requiredDrillsCompleted = $false
         $staleSession | ConvertTo-Json -Depth 12 | Set-Content -Path $staleSessionPath -Encoding utf8
 
-        try {
-          ./tools/evidence/Test-CertificationExecutionSession.ps1 -SessionPath $staleSessionPath
-          throw "Expected stale execution session validation to fail."
-        } catch {
-          if ($_.Exception.Message -match "Expected stale execution session validation to fail") {
-            throw
+        Assert-ExpectedFailure `
+          -Action { ./tools/evidence/Test-CertificationExecutionSession.ps1 -SessionPath $staleSessionPath } `
+          -FailureMessage "Expected stale execution session validation to fail." `
+          -SuccessMessage "Stale execution session failed validation as expected."
+
+        $missingHashSessionPath = "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.missing-hash.json"
+        $missingHashSession = Get-Content $baseSessionPath -Raw | ConvertFrom-Json
+        $missingHashDrill = $missingHashSession.drillLedger | Where-Object { $_.drillKind -eq "runbook_execution" } | Select-Object -First 1
+        $missingHashDrill.artifactHash = ""
+        $missingHashDrill.trustDecision = "blocked"
+        $missingHashSession.executionState = "blocked"
+        $missingHashSession.blockers = @("trusted_evidence_unverified")
+        $missingHashSession.decisionInputs.trustedEvidenceVerified = $false
+        $missingHashSession.decisionInputs.trustedEvidenceReady = $false
+        $missingHashSession | ConvertTo-Json -Depth 12 | Set-Content -Path $missingHashSessionPath -Encoding utf8
+        Assert-ExpectedFailure `
+          -Action { ./tools/evidence/Test-CertificationExecutionSession.ps1 -SessionPath $missingHashSessionPath } `
+          -FailureMessage "Expected missing hash validation to fail." `
+          -SuccessMessage "Missing hash validation failed as expected."
+
+        $unverifiedSessionPath = "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.unverified.json"
+        $unverifiedSession = Get-Content $baseSessionPath -Raw | ConvertFrom-Json
+        $unverifiedDrill = $unverifiedSession.drillLedger | Where-Object { $_.drillKind -eq "runbook_execution" } | Select-Object -First 1
+        $unverifiedDrill.verificationStatus = "unverified"
+        $unverifiedDrill.trustDecision = "blocked"
+        $unverifiedSession.executionState = "blocked"
+        $unverifiedSession.blockers = @("trusted_evidence_unverified")
+        $unverifiedSession.decisionInputs.trustedEvidenceVerified = $false
+        $unverifiedSession.decisionInputs.trustedEvidenceReady = $false
+        $unverifiedSession | ConvertTo-Json -Depth 12 | Set-Content -Path $unverifiedSessionPath -Encoding utf8
+        Assert-ExpectedFailure `
+          -Action { ./tools/evidence/Test-CertificationExecutionSession.ps1 -SessionPath $unverifiedSessionPath } `
+          -FailureMessage "Expected unverified evidence validation to fail." `
+          -SuccessMessage "Unverified evidence validation failed as expected."
+
+        $insufficientTierPath = "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.insufficient-tier.json"
+        $insufficientTierSession = Get-Content $baseSessionPath -Raw | ConvertFrom-Json
+        $insufficientTierDrill = $insufficientTierSession.drillLedger | Where-Object { $_.drillKind -eq "runbook_execution" } | Select-Object -First 1
+        $insufficientTierDrill.trustTier = "metadata_verified"
+        $insufficientTierDrill.policyMinimumTrustTier = "provider_verified"
+        $insufficientTierDrill.trustDecision = "blocked"
+        $insufficientTierSession.executionState = "blocked"
+        $insufficientTierSession.blockers = @("trusted_evidence_policy_violation")
+        $insufficientTierSession.decisionInputs.trustedEvidencePolicySatisfied = $false
+        $insufficientTierSession.decisionInputs.trustedEvidenceReady = $false
+        $insufficientTierSession | ConvertTo-Json -Depth 12 | Set-Content -Path $insufficientTierPath -Encoding utf8
+        Assert-ExpectedFailure `
+          -Action { ./tools/evidence/Test-CertificationExecutionSession.ps1 -SessionPath $insufficientTierPath } `
+          -FailureMessage "Expected insufficient trust tier validation to fail." `
+          -SuccessMessage "Insufficient trust tier validation failed as expected."
+
+        $invalidWaiverPath = "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.invalid-waiver.json"
+        $invalidWaiverSession = Get-Content $baseSessionPath -Raw | ConvertFrom-Json
+        $invalidWaiverSession.waivers = @(
+          @{
+            waiverId = "waiver://invalid-expired"
+            authority = "release_authority"
+            scope = "drill"
+            reason = "expired waiver"
+            expiresAtUtc = "2000-01-01T00:00:00Z"
+            linkedDrills = @("preview_failure_drill")
+            nonWaivable = $false
+            status = "active"
           }
-          Write-Host "Stale execution session failed validation as expected." -ForegroundColor Green
-        }
+        )
+        $invalidWaiverSession.executionState = "blocked"
+        $invalidWaiverSession.blockers = @("invalid_waiver")
+        $invalidWaiverSession.decisionInputs.invalidWaiverPresent = $true
+        $invalidWaiverSession.decisionInputs.trustedEvidenceReady = $false
+        $invalidWaiverSession | ConvertTo-Json -Depth 12 | Set-Content -Path $invalidWaiverPath -Encoding utf8
+        Assert-ExpectedFailure `
+          -Action { ./tools/evidence/Test-CertificationExecutionSession.ps1 -SessionPath $invalidWaiverPath } `
+          -FailureMessage "Expected invalid waiver validation to fail." `
+          -SuccessMessage "Invalid waiver validation failed as expected."
+
+        $providerProofGapPath = "artifacts/evidence-smoke/ci-acceptance-smoke/certification-execution-session.provider-proof-gap.json"
+        $providerProofGapSession = Get-Content $baseSessionPath -Raw | ConvertFrom-Json
+        $providerProofGapDrill = $providerProofGapSession.drillLedger | Where-Object { $_.drillKind -eq "runbook_execution" } | Select-Object -First 1
+        $providerProofGapDrill.verifierClass = "provider"
+        $providerProofGapDrill.providerHashRecomputed = $false
+        $providerProofGapDrill.providerProvenanceProofUri = ""
+        $providerProofGapDrill.trustDecision = "blocked"
+        $providerProofGapSession.executionState = "blocked"
+        $providerProofGapSession.blockers = @("provider_provenance_gap")
+        $providerProofGapSession.decisionInputs.providerProvenanceComplete = $false
+        $providerProofGapSession.decisionInputs.trustedEvidenceReady = $false
+        $providerProofGapSession | ConvertTo-Json -Depth 12 | Set-Content -Path $providerProofGapPath -Encoding utf8
+        Assert-ExpectedFailure `
+          -Action { ./tools/evidence/Test-CertificationExecutionSession.ps1 -SessionPath $providerProofGapPath } `
+          -FailureMessage "Expected provider provenance proof validation to fail." `
+          -SuccessMessage "Provider provenance proof validation failed as expected."
 
         ./tools/evidence/New-CertificationAcceptance.ps1 `
           -CertificationRunPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-run-manifest.json" `
@@ -349,15 +466,24 @@ jobs:
           -AcceptedBy "ci-operator" `
           -ApprovedBy "ci-approver"
 
-        try {
-          ./tools/evidence/Test-CertificationAcceptance.ps1 -AcceptancePath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-acceptance.stale.json"
-          throw "Expected acceptance validation to fail for incomplete execution session."
-        } catch {
-          if ($_.Exception.Message -match "Expected acceptance validation to fail") {
-            throw
-          }
-          Write-Host "Acceptance dependency on execution completeness enforced." -ForegroundColor Green
-        }
+        Assert-ExpectedFailure `
+          -Action { ./tools/evidence/Test-CertificationAcceptance.ps1 -AcceptancePath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-acceptance.stale.json" } `
+          -FailureMessage "Expected acceptance validation to fail for incomplete execution session." `
+          -SuccessMessage "Acceptance dependency on execution completeness enforced."
+
+        ./tools/evidence/New-CertificationAcceptance.ps1 `
+          -CertificationRunPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-run-manifest.json" `
+          -SummaryPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-review-summary.json" `
+          -ExecutionSessionPath $unverifiedSessionPath `
+          -BundlePath "artifacts/evidence-smoke/ci-acceptance-smoke" `
+          -OutputPath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-acceptance.unverified.json" `
+          -AcceptedBy "ci-operator" `
+          -ApprovedBy "ci-approver"
+
+        Assert-ExpectedFailure `
+          -Action { ./tools/evidence/Test-CertificationAcceptance.ps1 -AcceptancePath "artifacts/evidence-smoke/ci-acceptance-smoke/certification-acceptance.unverified.json" } `
+          -FailureMessage "Expected acceptance validation to fail for trust semantics." `
+          -SuccessMessage "Acceptance dependency on trusted evidence semantics enforced."
 
         Write-Host "Certification and release evidence flow verified." -ForegroundColor Green
 

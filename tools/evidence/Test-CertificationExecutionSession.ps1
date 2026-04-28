@@ -21,6 +21,7 @@ $requiredDrills = @(
 )
 $allowedStatuses = @("missing", "completed", "waived", "example", "blocked_example")
 $allowedStates = @("draft", "in_progress", "completed", "blocked", "expired")
+$nonWaivableDrills = @("operator_signoff")
 
 function Test-JsonProperty {
     param(
@@ -39,6 +40,23 @@ function Test-EvidenceUri {
     }
 
     return $Uri -match "^(artifact|https|ticket|incident)://.+" -or $Uri -match "^[A-Z]+-[0-9]+$"
+}
+
+function Test-Sha256Hex {
+    param([string]$Value)
+
+    return -not [string]::IsNullOrWhiteSpace($Value) -and $Value -match "^[0-9a-fA-F]{64}$"
+}
+
+function Get-TrustTierRank {
+    param([string]$TrustTier)
+
+    $value = if ($null -eq $TrustTier) { "" } else { $TrustTier.ToLowerInvariant() }
+    switch -Regex ($value) {
+        "^signature_verified$" { return 3 }
+        "^provider_verified$" { return 2 }
+        default { return 1 }
+    }
 }
 
 if (-not (Test-Path $SessionPath)) {
@@ -90,6 +108,54 @@ if (-not (Test-JsonProperty -InputObject $session -Name "decisionInputs")) {
     $errors.Add("Certification execution session must include decisionInputs.")
 }
 
+if (-not (Test-JsonProperty -InputObject $session -Name "trustPolicy")) {
+    $errors.Add("Certification execution session must include trustPolicy.")
+}
+else {
+    foreach ($field in @("policyVersion", "policyEnvironment", "minimumTrustTier", "acceptedVerifierClasses", "allowedUriPrefixes", "requireProviderProvenanceProofForVerifierClasses")) {
+        if (-not (Test-JsonProperty -InputObject $session.trustPolicy -Name $field)) {
+            $errors.Add("Certification execution trustPolicy field '$field' is required.")
+        }
+    }
+}
+
+if (-not (Test-JsonProperty -InputObject $session -Name "waivers")) {
+    $errors.Add("Certification execution session must include waivers.")
+}
+else {
+    foreach ($waiver in @($session.waivers)) {
+        foreach ($field in @("waiverId", "authority", "scope", "reason", "expiresAtUtc", "linkedDrills", "nonWaivable", "status")) {
+            if (-not (Test-JsonProperty -InputObject $waiver -Name $field)) {
+                $errors.Add("Waiver entry is missing required field '$field'.")
+            }
+        }
+
+        if ([string]$waiver.status -eq "active") {
+            if ([string]::IsNullOrWhiteSpace([string]$waiver.authority) -or [string]::IsNullOrWhiteSpace([string]$waiver.reason)) {
+                $errors.Add("Active waiver '$($waiver.waiverId)' requires authority and reason.")
+            }
+
+            if (@($waiver.linkedDrills).Count -eq 0) {
+                $errors.Add("Active waiver '$($waiver.waiverId)' requires linked drills.")
+            }
+
+            $waiverExpiry = [DateTimeOffset]::MinValue
+            if (-not [DateTimeOffset]::TryParse([string]$waiver.expiresAtUtc, [ref]$waiverExpiry)) {
+                $errors.Add("Active waiver '$($waiver.waiverId)' has invalid expiresAtUtc.")
+            }
+            elseif ($waiverExpiry -le $now) {
+                $errors.Add("Active waiver '$($waiver.waiverId)' is expired.")
+            }
+
+            foreach ($linkedDrill in @($waiver.linkedDrills)) {
+                if ($nonWaivableDrills -contains [string]$linkedDrill) {
+                    $errors.Add("Waiver '$($waiver.waiverId)' targets non-waivable drill '$linkedDrill'.")
+                }
+            }
+        }
+    }
+}
+
 if (-not (Test-JsonProperty -InputObject $session -Name "drillLedger")) {
     $errors.Add("Certification execution session must include drillLedger.")
 }
@@ -112,6 +178,11 @@ else {
         $evidenceUri = [string]$entry.evidenceUri
         $collectedAtUtc = [string]$entry.collectedAtUtc
         $freshnessWindowDays = [int]$entry.freshnessWindowDays
+        $verificationStatus = ([string]$entry.verificationStatus).ToLowerInvariant()
+        $trustTier = ([string]$entry.trustTier).ToLowerInvariant()
+        $verifierClass = ([string]$entry.verifierClass).ToLowerInvariant()
+        $trustDecision = ([string]$entry.trustDecision).ToLowerInvariant()
+        $artifactHash = [string]$entry.artifactHash
 
         if ($allowedStatuses -notcontains $status) {
             $errors.Add("Drill '$drillKind' has unsupported status '$status'.")
@@ -131,6 +202,50 @@ else {
 
         if ($status -eq "waived" -and [string]::IsNullOrWhiteSpace([string]$entry.waiverRef)) {
             $errors.Add("Drill '$drillKind' with waived status requires waiverRef.")
+        }
+
+        foreach ($requiredField in @("evidenceRecordId", "artifactHash", "artifactHashAlgorithm", "verificationStatus", "verifierClass", "trustTier", "trustDecision", "sourceSystem", "providerId", "providerProvenanceProofUri", "providerHashRecomputed", "allowedUriPrefixMatched", "policyMinimumTrustTier", "policyAcceptedVerifierClasses", "executedBy", "startedAtUtc", "completedAtUtc")) {
+            if (-not (Test-JsonProperty -InputObject $entry -Name $requiredField)) {
+                $errors.Add("Drill '$drillKind' is missing trusted evidence field '$requiredField'.")
+            }
+        }
+
+        if ($status -eq "completed") {
+            if ([string]::IsNullOrWhiteSpace([string]$entry.evidenceRecordId)) {
+                $errors.Add("Drill '$drillKind' completed state requires evidenceRecordId.")
+            }
+
+            if (-not (Test-Sha256Hex -Value $artifactHash)) {
+                $errors.Add("Drill '$drillKind' completed state requires SHA-256 artifactHash.")
+            }
+
+            if ($verificationStatus -notin @("verified", "accepted")) {
+                $errors.Add("Drill '$drillKind' completed state requires verified evidence.")
+            }
+
+            if ($trustDecision -ne "accepted") {
+                $errors.Add("Drill '$drillKind' completed state requires accepted trustDecision.")
+            }
+
+            if (-not [bool]$entry.allowedUriPrefixMatched) {
+                $errors.Add("Drill '$drillKind' completed state has disallowed evidence URI prefix.")
+            }
+
+            if (@($session.trustPolicy.acceptedVerifierClasses).Count -gt 0 -and @($session.trustPolicy.acceptedVerifierClasses | Where-Object { [string]::Equals($_, $verifierClass, [System.StringComparison]::OrdinalIgnoreCase) }).Count -eq 0) {
+                $errors.Add("Drill '$drillKind' uses unaccepted verifierClass '$verifierClass'.")
+            }
+
+            if ((Get-TrustTierRank -TrustTier $trustTier) -lt (Get-TrustTierRank -TrustTier ([string]$entry.policyMinimumTrustTier))) {
+                $errors.Add("Drill '$drillKind' trustTier '$trustTier' is below minimum '$([string]$entry.policyMinimumTrustTier)'.")
+            }
+
+            $providerProofRequired = @($session.trustPolicy.requireProviderProvenanceProofForVerifierClasses | Where-Object { [string]::Equals($_, $verifierClass, [System.StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+            if ($providerProofRequired -and -not [bool]$entry.providerHashRecomputed -and [string]::IsNullOrWhiteSpace([string]$entry.providerProvenanceProofUri)) {
+                $errors.Add("Drill '$drillKind' requires provider provenance proof.")
+            }
+        }
+        elseif ($status -eq "waived" -and $trustDecision -ne "waived") {
+            $errors.Add("Drill '$drillKind' waived state requires trustDecision waived.")
         }
 
         if ($drillKind -eq "operator_signoff" -and $status -in @("completed", "waived")) {
@@ -190,6 +305,16 @@ else {
 
     if ([bool]$session.decisionInputs.operatorSignoffCompleted -ne $signoffComplete) {
         $errors.Add("decisionInputs.operatorSignoffCompleted does not match operator_signoff drill state.")
+    }
+
+    foreach ($field in @("trustedEvidenceBound", "trustedEvidenceVerified", "trustedEvidencePolicySatisfied", "providerProvenanceComplete", "invalidWaiverPresent", "nonWaivableViolationPresent", "trustedEvidenceReady")) {
+        if (-not (Test-JsonProperty -InputObject $session.decisionInputs -Name $field)) {
+            $errors.Add("decisionInputs.$field is required.")
+        }
+    }
+
+    if (-not [bool]$session.decisionInputs.trustedEvidenceReady -and $session.executionState -eq "completed") {
+        $errors.Add("Completed execution session requires trustedEvidenceReady.")
     }
 }
 

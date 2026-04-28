@@ -1,6 +1,6 @@
 # Staging And Prod-Like Certification Execution
 
-This guide is the Sprint 29 operator path for preparing a certification run, capturing drill execution, and handing it to live-certification acceptance. It does not replace real staging/prod-like execution; it makes the evidence preparation, execution capture, review gate, and acceptance handoff repeatable.
+This guide is the Sprint 30 operator path for preparing a certification run, capturing drill execution, and handing it to live-certification acceptance and release-authority review. It does not replace real staging/prod-like execution; it makes evidence preparation, trusted provenance validation, review gate, and acceptance handoff repeatable.
 
 ## 1. Gather Evidence References
 
@@ -15,6 +15,7 @@ Run the catalog runbook and required failure drills in the target environment. C
 - `operator_signoff`
 
 Use `docs/certification_evidence_refs.example.json` as the shape, but do not use example refs for release review.
+Use `docs/certification_trusted_evidence_refs.example.json` as the trusted evidence metadata shape (evidence record id, artifact hash, verification status, trust tier, verifier class, and provider provenance proof).
 
 ## 2. Generate The Certification Run Manifest
 
@@ -100,7 +101,9 @@ After the manifest validates, record what actually ran:
 ```powershell
 ./tools/evidence/New-CertificationExecutionSession.ps1 `
   -CertificationRunPath "release-evidence/release-2026-04-16/certification-run-manifest.json" `
-  -OutputPath "release-evidence/release-2026-04-16/certification-execution-session.json"
+  -OutputPath "release-evidence/release-2026-04-16/certification-execution-session.json" `
+  -TrustedEvidencePath "release-evidence/release-2026-04-16/trusted-evidence-refs.json" `
+  -TrustPolicyPath "docs/certification_execution_trust_policy.template.json"
 
 ./tools/evidence/Test-CertificationExecutionSession.ps1 `
   -SessionPath "release-evidence/release-2026-04-16/certification-execution-session.json"
@@ -111,8 +114,18 @@ After the manifest validates, record what actually ran:
 ```
 
 Execution must be completed drill-by-drill before live acceptance.
+Execution trust policy must also pass drill-by-drill before live acceptance.
 
-## 8. Record Live Acceptance
+## 8. Generate Release Authority Packet
+
+```powershell
+./tools/evidence/New-CertificationReleaseAuthorityPacket.ps1 `
+  -SessionPath "release-evidence/release-2026-04-16/certification-execution-session.json" `
+  -ReviewSummaryPath "release-evidence/release-2026-04-16/certification-review-summary.json" `
+  -OutputRoot "release-evidence/release-2026-04-16"
+```
+
+## 9. Record Live Acceptance
 
 Only after the review summary validates without allowances, follow `docs/live_certification_acceptance.md`:
 
@@ -148,4 +161,7 @@ Promotion is blocked when:
 - release ids or certification run ids differ across certification manifest and bundle artifacts,
 - the certification manifest review gate is not `ready_for_review`,
 - required drill execution session is missing or incomplete,
+- trusted evidence is not bound/verified/policy-compliant at drill level,
+- provider-backed provenance proof is missing when policy requires it,
+- waiver objects are invalid, expired, or target non-waivable drills,
 - live acceptance is missing, blocked, expired, or based on dry-run/example evidence.

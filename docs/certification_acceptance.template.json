@@ -54,7 +54,9 @@
     "reviewReady": false,
     "signoffPresent": false,
     "bundleHashCaptured": false,
-    "executionSessionComplete": false
+    "executionSessionComplete": false,
+    "trustedEvidenceReady": false,
+    "trustedEvidencePolicySatisfied": false
   },
   "waivers": [],
   "blockers": []
