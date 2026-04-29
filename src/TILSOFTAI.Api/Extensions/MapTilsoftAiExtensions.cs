@@ -14,18 +14,18 @@ public static class MapTilsoftAiExtensions
     {
         // Private Network Access (PNA) - must be first to handle PNA preflight before any other middleware
         app.UseMiddleware<PrivateNetworkAccessMiddleware>();
-        
+
         app.UseRouting();
-        
+
         // Security headers for all responses
         app.UseMiddleware<SecurityHeadersMiddleware>();
-        
+
         // Metrics middleware - Outermost (after security headers) to measure full pipeline including error handling
         app.UseMiddleware<MetricsMiddleware>();
 
         // Exception handling must be outermost to ensure all errors are envelope-shaped
         app.UseMiddleware<ExceptionHandlingMiddleware>();
-        
+
         // CORS (if enabled via configuration)
         var corsOptions = app.Services.GetRequiredService<IOptions<CorsOptions>>().Value;
         if (corsOptions.Enabled)
@@ -71,7 +71,7 @@ public static class MapTilsoftAiExtensions
                 }
             });
         }
-        
+
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseMiddleware<RequestSizeLimitMiddleware>();
@@ -88,30 +88,30 @@ public static class MapTilsoftAiExtensions
         // Metrics endpoint
         // Resolve options to get path
         var metricsOptions = app.Services.GetRequiredService<IOptions<MetricsOptions>>().Value;
-        app.MapGet(metricsOptions.EndpointPath, async (HttpContext context, IOptions<MetricsOptions> options) => 
+        app.MapGet(metricsOptions.EndpointPath, async (HttpContext context, IOptions<MetricsOptions> options) =>
         {
             await TILSOFTAI.Api.Endpoints.MetricsEndpoint.HandleAsync(context, options);
         })
         .AllowAnonymous() // Auth handled inside endpoint if configured
         .DisableRateLimiting();
-        
+
         // Health endpoints for operational readiness
         app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
         {
             Predicate = _ => false // No checks for liveness - always returns 200 if process is up
         }).AllowAnonymous();
-        
+
         app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
         {
             Predicate = check => check.Tags.Contains("ready")
         }).AllowAnonymous();
-        
+
         // Detailed health endpoint with JSON response (authenticated)
         app.MapHealthChecks("/health/detailed", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
         {
             ResponseWriter = WriteDetailedResponse
         }).RequireAuthorization();
-        
+
         // Keep backward compatible /health endpoint
         app.MapHealthChecks("/health").AllowAnonymous();
 
@@ -123,7 +123,7 @@ public static class MapTilsoftAiExtensions
         Microsoft.Extensions.Diagnostics.HealthChecks.HealthReport report)
     {
         context.Response.ContentType = "application/json";
-        
+
         var result = new
         {
             status = report.Status.ToString(),
@@ -138,7 +138,7 @@ public static class MapTilsoftAiExtensions
                 exception = e.Value.Exception?.Message
             })
         };
-        
+
         await context.Response.WriteAsJsonAsync(result);
     }
 }

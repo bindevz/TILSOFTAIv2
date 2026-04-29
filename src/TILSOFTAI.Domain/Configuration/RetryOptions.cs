@@ -11,7 +11,7 @@ public class RetryOptions
     public double BackoffMultiplier { get; set; } = 2.0;
     public double JitterFactor { get; set; } = 0.2;
     public TimeSpan TotalTimeout { get; set; } = TimeSpan.FromSeconds(30);
-    
+
     // List of exceptions / status codes is tricky to configure via simple JSON binding
     // usually handled by code or complex object binding.
     // Spec says "RetryableExceptions: Type[]". This is hard to bind from JSON.

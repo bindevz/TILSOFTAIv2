@@ -38,9 +38,9 @@ public sealed class BasicLogRedactor : ILogRedactor
         @"/[^""'\s]+",
         RegexOptions.Compiled);
 
-    private static readonly string[] SensitiveKeys = 
+    private static readonly string[] SensitiveKeys =
     {
-        "password", "token", "email", "phone", "address", 
+        "password", "token", "email", "phone", "address",
         "ssn", "credit_card", "api_key", "secret", "apikey"
     };
 
@@ -156,7 +156,7 @@ public sealed class BasicLogRedactor : ILogRedactor
                 var value = property.Value;
 
                 // Check if key is sensitive
-                var isSensitiveKey = SensitiveKeys.Any(sk => 
+                var isSensitiveKey = SensitiveKeys.Any(sk =>
                     key.Contains(sk, StringComparison.OrdinalIgnoreCase));
 
                 if (isSensitiveKey && value.ValueKind == JsonValueKind.String)
@@ -226,7 +226,7 @@ public sealed class BasicLogRedactor : ILogRedactor
         return element.ValueKind switch
         {
             JsonValueKind.String => element.GetString(),
-            JsonValueKind.Number =>element.TryGetInt64(out var l) ? l : element.GetDouble(),
+            JsonValueKind.Number => element.TryGetInt64(out var l) ? l : element.GetDouble(),
             JsonValueKind.True => true,
             JsonValueKind.False => false,
             JsonValueKind.Null => null,

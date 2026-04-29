@@ -53,47 +53,47 @@ public sealed class ToolResultCompactor
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
-            {
-                var obj = new JsonObject();
-                foreach (var property in element.EnumerateObject())
                 {
-                    if (ShouldRemove(property.Name, rules.RemoveFields))
+                    var obj = new JsonObject();
+                    foreach (var property in element.EnumerateObject())
                     {
-                        removedFields.Add(property.Name);
-                        continue;
+                        if (ShouldRemove(property.Name, rules.RemoveFields))
+                        {
+                            removedFields.Add(property.Name);
+                            continue;
+                        }
+
+                        obj[property.Name] = CompactElement(property.Value, rules, removedFields, ref truncated);
+                    }
+                    return obj;
+                }
+            case JsonValueKind.Array:
+                {
+                    var items = new List<JsonNode>();
+                    foreach (var item in element.EnumerateArray())
+                    {
+                        items.Add(CompactElement(item, rules, removedFields, ref truncated));
                     }
 
-                    obj[property.Name] = CompactElement(property.Value, rules, removedFields, ref truncated);
-                }
-                return obj;
-            }
-            case JsonValueKind.Array:
-            {
-                var items = new List<JsonNode>();
-                foreach (var item in element.EnumerateArray())
-                {
-                    items.Add(CompactElement(item, rules, removedFields, ref truncated));
-                }
-
-                if (rules.MaxArrayLength > 0 && items.Count > rules.MaxArrayLength)
-                {
-                    truncated = true;
-                    var headCount = Math.Clamp(rules.HeadCount, 0, items.Count);
-                    var tailCount = Math.Clamp(rules.TailCount, 0, Math.Max(0, items.Count - headCount));
-                var headItems = new JsonArray(items.Take(headCount).ToArray());
-                var tailItems = new JsonArray(items.Skip(items.Count - tailCount).ToArray());
-
-                    return new JsonObject
+                    if (rules.MaxArrayLength > 0 && items.Count > rules.MaxArrayLength)
                     {
-                        ["_truncated"] = true,
-                        ["totalCount"] = items.Count,
-                        ["head"] = headItems,
-                        ["tail"] = tailItems
-                    };
-                }
+                        truncated = true;
+                        var headCount = Math.Clamp(rules.HeadCount, 0, items.Count);
+                        var tailCount = Math.Clamp(rules.TailCount, 0, Math.Max(0, items.Count - headCount));
+                        var headItems = new JsonArray(items.Take(headCount).ToArray());
+                        var tailItems = new JsonArray(items.Skip(items.Count - tailCount).ToArray());
 
-                return new JsonArray(items.ToArray());
-            }
+                        return new JsonObject
+                        {
+                            ["_truncated"] = true,
+                            ["totalCount"] = items.Count,
+                            ["head"] = headItems,
+                            ["tail"] = tailItems
+                        };
+                    }
+
+                    return new JsonArray(items.ToArray());
+                }
             default:
                 return JsonNode.Parse(element.GetRawText()) ?? new JsonObject();
         }

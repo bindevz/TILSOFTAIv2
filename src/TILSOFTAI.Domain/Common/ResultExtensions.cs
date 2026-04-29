@@ -15,7 +15,7 @@ public static class ResultExtensions
             ? Result<T>.Success(value)
             : Result<T>.Failure(errorIfNull);
     }
-    
+
     /// <summary>
     /// Combines two results into a tuple result.
     /// </summary>

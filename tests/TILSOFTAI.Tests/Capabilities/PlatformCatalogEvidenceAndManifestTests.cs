@@ -560,29 +560,29 @@ public sealed class PlatformCatalogEvidenceAndManifestTests
     private static CatalogCertificationEvidenceRecord TrustedEvidence(
         string evidenceId,
         string evidenceKind = CatalogCertificationEvidenceKinds.RunbookExecution) => new()
-    {
-        EvidenceId = evidenceId,
-        EnvironmentName = "prod",
-        EvidenceKind = evidenceKind,
-        Status = CatalogCertificationEvidenceStatus.Accepted,
-        Summary = $"{evidenceKind} accepted",
-        EvidenceUri = $"https://evidence.example/{evidenceId}.json",
-        OperatorUserId = "operator",
-        ArtifactHash = new string('b', 64),
-        ArtifactHashAlgorithm = "sha256",
-        ArtifactContentType = "application/json",
-        ArtifactType = "runbook",
-        SourceSystem = "runbook",
-        CollectedAtUtc = DateTime.UtcNow,
-        VerificationStatus = CatalogEvidenceVerificationStatus.Verified,
-        TrustTier = CatalogEvidenceTrustTiers.ProviderVerified,
-        ArtifactProvider = "test-provider",
-        ProviderVerifiedAtUtc = DateTime.UtcNow,
-        ArtifactSizeBytes = 128,
-        VerifiedByUserId = "verifier",
-        VerifiedAtUtc = DateTime.UtcNow,
-        ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
-    };
+        {
+            EvidenceId = evidenceId,
+            EnvironmentName = "prod",
+            EvidenceKind = evidenceKind,
+            Status = CatalogCertificationEvidenceStatus.Accepted,
+            Summary = $"{evidenceKind} accepted",
+            EvidenceUri = $"https://evidence.example/{evidenceId}.json",
+            OperatorUserId = "operator",
+            ArtifactHash = new string('b', 64),
+            ArtifactHashAlgorithm = "sha256",
+            ArtifactContentType = "application/json",
+            ArtifactType = "runbook",
+            SourceSystem = "runbook",
+            CollectedAtUtc = DateTime.UtcNow,
+            VerificationStatus = CatalogEvidenceVerificationStatus.Verified,
+            TrustTier = CatalogEvidenceTrustTiers.ProviderVerified,
+            ArtifactProvider = "test-provider",
+            ProviderVerifiedAtUtc = DateTime.UtcNow,
+            ArtifactSizeBytes = 128,
+            VerifiedByUserId = "verifier",
+            VerifiedAtUtc = DateTime.UtcNow,
+            ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
+        };
 
     private static CatalogMutationContext Context(string userId = "release-authority") => new()
     {

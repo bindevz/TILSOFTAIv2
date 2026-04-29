@@ -35,7 +35,7 @@ public sealed class RedisCacheProvider : IRedisCacheProvider
     {
         try
         {
-            var value = await _circuitBreaker.ExecuteAsync<string?>(async ct => 
+            var value = await _circuitBreaker.ExecuteAsync<string?>(async ct =>
             {
                 return await _retryPolicy.ExecuteAsync<string?>(async (int attempt, CancellationToken token) =>
                 {
@@ -51,7 +51,7 @@ public sealed class RedisCacheProvider : IRedisCacheProvider
             {
                 _metrics.IncrementCounter(MetricNames.CacheMissesTotal);
             }
-        
+
             return value;
         }
         catch (Exception ex)

@@ -228,11 +228,11 @@ public sealed class SemanticCapabilityRetrieverTests
             new DomainGate(),
             Options.Create(new AiRoutingOptions
             {
-            MaxCandidateDomains = 2,
-            MaxCandidateToolsPerDomain = 1,
-            MaxTotalCandidateTools = 2,
-            MaxCandidateTools = 2
-        }));
+                MaxCandidateDomains = 2,
+                MaxCandidateToolsPerDomain = 1,
+                MaxTotalCandidateTools = 2,
+                MaxCandidateTools = 2
+            }));
 
     private static IReadOnlySet<string> ModelOnlyDomains() =>
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "model" };

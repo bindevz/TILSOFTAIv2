@@ -279,7 +279,7 @@ public sealed partial class SqlExecutor : ISqlExecutor
     {
         var rows = new List<IReadOnlyDictionary<string, object?>>();
         await using var reader = await command.ExecuteReaderAsync(ct);
-        
+
         while (await reader.ReadAsync(ct))
         {
             var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);

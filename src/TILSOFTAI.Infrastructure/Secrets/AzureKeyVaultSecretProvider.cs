@@ -42,7 +42,7 @@ public sealed class AzureKeyVaultSecretProvider : ISecretProvider
     public async Task<string?> GetSecretAsync(string key, CancellationToken cancellationToken = default)
     {
         var cacheKey = $"akv:{key}";
-        
+
         if (_cache.TryGetValue(cacheKey, out string? cachedValue))
         {
             return cachedValue;

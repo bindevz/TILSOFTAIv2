@@ -26,7 +26,7 @@ namespace TILSOFTAI.Infrastructure.Metrics
             if (!_options.Enabled) return;
 
             var counter = _counters.GetOrAdd(name, n => Prometheus.Metrics.CreateCounter(n, n, GetLabelNames(labels)));
-            
+
             if (labels != null && labels.Count > 0)
             {
                 counter.WithLabels(GetLabelValues(labels)).Inc(value);
@@ -75,7 +75,7 @@ namespace TILSOFTAI.Infrastructure.Metrics
 
         public IDisposable CreateTimer(string name, Dictionary<string, string>? labels = null)
         {
-             if (!_options.Enabled) return new NoOpDisposable();
+            if (!_options.Enabled) return new NoOpDisposable();
 
             var histogram = _histograms.GetOrAdd(name, n => Prometheus.Metrics.CreateHistogram(n, n, new HistogramConfiguration
             {
@@ -99,7 +99,7 @@ namespace TILSOFTAI.Infrastructure.Metrics
         private string[] GetLabelNames(Dictionary<string, string>? labels)
         {
             if (labels == null || labels.Count == 0) return Array.Empty<string>();
-            
+
             // Ensure consistent order
             return labels.Keys.OrderBy(k => k).ToArray();
         }

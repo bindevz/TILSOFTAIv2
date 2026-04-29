@@ -5,12 +5,12 @@ namespace TILSOFTAI.Domain.Configuration
         public bool StructuredLoggingEnabled { get; set; } = true;
         public LogOutputFormat OutputFormat { get; set; } = LogOutputFormat.Json;
         public bool IncludeScopes { get; set; } = true;
-        public string[] RedactedFields { get; set; } = new[] 
-        { 
-            "password", 
-            "token", 
-            "apikey", 
-            "secret", 
+        public string[] RedactedFields { get; set; } = new[]
+        {
+            "password",
+            "token",
+            "apikey",
+            "secret",
             "connectionstring",
             "authorization",
             "cookie"

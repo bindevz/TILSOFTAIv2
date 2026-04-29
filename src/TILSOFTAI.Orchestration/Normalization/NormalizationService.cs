@@ -87,7 +87,7 @@ public sealed class NormalizationService : INormalizationService
         }
 
         output = _seasonNormalizer.ExpandMarkedSeasons(output);
-        
+
         // Post-canonicalize and guard against empty result
         output = PromptTextCanonicalizer.Canonicalize(output);
         if (string.IsNullOrWhiteSpace(output))
@@ -106,7 +106,7 @@ public sealed class NormalizationService : INormalizationService
                 inputTokenCount, outputTokenCount);
             return PromptTextCanonicalizer.Canonicalize(input) ?? input.Trim();
         }
-        
+
         return output;
     }
 

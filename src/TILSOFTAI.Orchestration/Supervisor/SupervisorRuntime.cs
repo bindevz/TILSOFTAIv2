@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Agents.Abstractions;
@@ -19,8 +20,8 @@ namespace TILSOFTAI.Supervisor;
 
 public sealed class SupervisorRuntime : ISupervisorRuntime
 {
-    private readonly IIntentClassifier _intentClassifier;
-    private readonly IAgentRegistry _agentRegistry;
+    private readonly IIntentClassifier? _intentClassifier;
+    private readonly IAgentRegistry? _agentRegistry;
     private readonly IApprovalEngine _approvalEngine;
     private readonly IToolAdapterRegistry _toolAdapterRegistry;
     private readonly ILogger<SupervisorRuntime> _logger;
@@ -28,6 +29,29 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
     private readonly IAgentToolRouter? _agentToolRouter;
     private readonly AiRoutingOptions _aiRoutingOptions;
     private readonly IPendingActionConfirmationResolver? _pendingActionConfirmationResolver;
+
+    [ActivatorUtilitiesConstructor]
+    public SupervisorRuntime(
+        IApprovalEngine approvalEngine,
+        IToolAdapterRegistry toolAdapterRegistry,
+        ILogger<SupervisorRuntime> logger,
+        RuntimeExecutionInstrumentation? instrumentation = null,
+        IAgentToolRouter? agentToolRouter = null,
+        IOptions<AiRoutingOptions>? aiRoutingOptions = null,
+        IPendingActionConfirmationResolver? pendingActionConfirmationResolver = null)
+        : this(
+            useLegacyRouting: false,
+            null,
+            null,
+            approvalEngine,
+            toolAdapterRegistry,
+            logger,
+            instrumentation,
+            agentToolRouter,
+            aiRoutingOptions,
+            pendingActionConfirmationResolver)
+    {
+    }
 
     public SupervisorRuntime(
         IIntentClassifier intentClassifier,
@@ -39,9 +63,38 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
         IAgentToolRouter? agentToolRouter = null,
         IOptions<AiRoutingOptions>? aiRoutingOptions = null,
         IPendingActionConfirmationResolver? pendingActionConfirmationResolver = null)
+        : this(
+            useLegacyRouting: true,
+            intentClassifier,
+            agentRegistry,
+            approvalEngine,
+            toolAdapterRegistry,
+            logger,
+            instrumentation,
+            agentToolRouter,
+            aiRoutingOptions,
+            pendingActionConfirmationResolver)
     {
-        _intentClassifier = intentClassifier ?? throw new ArgumentNullException(nameof(intentClassifier));
-        _agentRegistry = agentRegistry ?? throw new ArgumentNullException(nameof(agentRegistry));
+    }
+
+    private SupervisorRuntime(
+        bool useLegacyRouting,
+        IIntentClassifier? intentClassifier,
+        IAgentRegistry? agentRegistry,
+        IApprovalEngine approvalEngine,
+        IToolAdapterRegistry toolAdapterRegistry,
+        ILogger<SupervisorRuntime> logger,
+        RuntimeExecutionInstrumentation? instrumentation = null,
+        IAgentToolRouter? agentToolRouter = null,
+        IOptions<AiRoutingOptions>? aiRoutingOptions = null,
+        IPendingActionConfirmationResolver? pendingActionConfirmationResolver = null)
+    {
+        _intentClassifier = useLegacyRouting
+            ? intentClassifier ?? throw new ArgumentNullException(nameof(intentClassifier))
+            : null;
+        _agentRegistry = useLegacyRouting
+            ? agentRegistry ?? throw new ArgumentNullException(nameof(agentRegistry))
+            : null;
         _approvalEngine = approvalEngine ?? throw new ArgumentNullException(nameof(approvalEngine));
         _toolAdapterRegistry = toolAdapterRegistry ?? throw new ArgumentNullException(nameof(toolAdapterRegistry));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -121,6 +174,14 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
         }
 
         var sw = Stopwatch.StartNew();
+
+        if (_intentClassifier is null || _agentRegistry is null)
+        {
+            return FailClosedAgentRouting(
+                ctx,
+                "Official Agent Framework routing is required; legacy domain-agent routing is not registered.",
+                "LEGACY_ROUTING_DISABLED");
+        }
 
         // Step 1: Classify intent to determine domain hint (if not already provided)
         var task = MapRequest(request);

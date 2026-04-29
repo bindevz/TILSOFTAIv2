@@ -57,10 +57,10 @@ public sealed class CacheWriteBackgroundService : BackgroundService, ICacheWrite
             try
             {
                 await _cache.SetAsync(
-                    item.TenantId, 
-                    item.NormalizedQuery ?? string.Empty, 
-                    item.Roles, 
-                    item.Insight, 
+                    item.TenantId,
+                    item.NormalizedQuery ?? string.Empty,
+                    item.Roles,
+                    item.Insight,
                     stoppingToken);
 
                 _metrics.IncrementCounter(MetricNames.CacheWriteSuccessTotal);
@@ -69,9 +69,9 @@ public sealed class CacheWriteBackgroundService : BackgroundService, ICacheWrite
             {
                 _logger.LogError(ex,
                     "CacheWriteFailed | Tenant: {TenantId} | Query: {Query} | Error: {Error}",
-                    item.TenantId, 
-                    item.NormalizedQuery?.Length > 50 
-                        ? item.NormalizedQuery[..50] + "..." 
+                    item.TenantId,
+                    item.NormalizedQuery?.Length > 50
+                        ? item.NormalizedQuery[..50] + "..."
                         : item.NormalizedQuery,
                     ex.Message);
 

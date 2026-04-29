@@ -54,15 +54,15 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
         try
         {
             var normalizedQuestion = NormalizeQuestion(question);
-           var (digest, _, toolDigest, planDigest) = ComputeCacheDigests(context, normalizedQuestion, tools, planJson);
-            
+            var (digest, _, toolDigest, planDigest) = ComputeCacheDigests(context, normalizedQuestion, tools, planJson);
+
             // 1. Generate Embedding (SQL or C#)
             float[]? embedding;
             if (_options.UseSqlEmbeddings)
             {
                 _logger.LogDebug("Attempting to use SQL Server AI embeddings.");
                 embedding = await GenerateEmbeddingSqlAsync(normalizedQuestion, ct);
-                
+
                 // Fallback to C# if SQL returns null/empty
                 if (embedding == null || embedding.Length == 0)
                 {
@@ -74,7 +74,7 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
             {
                 embedding = await _embeddingClient.GenerateEmbeddingAsync(normalizedQuestion, ct);
             }
-            
+
             if (embedding == null || embedding.Length == 0) return Result<string?>.Success(null);
 
             // 2. Search in SQL
@@ -119,7 +119,7 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
             {
                 _logger.LogDebug("Attempting to use SQL Server AI embeddings for cache write.");
                 embedding = await GenerateEmbeddingSqlAsync(normalizedQuestion, ct);
-                
+
                 // Fallback to C# if SQL returns null/empty
                 if (embedding == null || embedding.Length == 0)
                 {
@@ -131,7 +131,7 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
             {
                 embedding = await _embeddingClient.GenerateEmbeddingAsync(normalizedQuestion, ct);
             }
-            
+
             if (embedding == null || embedding.Length == 0) return;
 
             // 2. Upsert in SQL
@@ -168,7 +168,7 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
     }
 
     private async Task UpsertSqlAsync(
-        TilsoftExecutionContext context, string module, string questionHash, string questionText, 
+        TilsoftExecutionContext context, string module, string questionHash, string questionText,
         string toolHash, string planHash, string answer, float[] embedding, CancellationToken ct)
     {
         await using var connection = new SqlConnection(_sqlOptions.ConnectionString);
@@ -194,11 +194,11 @@ public sealed class SqlVectorSemanticCache : ISemanticCache
 
     // --- Helper Logic (Duplicated from SemanticCache.cs) ---
 
-     private static (string Digest, string QuestionHash, string ToolDigest, string PlanDigest) ComputeCacheDigests(
-        TilsoftExecutionContext context,
-        string normalizedQuestion,
-        IReadOnlyList<ToolDefinition> tools,
-        string? planJson)
+    private static (string Digest, string QuestionHash, string ToolDigest, string PlanDigest) ComputeCacheDigests(
+       TilsoftExecutionContext context,
+       string normalizedQuestion,
+       IReadOnlyList<ToolDefinition> tools,
+       string? planJson)
     {
         var questionHash = ComputeHash(normalizedQuestion);
         var toolDigest = ComputeToolDigest(tools);

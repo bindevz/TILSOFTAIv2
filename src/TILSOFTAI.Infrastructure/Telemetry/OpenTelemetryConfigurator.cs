@@ -43,7 +43,7 @@ namespace TILSOFTAI.Infrastructure.Telemetry
                         o.RecordException = true;
                     });*/
                 }
-                
+
                 /*
                 if (options.EnableRedisInstrumentation)
                 {

@@ -310,24 +310,24 @@ public sealed class OfficialAgentFunctionProviderTests
         string aliases = """["item","sku"]""",
         string examples = """["stock for CHAIR-001"]""",
         string domain = "warehouse") => new()
-    {
-        Score = 1,
-        Metadata = new CapabilitySemanticMetadata
         {
-            CapabilityKey = key,
-            Domain = domain,
-            FunctionName = key.Replace('.', '_').Replace('-', '_'),
-            AdapterType = "sql",
-            Operation = operation,
-            ExecutionMode = executionMode,
-            Text = new CapabilityTextMetadata
+            Score = 1,
+            Metadata = new CapabilitySemanticMetadata
             {
-                Locale = "en-US",
-                Description = description,
-                UseWhen = useWhen,
-                DoNotUseWhen = "Do not use when loaded from C#."
-            },
-            Arguments =
+                CapabilityKey = key,
+                Domain = domain,
+                FunctionName = key.Replace('.', '_').Replace('-', '_'),
+                AdapterType = "sql",
+                Operation = operation,
+                ExecutionMode = executionMode,
+                Text = new CapabilityTextMetadata
+                {
+                    Locale = "en-US",
+                    Description = description,
+                    UseWhen = useWhen,
+                    DoNotUseWhen = "Do not use when loaded from C#."
+                },
+                Arguments =
             [
                 new CapabilityArgumentMetadata
                 {
@@ -346,31 +346,31 @@ public sealed class OfficialAgentFunctionProviderTests
                     }
                 }
             ]
-        }
-    };
+            }
+        };
 
     private static CapabilityCandidate ModelCodeCandidate(
         string key,
         string argumentName,
         string dataType = "string") => new()
-    {
-        Score = 1,
-        Metadata = new CapabilitySemanticMetadata
         {
-            CapabilityKey = key,
-            Domain = "model",
-            FunctionName = key.Replace('.', '_').Replace('-', '_'),
-            AdapterType = "sql",
-            Operation = "read",
-            ExecutionMode = "read",
-            Text = new CapabilityTextMetadata
+            Score = 1,
+            Metadata = new CapabilitySemanticMetadata
             {
-                Locale = "en-US",
-                Description = "Loaded from SQL metadata.",
-                UseWhen = "Use when loaded from SQL.",
-                DoNotUseWhen = "Do not use when loaded from C#."
-            },
-            Arguments =
+                CapabilityKey = key,
+                Domain = "model",
+                FunctionName = key.Replace('.', '_').Replace('-', '_'),
+                AdapterType = "sql",
+                Operation = "read",
+                ExecutionMode = "read",
+                Text = new CapabilityTextMetadata
+                {
+                    Locale = "en-US",
+                    Description = "Loaded from SQL metadata.",
+                    UseWhen = "Use when loaded from SQL.",
+                    DoNotUseWhen = "Do not use when loaded from C#."
+                },
+                Arguments =
             [
                 new CapabilityArgumentMetadata
                 {
@@ -393,8 +393,8 @@ public sealed class OfficialAgentFunctionProviderTests
                     }
                 }
             ]
-        }
-    };
+            }
+        };
 
     private sealed class StubCapabilityExecutionFacade : ICapabilityExecutionFacade
     {

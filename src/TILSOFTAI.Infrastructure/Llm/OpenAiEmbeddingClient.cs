@@ -22,7 +22,7 @@ public sealed class OpenAiEmbeddingClient : IEmbeddingClient
     private readonly ILogger<OpenAiEmbeddingClient> _logger;
 
     public OpenAiEmbeddingClient(
-        HttpClient httpClient, 
+        HttpClient httpClient,
         IOptions<LlmOptions> llmOptions,
         IOptions<SemanticCacheOptions> cacheOptions,
         ILogger<OpenAiEmbeddingClient> logger)
@@ -56,21 +56,21 @@ public sealed class OpenAiEmbeddingClient : IEmbeddingClient
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _llmOptions.ApiKey);
-        httpRequest.Content = new StringContent( JsonSerializer.Serialize(requestPayload, JsonOptions) );
+        httpRequest.Content = new StringContent(JsonSerializer.Serialize(requestPayload, JsonOptions));
         httpRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
         using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
-             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-             _logger.LogError("Embedding request failed. Status={Status} Body={Body}", response.StatusCode, body);
-             throw new InvalidOperationException($"Embedding request failed: {response.StatusCode}");
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("Embedding request failed. Status={Status} Body={Body}", response.StatusCode, body);
+            throw new InvalidOperationException($"Embedding request failed: {response.StatusCode}");
         }
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         using var doc = JsonDocument.Parse(json);
-        
+
         // Response format: { "data": [ { "embedding": [ ... ] } ] }
         var dataArray = doc.RootElement.GetProperty("data");
         if (dataArray.GetArrayLength() == 0)

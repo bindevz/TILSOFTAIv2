@@ -7,7 +7,7 @@ public sealed class ErrorEnvelope
     public string LocalizedMessage { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public object? Detail { get; set; }
-    
+
     // Trace fields for observability
     public string? CorrelationId { get; set; }
     public string? TraceId { get; set; }

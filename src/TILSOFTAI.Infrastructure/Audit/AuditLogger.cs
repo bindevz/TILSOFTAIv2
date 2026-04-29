@@ -77,10 +77,10 @@ public sealed class AuditLogger : IAuditLogger
     public void LogGovernanceEvent(GovernanceAuditEvent @event)
     {
         // Map string EventType to enum
-        var eventTypeEnum = @event.EventType == "governance.allow" 
-            ? AuditEventType.Governance_Allow 
+        var eventTypeEnum = @event.EventType == "governance.allow"
+            ? AuditEventType.Governance_Allow
             : AuditEventType.Governance_Deny;
-        
+
         if (!_options.ShouldAudit(eventTypeEnum)) return;
 
         var auditEvent = new AuditEvent

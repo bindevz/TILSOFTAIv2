@@ -43,12 +43,12 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
     public async Task<LlmResponse> CompleteAsync(LlmRequest req, CancellationToken ct)
     {
         using var activity = _instrumentation.StartRequest(_options.Model);
-        
+
         var requestPayload = BuildRequest(req, stream: false);
 
         var sw = Stopwatch.StartNew();
         using var timer = _metrics.CreateTimer(MetricNames.LlmRequestDurationSeconds, new Dictionary<string, string> { { "model", _options.Model }, { "streaming", "false" } });
-        
+
         _metrics.IncrementCounter(MetricNames.LlmRequestsTotal, new Dictionary<string, string> { { "model", _options.Model }, { "streaming", "false" } });
 
         using var response = await _retryPolicy.ExecuteAsync<HttpResponseMessage>(async ct0 =>

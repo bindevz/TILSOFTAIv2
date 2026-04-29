@@ -35,20 +35,20 @@ public sealed class SqlErrorLogWriter : ISqlErrorLogWriter
         var tenantId = string.IsNullOrWhiteSpace(context.TenantId) ? "unknown" : context.TenantId;
         var errorId = Guid.NewGuid().ToString("N");
         var safeMessage = message ?? string.Empty;
-        
+
         // Redact if enabled
         if (_observabilityOptions.RedactLogs && !string.IsNullOrWhiteSpace(safeMessage))
         {
             safeMessage = _logRedactor.RedactText(safeMessage).redacted;
         }
-        
+
         if (safeMessage.Length > 2000)
         {
             safeMessage = safeMessage[..2000];
         }
 
         var detailJson = SerializeDetail(detail);
-        
+
         // Redact detail JSON if enabled
         if (_observabilityOptions.RedactLogs && !string.IsNullOrWhiteSpace(detailJson))
         {

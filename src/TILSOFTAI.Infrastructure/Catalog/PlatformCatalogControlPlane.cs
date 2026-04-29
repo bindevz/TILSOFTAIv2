@@ -227,32 +227,32 @@ public sealed class PlatformCatalogControlPlane : IPlatformCatalogControlPlane
     private static CatalogChangeRequestRecord WithApplicationMetadata(
         CatalogChangeRequestRecord change,
         string appliedByUserId) => new()
-    {
-        ChangeId = change.ChangeId,
-        TenantId = change.TenantId,
-        RecordType = change.RecordType,
-        Operation = change.Operation,
-        RecordKey = change.RecordKey,
-        PayloadJson = change.PayloadJson,
-        Status = change.Status,
-        Owner = change.Owner,
-        ChangeNote = change.ChangeNote,
-        VersionTag = change.VersionTag,
-        ExpectedVersionTag = change.ExpectedVersionTag,
-        IdempotencyKey = change.IdempotencyKey,
-        RollbackOfChangeId = change.RollbackOfChangeId,
-        PayloadHash = change.PayloadHash,
-        RiskLevel = change.RiskLevel,
-        EnvironmentName = change.EnvironmentName,
-        BreakGlass = change.BreakGlass,
-        BreakGlassJustification = change.BreakGlassJustification,
-        RequestedByUserId = change.RequestedByUserId,
-        RequestedAtUtc = change.RequestedAtUtc,
-        ReviewedByUserId = change.ReviewedByUserId,
-        ReviewedAtUtc = change.ReviewedAtUtc,
-        AppliedByUserId = appliedByUserId,
-        AppliedAtUtc = DateTime.UtcNow
-    };
+        {
+            ChangeId = change.ChangeId,
+            TenantId = change.TenantId,
+            RecordType = change.RecordType,
+            Operation = change.Operation,
+            RecordKey = change.RecordKey,
+            PayloadJson = change.PayloadJson,
+            Status = change.Status,
+            Owner = change.Owner,
+            ChangeNote = change.ChangeNote,
+            VersionTag = change.VersionTag,
+            ExpectedVersionTag = change.ExpectedVersionTag,
+            IdempotencyKey = change.IdempotencyKey,
+            RollbackOfChangeId = change.RollbackOfChangeId,
+            PayloadHash = change.PayloadHash,
+            RiskLevel = change.RiskLevel,
+            EnvironmentName = change.EnvironmentName,
+            BreakGlass = change.BreakGlass,
+            BreakGlassJustification = change.BreakGlassJustification,
+            RequestedByUserId = change.RequestedByUserId,
+            RequestedAtUtc = change.RequestedAtUtc,
+            ReviewedByUserId = change.ReviewedByUserId,
+            ReviewedAtUtc = change.ReviewedAtUtc,
+            AppliedByUserId = appliedByUserId,
+            AppliedAtUtc = DateTime.UtcNow
+        };
 
     private async Task<CatalogMutationPlan> BuildMutationPlanAsync(
         CatalogMutationRequest request,

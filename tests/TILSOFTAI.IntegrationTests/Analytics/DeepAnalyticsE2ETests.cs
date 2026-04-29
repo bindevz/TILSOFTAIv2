@@ -47,7 +47,7 @@ public class DeepAnalyticsE2ETests
         result.Should().NotBeNull();
         result.Success.Should().BeTrue("analytics workflow should complete successfully");
         result.Content.Should().NotBeNullOrWhiteSpace();
-        
+
         // Content should start with headline (first line)
         var firstLine = result.Content!.Split('\n')[0];
         firstLine.Should().NotBeNullOrWhiteSpace("headline should be first line");

@@ -19,7 +19,7 @@ namespace TILSOFTAI.Tests.AiRouting;
 public sealed class OfficialAgentToolRouterWriteConfirmationTests
 {
     [Fact]
-    public async Task TryRouteAsync_WhenApprovedActionMetadataPresent_ApprovesAndExecutesThroughFacadeWithoutModel()
+    public async Task TryRouteAsync_WhenApprovedActionMetadataPresent_ApprovesWithoutExecutingWriteOrModel()
     {
         var approval = new RecordingApprovalEngine();
         var facade = new RecordingExecutionFacade();
@@ -62,12 +62,12 @@ public sealed class OfficialAgentToolRouterWriteConfirmationTests
 
         result.Handled.Should().BeTrue();
         result.Answer.Should().NotBeNull();
-        result.Answer!.AnswerType.Should().Be("structured");
+        result.Answer!.AnswerType.Should().Be("error");
+        result.Answer.Text.Should().Contain("direct write execution is disabled");
         approval.ApprovedActionIds.Should().ContainSingle().Which.Should().Be("action-32-6");
-        facade.ApprovedActionIds.Should().ContainSingle().Which.Should().Be("action-32-6");
-        facade.LastCapabilityKey.Should().Be("sales.order.create-execute");
-        facade.LastArguments.Should().ContainKey("customer_code");
-        facade.LastArguments["customer_code"]!.ToString().Should().Be("C001");
+        facade.ApprovedActionIds.Should().BeEmpty();
+        facade.LastCapabilityKey.Should().BeNull();
+        facade.LastArguments.Should().BeEmpty();
         agentRuntime.RunCalls.Should().Be(0);
     }
 

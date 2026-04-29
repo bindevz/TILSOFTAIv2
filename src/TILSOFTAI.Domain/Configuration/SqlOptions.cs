@@ -6,7 +6,7 @@ public sealed class SqlOptions
 {
     public string ConnectionString { get; set; } = string.Empty;
     public int CommandTimeoutSeconds { get; set; } = ConfigurationDefaults.Sql.CommandTimeoutSeconds;
-    
+
     /// <summary>
     /// Minimum number of connections maintained in the pool.
     /// </summary>

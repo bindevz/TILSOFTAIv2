@@ -26,13 +26,13 @@ public sealed class SqlHealthCheck : IHealthCheck
         {
             await using var connection = new SqlConnection(_sqlOptions.ConnectionString);
             await connection.OpenAsync(cancellationToken);
-            
+
             await using var command = connection.CreateCommand();
             command.CommandText = "SELECT 1";
             command.CommandTimeout = 5; // 5 second timeout for health checks
-            
+
             await command.ExecuteScalarAsync(cancellationToken);
-            
+
             return HealthCheckResult.Healthy("SQL Server is accessible");
         }
         catch (Exception ex)

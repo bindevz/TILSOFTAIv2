@@ -19,9 +19,9 @@ public sealed class AgentExecutionContext
         TilsoftExecutionContext runtimeContext,
         IApprovalEngine approvalEngine,
         IToolAdapterRegistry? toolAdapterRegistry = null) => new()
-    {
-        RuntimeContext = runtimeContext ?? throw new ArgumentNullException(nameof(runtimeContext)),
-        ApprovalEngine = approvalEngine ?? throw new ArgumentNullException(nameof(approvalEngine)),
-        ToolAdapterRegistry = toolAdapterRegistry
-    };
+        {
+            RuntimeContext = runtimeContext ?? throw new ArgumentNullException(nameof(runtimeContext)),
+            ApprovalEngine = approvalEngine ?? throw new ArgumentNullException(nameof(approvalEngine)),
+            ToolAdapterRegistry = toolAdapterRegistry
+        };
 }

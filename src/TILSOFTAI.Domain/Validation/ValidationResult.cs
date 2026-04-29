@@ -90,13 +90,13 @@ public sealed class ValidationResult
         string originalValue,
         string sanitizedValue,
         PromptInjectionSeverity severity) => new()
-    {
-        IsValid = true,
-        OriginalValue = originalValue,
-        SanitizedValue = sanitizedValue,
-        InjectionSeverity = severity,
-        Errors = Array.Empty<ValidationError>()
-    };
+        {
+            IsValid = true,
+            OriginalValue = originalValue,
+            SanitizedValue = sanitizedValue,
+            InjectionSeverity = severity,
+            Errors = Array.Empty<ValidationError>()
+        };
 }
 
 /// <summary>

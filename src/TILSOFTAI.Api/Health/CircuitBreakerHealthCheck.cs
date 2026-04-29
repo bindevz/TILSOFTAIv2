@@ -28,7 +28,7 @@ public sealed class CircuitBreakerHealthCheck : IHealthCheck
         foreach (var (name, state) in states)
         {
             data[$"circuit_{name}"] = state.ToString();
-            
+
             if (state == CircuitState.Open)
             {
                 openCircuits.Add(name);

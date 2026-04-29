@@ -25,17 +25,17 @@ public sealed class PlanValidationResult
     public static PlanValidationResult Success() => new() { IsValid = true };
 
     public static PlanValidationResult Fail(
-        string errorCode, 
-        string message, 
+        string errorCode,
+        string message,
         bool retryable = true,
         params string[] suggestions) => new()
-    {
-        IsValid = false,
-        ErrorCode = errorCode,
-        ErrorMessage = message,
-        Retryable = retryable,
-        Suggestions = suggestions.ToList()
-    };
+        {
+            IsValid = false,
+            ErrorCode = errorCode,
+            ErrorMessage = message,
+            Retryable = retryable,
+            Suggestions = suggestions.ToList()
+        };
 }
 
 /// <summary>

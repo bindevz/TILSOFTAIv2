@@ -19,7 +19,7 @@ public class CircuitBreakerDelegatingHandler : DelegatingHandler
         return await _policy.ExecuteAsync(async ct =>
         {
             var response = await base.SendAsync(request, ct);
-            
+
             // Optionally: treat 5xx as failures for the circuit breaker? 
             // In a simple policy handle<Exception>, we only break on exceptions.
             // If we want to break on 500s, we'd need to throw or configure the policy to handle results.

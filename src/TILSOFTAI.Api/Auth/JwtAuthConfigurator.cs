@@ -52,13 +52,13 @@ public static class JwtAuthConfigurator
                 {
                     var logger = loggerFactory.CreateLogger("JwtAuthentication");
                     var correlationId = context.HttpContext.TraceIdentifier;
-                    
+
                     logger.LogWarning(
                         context.Exception,
                         "JWT authentication failed. CorrelationId: {CorrelationId}, Failure: {FailureMessage}",
                         correlationId,
                         context.Exception?.Message ?? "Unknown");
-                    
+
                     return Task.CompletedTask;
                 };
             });

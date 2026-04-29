@@ -457,12 +457,12 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
         CancellationToken cancellationToken)
     {
         var stageStartedAt = Stopwatch.GetTimestamp();
-        if (_executionFacade is null || _approvalEngine is null)
+        if (_approvalEngine is null)
         {
             return new AgentToolRoutingResult
             {
                 Handled = false,
-                FailureReason = "Write confirmation requires approval and execution services."
+                FailureReason = "Write confirmation requires approval services."
             };
         }
 
@@ -473,13 +473,9 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
             .ConfigureAwait(false);
         MarkStage(stageLatencyMs, "write_confirmation_approval", ref stageStartedAt);
 
-        var envelope = await _executionFacade.ExecuteApprovedWriteAsync(
-                confirmation.CapabilityKey,
-                confirmation.ApprovedActionId,
-                confirmation.Arguments,
-                cancellationToken)
-            .ConfigureAwait(false);
-        MarkStage(stageLatencyMs, "write_confirmation_execution", ref stageStartedAt);
+        var envelope = CapabilityExecutionEnvelope.Blocked(
+            confirmation.CapabilityKey,
+            "Pending action was confirmed for approval review; direct write execution is disabled.");
 
         var agentResult = new AgentRunResult
         {

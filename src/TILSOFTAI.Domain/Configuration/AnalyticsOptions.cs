@@ -33,7 +33,7 @@ public sealed class AnalyticsOptions
     /// <summary>
     /// Allowed metric operations.
     /// </summary>
-    public string[] AllowedMetricOps { get; set; } = 
+    public string[] AllowedMetricOps { get; set; } =
         { "count", "countDistinct", "sum", "avg", "min", "max" };
 
     /// <summary>

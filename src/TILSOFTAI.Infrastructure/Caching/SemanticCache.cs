@@ -22,7 +22,7 @@ public sealed class SemanticCache : ISemanticCache
     private readonly SensitiveDataOptions _sensitiveDataOptions;
     private readonly SqlOptions _sqlOptions;
     private readonly ILogger<SemanticCache> _logger;
-   private readonly TimeSpan _defaultTtl;
+    private readonly TimeSpan _defaultTtl;
 
     public SemanticCache(
         IRedisCacheProvider cacheProvider,
@@ -193,7 +193,7 @@ public sealed class SemanticCache : ISemanticCache
         var normalizedQuestion = NormalizeQuestion(question);
         var questionHash = ComputeHash(normalizedQuestion);
         var toolDigest = ComputeToolDigest(tools);
-        var planDigest =string.IsNullOrWhiteSpace(planJson) ? string.Empty : ComputeHash(planJson);
+        var planDigest = string.IsNullOrWhiteSpace(planJson) ? string.Empty : ComputeHash(planJson);
 
         var digest = ComputeHash(context.Language, normalizedQuestion, toolDigest, planDigest);
         return (digest, questionHash, toolDigest, planDigest);

@@ -34,7 +34,7 @@ namespace TILSOFTAI.Infrastructure.Logging
                     // If it looks like a token/secret, mask it partially or fully
                     return "[Possibly Sensitive - Redacted]";
                 }
-                
+
                 if (s.Length > _options.MaxPropertyValueLength)
                 {
                     return s.Substring(0, _options.MaxPropertyValueLength) + "... [TRUNCATED]";
@@ -47,7 +47,7 @@ namespace TILSOFTAI.Infrastructure.Logging
         private bool IsSensitiveKey(string key)
         {
             if (string.IsNullOrWhiteSpace(key)) return false;
-            
+
             foreach (var redactedField in _options.RedactedFields)
             {
                 if (key.IndexOf(redactedField, StringComparison.OrdinalIgnoreCase) >= 0)

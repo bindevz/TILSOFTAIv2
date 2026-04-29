@@ -36,19 +36,19 @@ public sealed class RedisHealthCheck : IHealthCheck
             // Try to set and get a test value
             var testKey = "__health_check__";
             var testValue = DateTimeOffset.UtcNow.Ticks.ToString();
-            
+
             await _cache.SetStringAsync(testKey, testValue, new DistributedCacheEntryOptions
             {
                 AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(5)
             }, cancellationToken);
-            
+
             var retrieved = await _cache.GetStringAsync(testKey, cancellationToken);
-            
+
             if (retrieved == testValue)
             {
                 return HealthCheckResult.Healthy("Redis is accessible");
             }
-            
+
             return HealthCheckResult.Degraded("Redis returned unexpected value");
         }
         catch (Exception ex)

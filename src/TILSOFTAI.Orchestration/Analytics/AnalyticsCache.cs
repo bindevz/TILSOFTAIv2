@@ -54,8 +54,8 @@ public sealed class AnalyticsCache
     /// Requires roles to ensure cache isolation by security context.
     /// </summary>
     public async Task<InsightOutput?> TryGetAsync(
-        string tenantId, 
-        string normalizedQuery, 
+        string tenantId,
+        string normalizedQuery,
         IEnumerable<string>? roles,
         CancellationToken ct)
     {
@@ -104,10 +104,10 @@ public sealed class AnalyticsCache
     /// Requires roles to ensure cache isolation by security context.
     /// </summary>
     public async Task SetAsync(
-        string tenantId, 
-        string normalizedQuery, 
+        string tenantId,
+        string normalizedQuery,
         IEnumerable<string>? roles,
-        InsightOutput insight, 
+        InsightOutput insight,
         CancellationToken ct)
     {
         if (!_analyticsOptions.EnableInsightCache)
@@ -155,10 +155,10 @@ public sealed class AnalyticsCache
     private static bool ContainsSecurityWarning(InsightOutput insight)
     {
         if (insight.Notes == null) return false;
-        
+
         var securityTerms = new[] { "restricted", "security", "pii", "sensitive" };
-        return insight.Notes.Any(note => 
-            securityTerms.Any(term => 
+        return insight.Notes.Any(note =>
+            securityTerms.Any(term =>
                 note.Contains(term, StringComparison.OrdinalIgnoreCase)));
     }
 
@@ -176,7 +176,7 @@ public sealed class AnalyticsCache
                 .Distinct()
                 .OrderBy(r => r, StringComparer.Ordinal))
             : string.Empty;
-        
+
         var input = $"{tenantId}|{normalizedQuery}|{rolesCsv}";
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(bytes);

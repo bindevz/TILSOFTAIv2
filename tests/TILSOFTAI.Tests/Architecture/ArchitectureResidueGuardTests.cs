@@ -489,10 +489,35 @@ public sealed class ArchitectureResidueGuardTests
         toolFactory.Should().NotContain("_executionFacade.ExecuteApprovedWriteAsync", "model-callable tools must never directly execute mutations");
         router.Should().Contain("TryCreateConfirmationTurn");
         router.Should().Contain("_approvalEngine.ApproveAsync");
-        router.Should().Contain("_executionFacade.ExecuteApprovedWriteAsync");
+        router.Should().NotContain(
+            "_executionFacade.ExecuteApprovedWriteAsync",
+            "Sprint 37 keeps pending action confirmation state but forbids direct write execution from the active router");
+        router.Should().Contain("direct write execution is disabled");
         facade.Should().Contain("string approvedActionId");
         facade.Should().Contain("Write operations require an approved action ID.");
         composer.Should().Contain("ConfirmationBlock");
+    }
+
+    [Fact]
+    public void ActiveOrchestrationDi_ShouldBeModelOnlyAndOfficial()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var registrations = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "OrchestrationServiceCollectionExtensions.cs"),
+            Encoding.UTF8);
+
+        registrations.Should().Contain("AddModelOnlyCapabilities");
+        registrations.Should().Contain("AddOfficialAgentFrameworkCore");
+        registrations.Should().Contain("AddCapabilityExecutionBoundary");
+        registrations.Should().Contain("AddAnswerComposer");
+        registrations.Should().Contain("AddPendingActionState");
+        registrations.Should().Contain("new InMemoryCapabilityRegistry(ModelCapabilities.All)");
+        registrations.Should().Contain("IOfficialMicrosoftAgentRuntime, OfficialMicrosoftAgentRuntime");
+        registrations.Should().NotContain("AddLegacyFallbackOnlyServices");
+        registrations.Should().NotContain("KeywordIntentClassifier");
+        registrations.Should().NotContain("StructuredCapabilityResolver");
+        registrations.Should().NotContain("AccountingAgent");
+        registrations.Should().NotContain("WarehouseAgent");
     }
 
     [Fact]

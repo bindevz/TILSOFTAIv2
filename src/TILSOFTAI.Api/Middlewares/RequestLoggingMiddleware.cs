@@ -48,7 +48,7 @@ namespace TILSOFTAI.Api.Middlewares
             }
 
             var start = Stopwatch.GetTimestamp();
-            
+
             _logger.LogInformation(
                 "Request started: {Method} {Path}{Query}",
                 context.Request.Method,

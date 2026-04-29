@@ -7,7 +7,7 @@ namespace TILSOFTAI.Domain.Resilience;
 public interface IRetryPolicy
 {
     Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken);
-    
+
     // Spec requested Func<int, ...> but simple ExecuteAsync usually implies wrapping.
     // Spec diff intent says: "ExecuteAsync<T>(Func<int, CancellationToken, Task<T>> action, CancellationToken ct)"
     // where int is attempt number.

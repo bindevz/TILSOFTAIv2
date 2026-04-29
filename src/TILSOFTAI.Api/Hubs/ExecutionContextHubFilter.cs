@@ -40,7 +40,7 @@ public sealed class ExecutionContextHubFilter : IHubFilter
     {
         // Resolve identity using policy (claims-first, no header fallback)
         var result = BuildExecutionContext(invocationContext.Context);
-        
+
         // Fail-closed: Require valid tenant and user claims
         if (string.IsNullOrWhiteSpace(result.TenantId) || string.IsNullOrWhiteSpace(result.UserId))
         {

@@ -18,7 +18,7 @@ public sealed class SqlConversationStore : IConversationStore
     private readonly ILogRedactor _logRedactor;
 
     public SqlConversationStore(
-        IOptions<SqlOptions> sqlOptions, 
+        IOptions<SqlOptions> sqlOptions,
         IOptions<ObservabilityOptions> observabilityOptions,
         ILogRedactor logRedactor)
     {

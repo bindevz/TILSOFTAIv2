@@ -24,13 +24,13 @@ public sealed class SupervisorResult
         string? code = null,
         object? detail = null,
         string? selectedAgentId = null) => new()
-    {
-        Success = false,
-        Error = error,
-        Code = code,
-        Detail = detail,
-        SelectedAgentId = selectedAgentId
-    };
+        {
+            Success = false,
+            Error = error,
+            Code = code,
+            Detail = detail,
+            SelectedAgentId = selectedAgentId
+        };
 
     public static SupervisorResult FromAgentResult(AgentResult result, string? selectedAgentId) =>
         result.Success

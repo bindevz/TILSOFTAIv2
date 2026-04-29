@@ -60,7 +60,7 @@ public sealed class ModelsController : ControllerBase
     public IActionResult Retrieve(string modelId)
     {
         var configuredModelId = string.IsNullOrWhiteSpace(_llmOptions.Model) ? "gemma4:26b" : _llmOptions.Model;
-        
+
         // For simplicity, we only have one model configured
         // Return 404 if requesting a different model
         if (!string.Equals(modelId, configuredModelId, StringComparison.OrdinalIgnoreCase))

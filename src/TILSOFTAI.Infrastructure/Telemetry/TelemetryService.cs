@@ -10,11 +10,11 @@ namespace TILSOFTAI.Infrastructure.Telemetry
         public Activity? StartActivity(string name, ActivityKind kind = ActivityKind.Internal)
         {
             var activity = _activitySource.StartActivity(name, kind);
-            
+
             // Auto-enrich with ambient LogContext if available (correlation props)
             // Note: Since LogContext uses AsyncLocal, its values might already be propagated if Activity mirrors it.
             // But we can ensure standard attributes here.
-             if (activity != null)
+            if (activity != null)
             {
                 var context = Domain.Logging.LogContext.Current;
                 if (!string.IsNullOrEmpty(context.TenantId)) activity.SetTag(TelemetryConstants.Attributes.TenantId, context.TenantId);

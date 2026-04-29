@@ -81,7 +81,7 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
                     var field = filter.TryGetProperty("field", out var f) ? f.GetString() : null;
                     var op = filter.TryGetProperty("op", out var o) ? o.GetString() : "=";
                     var value = filter.TryGetProperty("value", out var v) ? GetJsonValue(v) : null;
-                    
+
                     if (!string.IsNullOrEmpty(field))
                     {
                         summary.Filters.Add(new PlanFilter
@@ -200,8 +200,8 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
         // 2. Limit/topN notes from plan
         if (planSummary.TopN > 0)
         {
-            notes.Add(language == "vi" 
-                ? $"Giới hạn: Top {planSummary.TopN}" 
+            notes.Add(language == "vi"
+                ? $"Giới hạn: Top {planSummary.TopN}"
                 : $"Limit: Top {planSummary.TopN}");
         }
 
@@ -248,21 +248,21 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
     }
 
     private static InsightHeadline BuildHeadline(
-        TaskFrame taskFrame, 
+        TaskFrame taskFrame,
         IReadOnlyList<QueryResultSet> results,
         string language)
     {
         var totalResult = results.FirstOrDefault(r => r.Type == QueryResultType.Total);
-        
+
         string headlineText;
         if (totalResult?.Rows.Count > 0 && totalResult.Rows[0].Count > 0)
         {
             var value = totalResult.Rows[0][0];
             var formattedValue = FormatNumber(value);
-            
+
             var entity = taskFrame.Entity ?? "items";
             var filterContext = BuildFilterContext(taskFrame, language);
-            
+
             headlineText = language == "vi"
                 ? $"{filterContext} có {formattedValue} {entity}"
                 : $"{filterContext} has {formattedValue} {entity}";
@@ -276,7 +276,7 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
                 var sum = breakdown.Rows
                     .Where(r => r.Count > 1)
                     .Sum(r => Convert.ToDecimal(r[^1] ?? 0));
-                
+
                 var entity = taskFrame.Entity ?? "items";
                 var filterContext = BuildFilterContext(taskFrame, language);
                 headlineText = language == "vi"
@@ -285,8 +285,8 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
             }
             else
             {
-                headlineText = language == "vi" 
-                    ? "Không có dữ liệu" 
+                headlineText = language == "vi"
+                    ? "Không có dữ liệu"
                     : "No data available";
             }
         }
@@ -301,11 +301,11 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
 
         var seasonFilter = taskFrame.Filters
             .FirstOrDefault(f => f.FieldHint?.Contains("season", StringComparison.OrdinalIgnoreCase) == true);
-        
+
         if (seasonFilter?.Value != null)
         {
-            return language == "vi" 
-                ? $"Mùa {seasonFilter.Value}" 
+            return language == "vi"
+                ? $"Mùa {seasonFilter.Value}"
                 : $"Season {seasonFilter.Value}";
         }
 
@@ -313,7 +313,7 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
     }
 
     private static List<InsightTable> BuildTables(
-        IReadOnlyList<QueryResultSet> results, 
+        IReadOnlyList<QueryResultSet> results,
         string language)
     {
         return results

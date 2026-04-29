@@ -55,10 +55,10 @@ public sealed class ChatController : ControllerBase
     public async Task<ActionResult<ChatApiResponse>> Post([FromBody] ChatApiRequest request, CancellationToken cancellationToken)
     {
         var context = _contextAccessor.Current;
-        
+
         // Compute sensitivity server-side (ignore client value)
         var input = request?.Input ?? string.Empty;
-        
+
         // Enforce input size limit
         if (!string.IsNullOrEmpty(input) && input.Length > _chatOptions.Value.MaxInputChars)
         {
@@ -68,7 +68,7 @@ public sealed class ChatController : ControllerBase
                 detail: new { maxInputChars = _chatOptions.Value.MaxInputChars });
         }
         var sensitivityResult = _sensitivityClassifier.Classify(input);
-        
+
         ApplyPreferredLanguage(context, request?.PreferredLanguage);
         var supervisorRequest = BuildSupervisorRequest(
             input,
@@ -78,7 +78,7 @@ public sealed class ChatController : ControllerBase
             request?.Metadata);
 
         var result = await _supervisorRuntime.RunAsync(supervisorRequest, context, cancellationToken);
-        
+
         if (!result.Success)
         {
             var code = string.IsNullOrWhiteSpace(result.Code) ? ErrorCode.ChatFailed : result.Code;
@@ -87,7 +87,7 @@ public sealed class ChatController : ControllerBase
                 StatusCodes.Status400BadRequest,
                 detail: result.Detail ?? result.Error);
         }
-        
+
         var response = new ChatApiResponse
         {
             Success = true,
@@ -113,7 +113,7 @@ public sealed class ChatController : ControllerBase
 
         // Compute sensitivity server-side (ignore client value)
         var input = request?.Input ?? string.Empty;
-        
+
         // Enforce input size limit
         if (!string.IsNullOrEmpty(input) && input.Length > _chatOptions.Value.MaxInputChars)
         {
@@ -135,7 +135,7 @@ public sealed class ChatController : ControllerBase
 #if DEBUG
         // Test-only hook: Trigger deterministic error for contract testing
         // Only enabled in Testing environment
-        if (HttpContext.Request.Headers.TryGetValue("X-Test-Trigger-Error", out var triggerErrorValue) 
+        if (HttpContext.Request.Headers.TryGetValue("X-Test-Trigger-Error", out var triggerErrorValue)
             && triggerErrorValue == "true")
         {
             throw new TilsoftApiException(

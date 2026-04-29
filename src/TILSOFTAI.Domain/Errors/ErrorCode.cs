@@ -7,21 +7,21 @@ public static class ErrorCode
     public const string Unauthorized = "UNAUTHORIZED";
     public const string Forbidden = "FORBIDDEN";
     public const string NotFound = "NOT_FOUND";
-    
+
     // Tool-related errors
     public const string ToolValidationFailed = "TOOL_VALIDATION_FAILED";
     public const string ToolExecutionFailed = "TOOL_EXECUTION_FAILED";
     public const string ToolArgsInvalid = "TOOL_ARGS_INVALID";
     public const string ToolNotFound = "TOOL_NOT_FOUND";
-    
+
     // Auth-related errors
     public const string TenantMismatch = "TENANT_MISMATCH";
-    
+
     // Write action errors
     public const string WriteActionArgsInvalid = "WRITE_ACTION_ARGS_INVALID";
     public const string WriteActionDisabled = "WRITE_ACTION_DISABLED";
     public const string WriteActionNotFound = "WRITE_ACTION_NOT_FOUND";
-    
+
     // Infrastructure errors
     public const string LlmTransportError = "LLM_TRANSPORT_ERROR";
     public const string SqlError = "SQL_ERROR";

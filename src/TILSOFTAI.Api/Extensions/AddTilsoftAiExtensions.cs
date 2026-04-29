@@ -220,17 +220,17 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<IWriteActionGuard, ApprovalBackedWriteActionGuard>();
         services.AddSingleton<CacheStampedeGuard>();
         services.AddSingleton<SemanticCache>();
-        
+
         // Analytics services
         services.AddSingleton<IInsightAssemblyService, InsightAssemblyService>();
-        
+
         // Background cache write service
         services.AddSingleton<CacheWriteBackgroundService>();
-        services.AddSingleton<ICacheWriteQueue>(sp => 
+        services.AddSingleton<ICacheWriteQueue>(sp =>
             sp.GetRequiredService<CacheWriteBackgroundService>());
-        services.AddHostedService(sp => 
+        services.AddHostedService(sp =>
             sp.GetRequiredService<CacheWriteBackgroundService>());
-        
+
         services.AddHttpClient<OpenAiEmbeddingClient>();
         services.AddSingleton<IEmbeddingClient>(sp => sp.GetRequiredService<OpenAiEmbeddingClient>());
         services.AddSingleton<SqlVectorSemanticCache>();
@@ -311,13 +311,13 @@ public static class AddTilsoftAiExtensions
                 options.FallbackPolicy = null; // Allow anonymous access
             });
         }
-        
+
         // Register RateLimiter configurator and service
         services.AddSingleton<IConfigureOptions<RateLimiterOptions>, ConfigureRateLimiterOptions>();
         services.AddRateLimiter(_ => { }); // Configuration happens via ConfigureRateLimiterOptions
 
         services.AddControllers();
-        
+
         // SignalR with execution context propagation and claims enforcement
         services.AddSingleton<HubIdentityResolutionPolicy>();
         services.AddSingleton<ExecutionContextHubFilter>();
@@ -326,11 +326,11 @@ public static class AddTilsoftAiExtensions
             options.AddFilter<ExecutionContextHubFilter>();
         });
         services.AddSignalR();
-        
+
         // Health checks - register Redis check only when enabled
         // Read configuration directly for conditional registration (acceptable pattern)
         var redisEnabled = configuration.GetValue<bool>("Redis:Enabled");
-        
+
         var healthChecksBuilder = services.AddHealthChecks()
             .AddCheck<SqlHealthCheck>("sql", tags: new[] { "ready", "db" })
             .AddCheck<LlmHealthCheck>("llm", tags: new[] { "ready", "external" })
@@ -339,7 +339,7 @@ public static class AddTilsoftAiExtensions
             .AddCheck<PlatformCatalogHealthCheck>("platform-catalog", tags: new[] { "ready", "catalog" })
             .AddCheck<NativeRuntimeHealthCheck>("native-runtime", tags: new[] { "ready", "runtime", "native" })
             .AddCheck<OfficialAgentFrameworkHealthCheck>("official-agent-framework", tags: new[] { "ready", "runtime", "agent-framework" });
-        
+
         if (redisEnabled)
         {
             healthChecksBuilder.AddCheck<RedisHealthCheck>("redis", tags: new[] { "ready", "cache" });
@@ -350,20 +350,20 @@ public static class AddTilsoftAiExtensions
 
         // Secret provider - register based on configuration
         var secretsProvider = configuration["Secrets:Provider"] ?? "Environment";
-        
+
         services.AddSingleton<TILSOFTAI.Domain.Secrets.ISecretProvider>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<SecretsOptions>>();
             var cache = sp.GetRequiredService<IMemoryCache>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            
+
             TILSOFTAI.Domain.Secrets.ISecretProvider provider = secretsProvider switch
             {
                 "AzureKeyVault" => new TILSOFTAI.Infrastructure.Secrets.AzureKeyVaultSecretProvider(
                     options, cache, loggerFactory.CreateLogger<TILSOFTAI.Infrastructure.Secrets.AzureKeyVaultSecretProvider>()),
                 _ => new TILSOFTAI.Infrastructure.Secrets.EnvironmentSecretProvider()
             };
-            
+
             return new TILSOFTAI.Infrastructure.Secrets.CachingSecretProvider(provider, cache, options);
         });
 
@@ -752,7 +752,7 @@ public static class AddTilsoftAiExtensions
                     && !string.IsNullOrWhiteSpace(signer.PublicKeyPem)),
                 "CatalogCertification:TrustedEvidenceSigners entries must include SignerId, KeyId, and PublicKeyPem.")
             .ValidateOnStart();
-        
+
         // Analytics options
         services.AddOptions<AnalyticsOptions>()
             .Bind(configuration.GetSection(ConfigurationSectionNames.Analytics))
@@ -761,7 +761,7 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.MaxMetrics > 0, "Analytics:MaxMetrics must be > 0.")
             .Validate(options => options.MaxJoins >= 0, "Analytics:MaxJoins must be >= 0.")
             .Validate(options => options.MaxTimeWindowDays > 0, "Analytics:MaxTimeWindowDays must be > 0.")
-            .Validate(options => options.AllowedMetricOps != null && options.AllowedMetricOps.Length > 0, 
+            .Validate(options => options.AllowedMetricOps != null && options.AllowedMetricOps.Length > 0,
                 "Analytics:AllowedMetricOps must have at least one allowed operation.")
             .ValidateOnStart();
     }
@@ -801,11 +801,11 @@ public static class AddTilsoftAiExtensions
     {
         // Register JWT Bearer configurator
         services.AddSingleton<IConfigureNamedOptions<JwtBearerOptions>, ConfigureJwtBearerOptions>();
-        
+
         // Add authentication with JWT Bearer
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer();
-        
+
         // Configure signing key resolver (existing pattern from JwtAuthConfigurator)
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
             .Configure<IJwtSigningKeyProvider, ILoggerFactory, IAuditLogger, IOptions<AuthOptions>>((jwtOptions, keyProvider, loggerFactory, auditLogger, authOptions) =>
@@ -889,14 +889,14 @@ public static class AddTilsoftAiExtensions
 
         // Configure OTel SDK
         var builder = services.AddOpenTelemetry();
-        
+
         // We need to resolve options to configure the builder, but the builder is configured at service registration time.
         // We can use the IOptions pattern inside the configurator if we were using a different overload, 
         // but here we are using the builder directly. 
         // Best practice: Bind options and then use valid values.
         var otelOptions = new OpenTelemetryOptions();
         configuration.GetSection(ConfigurationSectionNames.OpenTelemetry).Bind(otelOptions);
-        
+
         // Use our configurator
         OpenTelemetryConfigurator.Configure(builder, otelOptions);
     }

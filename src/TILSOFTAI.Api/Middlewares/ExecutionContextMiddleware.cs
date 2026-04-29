@@ -31,7 +31,7 @@ public sealed class ExecutionContextMiddleware : IMiddleware
     public async Task InvokeAsync(HttpContext context, RequestDelegate next)
     {
         var authOptions = _authOptions.Value;
-        
+
         // Detect if endpoint requires authentication (has [Authorize] and not [AllowAnonymous])
         var endpoint = context.GetEndpoint();
         var requiresAuth = endpoint?.Metadata.GetMetadata<IAuthorizeData>() != null
@@ -88,7 +88,7 @@ public sealed class ExecutionContextMiddleware : IMiddleware
         logContext.TenantId = executionContext.TenantId;
         logContext.UserId = executionContext.UserId;
         logContext.ConversationId = executionContext.ConversationId;
-        
+
         await next(context);
     }
 

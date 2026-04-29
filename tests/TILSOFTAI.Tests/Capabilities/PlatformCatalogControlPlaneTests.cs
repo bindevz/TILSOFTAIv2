@@ -465,40 +465,40 @@ file static class CatalogMutationRequestTestExtensions
     public static CatalogMutationRequest withExpectedVersion(
         this CatalogMutationRequest existing,
         string expectedVersionTag) => new()
-    {
-        RecordType = existing.RecordType,
-        Operation = existing.Operation,
-        RecordKey = existing.RecordKey,
-        Capability = existing.Capability,
-        ExternalConnection = existing.ExternalConnection,
-        Owner = existing.Owner,
-        ChangeNote = existing.ChangeNote,
-        VersionTag = existing.VersionTag,
-        ExpectedVersionTag = expectedVersionTag,
-        IdempotencyKey = existing.IdempotencyKey,
-        RollbackOfChangeId = existing.RollbackOfChangeId,
-        BreakGlass = existing.BreakGlass,
-        BreakGlassJustification = existing.BreakGlassJustification
-    };
+        {
+            RecordType = existing.RecordType,
+            Operation = existing.Operation,
+            RecordKey = existing.RecordKey,
+            Capability = existing.Capability,
+            ExternalConnection = existing.ExternalConnection,
+            Owner = existing.Owner,
+            ChangeNote = existing.ChangeNote,
+            VersionTag = existing.VersionTag,
+            ExpectedVersionTag = expectedVersionTag,
+            IdempotencyKey = existing.IdempotencyKey,
+            RollbackOfChangeId = existing.RollbackOfChangeId,
+            BreakGlass = existing.BreakGlass,
+            BreakGlassJustification = existing.BreakGlassJustification
+        };
 
     public static CatalogMutationRequest withIdempotency(
         this CatalogMutationRequest existing,
         string idempotencyKey) => new()
-    {
-        RecordType = existing.RecordType,
-        Operation = existing.Operation,
-        RecordKey = existing.RecordKey,
-        Capability = existing.Capability,
-        ExternalConnection = existing.ExternalConnection,
-        Owner = existing.Owner,
-        ChangeNote = existing.ChangeNote,
-        VersionTag = existing.VersionTag,
-        ExpectedVersionTag = existing.ExpectedVersionTag,
-        IdempotencyKey = idempotencyKey,
-        RollbackOfChangeId = existing.RollbackOfChangeId,
-        BreakGlass = existing.BreakGlass,
-        BreakGlassJustification = existing.BreakGlassJustification
-    };
+        {
+            RecordType = existing.RecordType,
+            Operation = existing.Operation,
+            RecordKey = existing.RecordKey,
+            Capability = existing.Capability,
+            ExternalConnection = existing.ExternalConnection,
+            Owner = existing.Owner,
+            ChangeNote = existing.ChangeNote,
+            VersionTag = existing.VersionTag,
+            ExpectedVersionTag = existing.ExpectedVersionTag,
+            IdempotencyKey = idempotencyKey,
+            RollbackOfChangeId = existing.RollbackOfChangeId,
+            BreakGlass = existing.BreakGlass,
+            BreakGlassJustification = existing.BreakGlassJustification
+        };
 }
 
 file static class CatalogChangeTestExtensions
@@ -507,28 +507,28 @@ file static class CatalogChangeTestExtensions
         this CatalogChangeRequestRecord existing,
         string status,
         string reviewerUserId) => new()
-    {
-        ChangeId = existing.ChangeId,
-        TenantId = existing.TenantId,
-        RecordType = existing.RecordType,
-        Operation = existing.Operation,
-        RecordKey = existing.RecordKey,
-        PayloadJson = existing.PayloadJson,
-        Status = status,
-        Owner = existing.Owner,
-        ChangeNote = existing.ChangeNote,
-        VersionTag = existing.VersionTag,
-        ExpectedVersionTag = existing.ExpectedVersionTag,
-        IdempotencyKey = existing.IdempotencyKey,
-        RollbackOfChangeId = existing.RollbackOfChangeId,
-        PayloadHash = existing.PayloadHash,
-        RiskLevel = existing.RiskLevel,
-        EnvironmentName = existing.EnvironmentName,
-        BreakGlass = existing.BreakGlass,
-        BreakGlassJustification = existing.BreakGlassJustification,
-        RequestedByUserId = existing.RequestedByUserId,
-        RequestedAtUtc = existing.RequestedAtUtc,
-        ReviewedByUserId = reviewerUserId,
-        ReviewedAtUtc = DateTime.UtcNow
-    };
+        {
+            ChangeId = existing.ChangeId,
+            TenantId = existing.TenantId,
+            RecordType = existing.RecordType,
+            Operation = existing.Operation,
+            RecordKey = existing.RecordKey,
+            PayloadJson = existing.PayloadJson,
+            Status = status,
+            Owner = existing.Owner,
+            ChangeNote = existing.ChangeNote,
+            VersionTag = existing.VersionTag,
+            ExpectedVersionTag = existing.ExpectedVersionTag,
+            IdempotencyKey = existing.IdempotencyKey,
+            RollbackOfChangeId = existing.RollbackOfChangeId,
+            PayloadHash = existing.PayloadHash,
+            RiskLevel = existing.RiskLevel,
+            EnvironmentName = existing.EnvironmentName,
+            BreakGlass = existing.BreakGlass,
+            BreakGlassJustification = existing.BreakGlassJustification,
+            RequestedByUserId = existing.RequestedByUserId,
+            RequestedAtUtc = existing.RequestedAtUtc,
+            ReviewedByUserId = reviewerUserId,
+            ReviewedAtUtc = DateTime.UtcNow
+        };
 }

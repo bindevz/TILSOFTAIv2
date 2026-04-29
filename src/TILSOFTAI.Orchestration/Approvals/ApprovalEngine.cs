@@ -556,54 +556,54 @@ public sealed class ApprovalEngine : IApprovalEngine
         ActionRequestRecord record,
         ProposedAction action,
         string? agentId) => new()
-    {
-        ActionId = record.ActionId,
-        TenantId = record.TenantId,
-        ConversationId = record.ConversationId,
-        RequestedAtUtc = record.RequestedAtUtc,
-        Status = record.Status,
-        ActionType = action.ActionType,
-        AgentId = string.IsNullOrWhiteSpace(action.AgentId) ? agentId ?? string.Empty : action.AgentId,
-        TargetSystem = action.TargetSystem,
-        CapabilityKey = action.CapabilityKey,
-        ToolName = record.ProposedToolName,
-        StoredProcedure = record.ProposedSpName,
-        PayloadJson = record.ArgsJson,
-        DiffPreviewJson = action.DiffPreviewJson ?? record.PreviewResultJson,
-        RiskLevel = action.RiskLevel,
-        ApprovalRequirement = action.ApprovalRequirement,
-        RequestedByUserId = record.RequestedByUserId,
-        ApprovedByUserId = record.ApprovedByUserId,
-        ApprovedAtUtc = record.ApprovedAtUtc,
-        ExecutedAtUtc = record.ExecutedAtUtc,
-        ExecutionResultCompactJson = record.ExecutionResultCompactJson
-    };
+        {
+            ActionId = record.ActionId,
+            TenantId = record.TenantId,
+            ConversationId = record.ConversationId,
+            RequestedAtUtc = record.RequestedAtUtc,
+            Status = record.Status,
+            ActionType = action.ActionType,
+            AgentId = string.IsNullOrWhiteSpace(action.AgentId) ? agentId ?? string.Empty : action.AgentId,
+            TargetSystem = action.TargetSystem,
+            CapabilityKey = action.CapabilityKey,
+            ToolName = record.ProposedToolName,
+            StoredProcedure = record.ProposedSpName,
+            PayloadJson = record.ArgsJson,
+            DiffPreviewJson = action.DiffPreviewJson ?? record.PreviewResultJson,
+            RiskLevel = action.RiskLevel,
+            ApprovalRequirement = action.ApprovalRequirement,
+            RequestedByUserId = record.RequestedByUserId,
+            ApprovedByUserId = record.ApprovedByUserId,
+            ApprovedAtUtc = record.ApprovedAtUtc,
+            ExecutedAtUtc = record.ExecutedAtUtc,
+            ExecutionResultCompactJson = record.ExecutionResultCompactJson
+        };
 
     private static ProposedActionRecord MapRecord(
         ActionRequestRecord record,
         string actionType,
         string? agentId,
         string targetSystem) => new()
-    {
-        ActionId = record.ActionId,
-        TenantId = record.TenantId,
-        ConversationId = record.ConversationId,
-        RequestedAtUtc = record.RequestedAtUtc,
-        Status = record.Status,
-        ActionType = actionType,
-        AgentId = agentId ?? string.Empty,
-        TargetSystem = targetSystem,
-        CapabilityKey = string.IsNullOrWhiteSpace(record.CapabilityKey) ? record.ProposedToolName : record.CapabilityKey,
-        ToolName = record.ProposedToolName,
-        StoredProcedure = record.ProposedSpName,
-        PayloadJson = record.ArgsJson,
-        DiffPreviewJson = record.PreviewResultJson,
-        RequestedByUserId = record.RequestedByUserId,
-        ApprovedByUserId = record.ApprovedByUserId,
-        ApprovedAtUtc = record.ApprovedAtUtc,
-        ExecutedAtUtc = record.ExecutedAtUtc,
-        ExecutionResultCompactJson = record.ExecutionResultCompactJson
-    };
+        {
+            ActionId = record.ActionId,
+            TenantId = record.TenantId,
+            ConversationId = record.ConversationId,
+            RequestedAtUtc = record.RequestedAtUtc,
+            Status = record.Status,
+            ActionType = actionType,
+            AgentId = agentId ?? string.Empty,
+            TargetSystem = targetSystem,
+            CapabilityKey = string.IsNullOrWhiteSpace(record.CapabilityKey) ? record.ProposedToolName : record.CapabilityKey,
+            ToolName = record.ProposedToolName,
+            StoredProcedure = record.ProposedSpName,
+            PayloadJson = record.ArgsJson,
+            DiffPreviewJson = record.PreviewResultJson,
+            RequestedByUserId = record.RequestedByUserId,
+            ApprovedByUserId = record.ApprovedByUserId,
+            ApprovedAtUtc = record.ApprovedAtUtc,
+            ExecutedAtUtc = record.ExecutedAtUtc,
+            ExecutionResultCompactJson = record.ExecutionResultCompactJson
+        };
 
     private sealed class CatalogEntry
     {

@@ -38,7 +38,7 @@ namespace TILSOFTAI.Api.Middlewares
                 { "tenant_id", tenantId },
                 { "status_code", "0" } // Placeholder, will be set after request completes
             };
-            
+
             // Note: We only increment HttpRequestsTotal AFTER the request completes
             // to ensure the status_code label is populated correctly
 
@@ -52,7 +52,7 @@ namespace TILSOFTAI.Api.Middlewares
             {
                 sw.Stop();
                 labels["status_code"] = context.Response.StatusCode.ToString();
-                
+
                 // Add status code to total count? 
                 // Usually we want total requests by status code. 
                 // The previous IncrementCounter didn't have status code. 
@@ -60,10 +60,10 @@ namespace TILSOFTAI.Api.Middlewares
                 // But we already incremented on start. 
                 // Standard practice: "Total" usually implies "Completed".
                 // So let's NOT increment at start, but increment at end with status.
-                
+
                 _metrics.IncrementCounter(MetricNames.HttpRequestsTotal, labels);
                 _metrics.RecordHistogram(MetricNames.HttpRequestDurationSeconds, sw.Elapsed.TotalSeconds, labels);
-                
+
                 // For "In Progress", we can't do it cleanly with current interface (Set only).
                 // Ignoring InProgress for now to stick to interface, or we just rely on Duration/Rate.
             }

@@ -29,14 +29,14 @@ public sealed class CachingSecretProvider : ISecretProvider
     public async Task<string?> GetSecretAsync(string key, CancellationToken cancellationToken = default)
     {
         var cacheKey = $"secret:{key}";
-        
+
         if (_cache.TryGetValue(cacheKey, out string? cached))
         {
             return cached;
         }
 
         var value = await _inner.GetSecretAsync(key, cancellationToken);
-        
+
         if (value is not null)
         {
             _cache.Set(cacheKey, value, _cacheDuration);

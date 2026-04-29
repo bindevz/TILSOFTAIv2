@@ -222,18 +222,18 @@ public sealed class AgentFrameworkAntiRegressionTests
         string message,
         AnswerMode mode,
         string locale = "en-US") => new()
-    {
-        Message = message,
-        Locale = locale,
-        RequestedAnswerMode = mode,
-        ExecutionContext = new TilsoftExecutionContext
         {
-            TenantId = "tenant-35",
-            UserId = "user-35",
-            ConversationId = "conversation-35",
-            CorrelationId = "corr-35"
-        }
-    };
+            Message = message,
+            Locale = locale,
+            RequestedAnswerMode = mode,
+            ExecutionContext = new TilsoftExecutionContext
+            {
+                TenantId = "tenant-35",
+                UserId = "user-35",
+                ConversationId = "conversation-35",
+                CorrelationId = "corr-35"
+            }
+        };
 
     private static CapabilityCandidate ModelCandidate(string key, string domain = "model") => new()
     {

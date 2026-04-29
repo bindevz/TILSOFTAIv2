@@ -25,35 +25,35 @@ public sealed record GovernanceAuditEvent
         string tenantId, string userId, string correlationId,
         string toolName, string source, string[] userRoles, string[] requiredRoles,
         double durationMs) => new()
-    {
-        EventType = "governance.allow",
-        TenantId = tenantId,
-        UserId = userId,
-        CorrelationId = correlationId,
-        ToolName = toolName,
-        ExecutionSource = source,
-        UserRoles = userRoles,
-        RequiredRoles = requiredRoles,
-        SchemaValid = true,
-        InputSanitized = true,
-        DurationMs = durationMs
-    };
+        {
+            EventType = "governance.allow",
+            TenantId = tenantId,
+            UserId = userId,
+            CorrelationId = correlationId,
+            ToolName = toolName,
+            ExecutionSource = source,
+            UserRoles = userRoles,
+            RequiredRoles = requiredRoles,
+            SchemaValid = true,
+            InputSanitized = true,
+            DurationMs = durationMs
+        };
 
     public static GovernanceAuditEvent Denied(
         string tenantId, string userId, string correlationId,
         string toolName, string source, string[] userRoles, string[] requiredRoles,
         string reason, string? code, double durationMs) => new()
-    {
-        EventType = "governance.deny",
-        TenantId = tenantId,
-        UserId = userId,
-        CorrelationId = correlationId,
-        ToolName = toolName,
-        ExecutionSource = source,
-        UserRoles = userRoles,
-        RequiredRoles = requiredRoles,
-        DenialReason = reason,
-        DenialCode = code,
-        DurationMs = durationMs
-    };
+        {
+            EventType = "governance.deny",
+            TenantId = tenantId,
+            UserId = userId,
+            CorrelationId = correlationId,
+            ToolName = toolName,
+            ExecutionSource = source,
+            UserRoles = userRoles,
+            RequiredRoles = requiredRoles,
+            DenialReason = reason,
+            DenialCode = code,
+            DurationMs = durationMs
+        };
 }

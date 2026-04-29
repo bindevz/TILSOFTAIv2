@@ -21,7 +21,7 @@ public sealed class ErrorCatalogCoverageGuard : IHostedService
 
     // List of critical error codes that MUST have specific translations.
     // We reflect over ErrorCode struct to get all constant values to ensure generic coverage.
-    private static readonly Lazy<string[]> RequiredErrorCodes = new(() => 
+    private static readonly Lazy<string[]> RequiredErrorCodes = new(() =>
     {
         return typeof(ErrorCode)
             .GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)

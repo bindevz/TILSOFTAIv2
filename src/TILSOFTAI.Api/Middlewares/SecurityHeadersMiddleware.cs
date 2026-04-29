@@ -17,16 +17,16 @@ public sealed class SecurityHeadersMiddleware
     {
         // Prevent MIME type sniffing
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-        
+
         // Prevent clickjacking attacks
         context.Response.Headers["X-Frame-Options"] = "DENY";
-        
+
         // Control referrer information leakage
         context.Response.Headers["Referrer-Policy"] = "no-referrer";
-        
+
         // Disable potentially dangerous browser features
         context.Response.Headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()";
-        
+
         await _next(context);
     }
 }

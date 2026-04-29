@@ -34,9 +34,9 @@ public static class TransientExceptionClassifier
             // 504 Gateway Timeout
             return code == 408 || code == 429 || code >= 500;
         }
-        
+
         // Network errors w/o status code are often transient
-        return true; 
+        return true;
     }
 
     private static bool IsTransientSql(SqlException ex)
@@ -51,12 +51,12 @@ public static class TransientExceptionClassifier
             // 10054: Transport level error
             // 10060: Network error
             // 40613: Azure SQL transient
-            if (error.Number == 1205 || 
-                error.Number == -2 || 
-                error.Number == 233 || 
-                error.Number == 10053 || 
-                error.Number == 10054 || 
-                error.Number == 10060 || 
+            if (error.Number == 1205 ||
+                error.Number == -2 ||
+                error.Number == 233 ||
+                error.Number == 10053 ||
+                error.Number == 10054 ||
+                error.Number == 10060 ||
                 error.Number == 40613)
             {
                 return true;

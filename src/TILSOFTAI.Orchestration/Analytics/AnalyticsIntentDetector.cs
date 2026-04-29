@@ -22,7 +22,7 @@ public sealed class AnalyticsIntentDetector
     private const decimal SkipAnalytics = 0.40m;
 
     // Vietnamese analytics triggers (soft hints, not hard gates)
-    private static readonly string[] ViMetricTriggers = 
+    private static readonly string[] ViMetricTriggers =
     {
         "bao nhiêu", "có bao nhiêu", "tổng cộng", "tổng số",
         "đếm", "tính tổng", "trung bình",
@@ -43,7 +43,7 @@ public sealed class AnalyticsIntentDetector
     private static readonly string[] EntityHints =
     {
         "model", "mẫu", "style", "kiểu",
-        "order", "đơn hàng", "đơn", 
+        "order", "đơn hàng", "đơn",
         "product", "sản phẩm", "hàng",
         "customer", "khách hàng", "khách",
         "supplier", "nhà cung cấp",
@@ -124,9 +124,9 @@ public sealed class AnalyticsIntentDetector
         // Step 1: Lightweight pre-check for obvious non-analytics
         if (IsObviousNonAnalytics(normalized))
         {
-            return new AnalyticsIntentResult 
-            { 
-                IsAnalytics = false, 
+            return new AnalyticsIntentResult
+            {
+                IsAnalytics = false,
                 Confidence = 0,
                 Hints = new List<string> { "non_analytics_pattern" }
             };
@@ -170,9 +170,9 @@ public sealed class AnalyticsIntentDetector
 
         if (IsObviousNonAnalytics(normalized))
         {
-            return new AnalyticsIntentResult 
-            { 
-                IsAnalytics = false, 
+            return new AnalyticsIntentResult
+            {
+                IsAnalytics = false,
                 Confidence = 0,
                 Hints = new List<string> { "non_analytics_pattern" }
             };
@@ -211,7 +211,7 @@ Rules:
         };
 
         var response = await _llmClient.CompleteAsync(request, ct);
-        
+
         if (string.IsNullOrWhiteSpace(response?.Content))
             return null;
 
@@ -233,7 +233,7 @@ Rules:
 
             var isAnalytics = root.TryGetProperty("isAnalytics", out var ia) && ia.GetBoolean();
             var confidence = root.TryGetProperty("confidence", out var c) ? (decimal)c.GetDouble() : 0.5m;
-            var entityHint = root.TryGetProperty("entityHint", out var e) && e.ValueKind == JsonValueKind.String 
+            var entityHint = root.TryGetProperty("entityHint", out var e) && e.ValueKind == JsonValueKind.String
                 ? e.GetString() : null;
 
             var hints = new List<string> { "llm_classified" };
@@ -302,7 +302,7 @@ Rules:
         var matchedEntities = EntityHintsNormalized
             .Where(e => normalized.Contains(e.ToLowerInvariant()))
             .ToList();
-        
+
         if (matchedEntities.Count > 0)
         {
             confidence += 0.25m;

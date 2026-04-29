@@ -59,7 +59,7 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
         }
 
         var joinedInput = BuildUserInput(request.Messages);
-        
+
         // Enforce input size limit
         if (!string.IsNullOrEmpty(joinedInput) && joinedInput.Length > _chatOptions.Value.MaxInputChars)
         {

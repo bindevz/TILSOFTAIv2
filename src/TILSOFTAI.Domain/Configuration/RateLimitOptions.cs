@@ -11,13 +11,13 @@ public sealed class RateLimitOptions
     /// Default: 100 requests.
     /// </summary>
     public int PermitLimit { get; set; } = 100;
-    
+
     /// <summary>
     /// Time window in seconds for rate limiting.
     /// Default: 60 seconds (1 minute).
     /// </summary>
     public int WindowSeconds { get; set; } = 60;
-    
+
     /// <summary>
     /// Maximum number of queued requests when limit is reached.
     /// Requests beyond this will be rejected immediately.

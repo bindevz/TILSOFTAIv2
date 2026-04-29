@@ -29,7 +29,7 @@ if (string.IsNullOrEmpty(sqlConn) || sqlConn.Contains("__") || sqlConn.Contains(
 builder.WebHost.ConfigureKestrel((context, options) =>
 {
     var maxRequestBytes = context.Configuration.GetValue<long?>("Chat:MaxRequestBytes") ?? 1048576; // 1MB default
-    
+
     options.Limits.MaxRequestBodySize = maxRequestBytes;
 });
 

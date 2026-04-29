@@ -179,7 +179,7 @@ public sealed class ReActFollowUpEvaluator
             return null;
         }
 
-        found:
+    found:
         return prop.ValueKind switch
         {
             JsonValueKind.Null => null,

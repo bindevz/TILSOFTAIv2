@@ -52,7 +52,7 @@ public sealed class ObservabilityPurgeHostedService : BackgroundService
             while (!stoppingToken.IsCancellationRequested)
             {
                 await ExecutePurgeAsync(stoppingToken);
-                
+
                 // Wait for next tick or cancellation
                 if (!await timer.WaitForNextTickAsync(stoppingToken))
                 {
@@ -76,28 +76,28 @@ public sealed class ObservabilityPurgeHostedService : BackgroundService
 
         var retentionDays = _observabilityOptions.Value.RetentionDays;
         var batchSize = _observabilityOptions.Value.PurgeBatchSize;
-        
+
         _logger.LogInformation(
             "Starting observability purge. Retention: {RetentionDays} days, BatchSize: {BatchSize}",
             retentionDays, batchSize);
-        
+
         try
         {
             await using var connection = new SqlConnection(_sqlOptions.Value.ConnectionString);
             await connection.OpenAsync(cancellationToken);
-            
+
             await using var command = new SqlCommand("dbo.app_observability_purge", connection)
             {
                 CommandType = CommandType.StoredProcedure,
                 CommandTimeout = 300 // 5 minutes for large purges
             };
-            
+
             command.Parameters.AddWithValue("@RetentionDays", retentionDays);
             command.Parameters.AddWithValue("@BatchSize", batchSize);
             command.Parameters.AddWithValue("@TenantId", DBNull.Value); // Purge all tenants
-            
+
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            
+
             if (await reader.ReadAsync(cancellationToken))
             {
                 var cutoffDate = reader.GetDateTime(reader.GetOrdinal("CutoffDate"));
@@ -106,7 +106,7 @@ public sealed class ObservabilityPurgeHostedService : BackgroundService
                 var deletedConversations = reader.GetInt32(reader.GetOrdinal("DeletedConversations"));
                 var deletedErrors = reader.GetInt32(reader.GetOrdinal("DeletedErrors"));
                 var totalDeleted = reader.GetInt32(reader.GetOrdinal("TotalDeleted"));
-                
+
                 _logger.LogInformation(
                     "Purge completed. Cutoff: {CutoffDate:yyyy-MM-dd HH:mm:ss} UTC. Deleted: {TotalDeleted} records " +
                     "(Messages: {Messages}, Tools: {Tools}, Conversations: {Conversations}, Errors: {Errors})",

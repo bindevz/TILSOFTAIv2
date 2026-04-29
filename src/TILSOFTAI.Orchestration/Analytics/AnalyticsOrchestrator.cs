@@ -148,7 +148,7 @@ public sealed class AnalyticsOrchestrator
 
             // Step 3: Generate Plan via LLM (short focused prompt)
             var planJson = await GeneratePlanAsync(userQuery, schemaResult, language, context, ct);
-            
+
             // Step 4: Validate Plan (with retries)
             string? validatedPlan = null;
             for (var retry = 0; retry <= _options.MaxPlanRetries; retry++)
@@ -245,8 +245,8 @@ public sealed class AnalyticsOrchestrator
             return new AnalyticsOrchestratorResult
             {
                 Success = false,
-                ErrorMessage = language == "vi" 
-                    ? "Không thể hoàn thành phân tích. Vui lòng thử lại." 
+                ErrorMessage = language == "vi"
+                    ? "Không thể hoàn thành phân tích. Vui lòng thử lại."
                     : "Unable to complete analytics. Please try again.",
                 ToolCallCount = toolCallCount,
                 ToolSequence = toolSequence,
@@ -431,7 +431,7 @@ JSON:";
         try
         {
             using var doc = JsonDocument.Parse(executeResult);
-            
+
             // Parse meta
             DateTime generatedAt = DateTime.UtcNow;
             bool truncated = false;
@@ -441,9 +441,9 @@ JSON:";
             {
                 if (meta.TryGetProperty("truncated", out var t))
                     truncated = t.GetBoolean();
-                
+
                 // Parse meta.freshness.asOfUtc (preferred) or legacy meta.generatedAtUtc
-                if (meta.TryGetProperty("freshness", out var freshness) && 
+                if (meta.TryGetProperty("freshness", out var freshness) &&
                     freshness.TryGetProperty("asOfUtc", out var asOf))
                 {
                     DateTime.TryParse(asOf.GetString(), out generatedAt);
@@ -573,8 +573,8 @@ JSON:";
         return new AnalyticsOrchestratorResult
         {
             Success = false,
-            ErrorMessage = language == "vi" 
-                ? "Không tìm thấy dataset phù hợp." 
+            ErrorMessage = language == "vi"
+                ? "Không tìm thấy dataset phù hợp."
                 : "No matching dataset found.",
             ToolSequence = sequence,
             DurationMs = durationMs
@@ -601,7 +601,7 @@ JSON:";
     {
         if (string.IsNullOrEmpty(planJson))
             return "empty";
-            
+
         var bytes = System.Text.Encoding.UTF8.GetBytes(planJson);
         var hash = System.Security.Cryptography.SHA256.HashData(bytes);
         return Convert.ToHexString(hash)[..8].ToLowerInvariant();
@@ -612,29 +612,29 @@ JSON:";
     /// Returns whether any datasets match the entity hint.
     /// </summary>
     public async Task<CatalogSearchResult> TryCatalogSearchAsync(
-        string entityHint, 
-        TilsoftExecutionContext context, 
+        string entityHint,
+        TilsoftExecutionContext context,
         CancellationToken ct)
     {
         try
         {
             var tools = await _toolCatalogResolver.GetResolvedToolsAsync(ct);
             var toolLookup = tools.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
-            
+
             if (!toolLookup.TryGetValue(ToolCatalogSearch, out var tool))
             {
                 _logger.LogWarning("catalog_search tool not available for tie-breaker");
                 return new CatalogSearchResult { HasResults = false };
             }
-            
+
             var searchArgs = JsonSerializer.Serialize(new { query = entityHint, topK = 3 });
             var searchResult = await ExecuteToolAsync(ToolCatalogSearch, searchArgs, toolLookup, context, ct);
-            
+
             if (string.IsNullOrEmpty(searchResult))
                 return new CatalogSearchResult { HasResults = false };
-            
+
             using var doc = JsonDocument.Parse(searchResult);
-            if (doc.RootElement.TryGetProperty("datasets", out var datasets) && 
+            if (doc.RootElement.TryGetProperty("datasets", out var datasets) &&
                 datasets.ValueKind == JsonValueKind.Array &&
                 datasets.GetArrayLength() > 0)
             {

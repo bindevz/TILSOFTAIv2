@@ -10,7 +10,7 @@ public class CircuitBreakerException : TilsoftApiException
 {
     public string CircuitName { get; }
 
-    public CircuitBreakerException(string circuitName, string message, Exception? innerException = null) 
+    public CircuitBreakerException(string circuitName, string message, Exception? innerException = null)
         : base(ErrorCode.CircuitOpen, 503, message, innerException)
     {
         CircuitName = circuitName;
