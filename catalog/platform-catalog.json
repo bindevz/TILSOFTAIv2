@@ -15,7 +15,7 @@
       "ExecutionMode": "readonly",
       "RequiredRoles": [],
       "IntegrationBinding": {
-        "storedProcedure": "dbo.ai_model_count"
+        "storedProcedure": "ai_model_count"
       },
       "ArgumentContract": {
         "ContractVersion": "1",
@@ -42,7 +42,7 @@
       "ExecutionMode": "readonly",
       "RequiredRoles": [],
       "IntegrationBinding": {
-        "storedProcedure": "dbo.ai_model_get_overview"
+        "storedProcedure": "ai_model_get_overview"
       },
       "ArgumentContract": {
         "ContractVersion": "1",
@@ -69,7 +69,7 @@
       "ExecutionMode": "readonly",
       "RequiredRoles": [],
       "IntegrationBinding": {
-        "storedProcedure": "dbo.ai_model_get_pieces"
+        "storedProcedure": "ai_model_get_pieces"
       },
       "ArgumentContract": {
         "ContractVersion": "1",
@@ -96,7 +96,7 @@
       "ExecutionMode": "readonly",
       "RequiredRoles": [],
       "IntegrationBinding": {
-        "storedProcedure": "dbo.ai_model_get_materials"
+        "storedProcedure": "ai_model_get_materials"
       },
       "ArgumentContract": {
         "ContractVersion": "1",
@@ -123,7 +123,7 @@
       "ExecutionMode": "readonly",
       "RequiredRoles": [],
       "IntegrationBinding": {
-        "storedProcedure": "dbo.ai_model_compare_models"
+      "storedProcedure": "ai_model_compare"
       },
       "ArgumentContract": {
         "ContractVersion": "1",
@@ -149,7 +149,7 @@
       "ExecutionMode": "readonly",
       "RequiredRoles": [],
       "IntegrationBinding": {
-        "storedProcedure": "dbo.ai_model_get_packaging"
+        "storedProcedure": "ai_model_get_packaging"
       },
       "ArgumentContract": {
         "ContractVersion": "1",

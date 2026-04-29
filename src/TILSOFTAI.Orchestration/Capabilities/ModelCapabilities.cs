@@ -29,7 +29,7 @@ public static class ModelCapabilities
         ReadOnlySql("model.overview.by-code", "ai_model_get_overview", ModelCodeContract()),
         ReadOnlySql("model.pieces.by-code", "ai_model_get_pieces", ModelCodeContract()),
         ReadOnlySql("model.materials.by-code", "ai_model_get_materials", ModelCodeContract()),
-        ReadOnlySql("model.compare", "ai_model_compare_models", new CapabilityArgumentContract
+        ReadOnlySql("model.compare", "ai_model_compare", new CapabilityArgumentContract
         {
             RequiredArguments = ["modelCodes"],
             AllowedArguments = ["modelCodes"],
@@ -60,7 +60,7 @@ public static class ModelCapabilities
             TargetSystemId = "sql",
             IntegrationBinding = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["storedProcedure"] = $"dbo.{storedProcedure}"
+                ["storedProcedure"] = storedProcedure
             },
             RequiredRoles = [],
             ArgumentContract = argumentContract,

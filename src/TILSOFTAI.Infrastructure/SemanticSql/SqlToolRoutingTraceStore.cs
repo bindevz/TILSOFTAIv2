@@ -48,7 +48,7 @@ INSERT INTO ai.ToolRoutingTrace
     ArgumentsAfterNormalizationJson,
     ValidationResultJson,
     AdapterType,
-    RowCount,
+    [RowCount],
     AnswerMode,
     LatencyMs,
     LatencyByStageJson,

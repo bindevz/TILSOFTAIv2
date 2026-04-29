@@ -43,7 +43,7 @@ public static class ToolRoutingTraceFactory
             AdvertisedToolCount = tools.Count,
             ArgumentsJson = agentResult.Arguments.ToJsonString(),
             ArgumentsBeforeNormalizationJson = agentResult.Arguments.ToJsonString(),
-            ArgumentsAfterNormalizationJson = JsonSerializer.Serialize(agentResult.ToolResult?.Arguments),
+            ArgumentsAfterNormalizationJson = SerializeObjectOrEmpty(agentResult.ToolResult?.Arguments),
             ValidationResultJson = JsonSerializer.Serialize(new
             {
                 routed = true,
@@ -133,6 +133,9 @@ public static class ToolRoutingTraceFactory
 
     private static string Redact(string value) =>
         string.IsNullOrWhiteSpace(value) ? string.Empty : value.Length <= 512 ? value : value[..512];
+
+    private static string SerializeObjectOrEmpty(object? value) =>
+        value is null ? "{}" : JsonSerializer.Serialize(value);
 
     private static object ToAdvertisedToolTrace(AIFunction function)
     {

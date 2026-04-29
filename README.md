@@ -1,123 +1,153 @@
 # TILSOFTAI V3
 
-TILSOFTAI is an enterprise-grade internal AI platform with a supervisor-native, agent-native runtime. Runtime ownership is intentionally simple:
+TILSOFTAI is an internal AI runtime for executing governed, SQL-backed capabilities through the official Microsoft Agent Framework. The active development runtime is intentionally narrow: the `model` domain is the only enabled domain, all active capabilities are read-only, and write execution remains disabled.
 
-- Supervisor orchestration owns request classification and agent dispatch.
-- Domain Agents own business-domain routing and policy.
-- Tool Adapters and infrastructure own execution boundaries, provider integration, persistence, and external connections.
-
-Technical provider/model concerns are not a business-domain ownership boundary. Production capability ownership lives in the platform catalog and adapter layer, not in module packages.
-
-## Current Runtime Shape
+## Current Architecture
 
 ```text
-API / Hub / OpenAI surface
+API / Hub / OpenAI-compatible surface
   -> ISupervisorRuntime
-     -> IIntentClassifier
-     -> CapabilityRequestHint
-     -> IAgentRegistry
-        -> WarehouseAgent          (business-domain routing, SQL + REST/JSON capabilities)
-        -> AccountingAgent         (business-domain routing, SQL + REST/JSON capabilities)
-        -> GeneralChatAgent        (native general response and retired legacy notices)
-
-Native capability path:
-  DomainAgent
-    -> ICapabilityRegistry.GetByDomain(domain)
-    -> ICapabilityResolver.Resolve(hint, candidates)
-    -> CapabilityAccessPolicy.Evaluate(required roles, allowed tenants)
-    -> CapabilityArgumentValidator.Validate(typed contract, arguments)
-    -> IToolAdapterRegistry.Resolve(adapterType)
-    -> IToolAdapter.ExecuteAsync(request)
-
-Capability registry:
-  CompositeCapabilityRegistry
-    -> StaticCapabilitySource (WarehouseCapabilities, AccountingCapabilities)
-    -> ConfigurationCapabilitySource (bootstrap only)
-    -> PlatformCatalogCapabilitySource (durable platform records)
-
-External connection catalog:
-  CompositeExternalConnectionCatalog
-    -> PlatformExternalConnectionCatalog (primary)
-    -> ConfigurationExternalConnectionCatalog (bootstrap fallback when enabled)
-
-Catalog control plane:
-  PlatformCatalogController
-    -> IPlatformCatalogControlPlane
-    -> preview / submit / approve / reject / apply
-    -> expected version + idempotency + risk policy
-    -> IPlatformCatalogPromotionGate
-    -> IPlatformCatalogCertificationStore
-    -> IPlatformCatalogPromotionManifestService
-    -> IPlatformCatalogPromotionManifestStore
-    -> IPlatformCatalogMutationStore
-    -> PlatformCatalogChangeRequest
-    -> PlatformCapabilityCatalog / PlatformExternalConnectionCatalog
-    -> signed evidence, promotion manifests, rollout attestations
-    -> managed durable dossier archive and signer trust recovery
-
-Write requests:
-  -> IApprovalEngine (create -> approve -> execute lifecycle)
-     -> IActionRequestStore
-     -> IWriteActionGuard
-     -> SqlToolAdapter
+  -> OfficialAgentToolRouter
+  -> OfficialMicrosoftAgentRuntime
+  -> official Microsoft Agent Framework AIAgent
+  -> model-only AIFunction tools
+  -> CapabilityExecutionFacade
+  -> SqlToolAdapter
+  -> AnswerComposer
 ```
 
-## Current Assurance Posture
+Runtime boundaries:
 
-- Platform catalog records are the production source of truth for capabilities and external connections.
-- Catalog mutations use preview, submit, independent review, approve/reject, and apply.
-- Promotion gates bind source mode, preview validity, approved change state, expected version posture, break-glass posture, and certification evidence.
-- Evidence verification supports provider-controlled artifact checks, RSA signatures, signer lifecycle snapshots, trust tiers, freshness policy, and retention policy.
-- Promotion manifests are immutable, rollout attestations are append-only, and audit dossiers are hash-bound.
-- Dossier archives and signer trust-store recovery support managed SQL durability with explicit backend class, retention posture, immutability posture, and custody metadata.
+- `CapabilityExecutionFacade` is the execution boundary for capability calls.
+- `AnswerComposer` is the response boundary for RawJson and Structured answers.
+- Active capabilities are read-only model capabilities.
+- Active model-facing arguments are `modelCode` and `modelCodes`.
+- PendingActionState is future infrastructure only.
+- Legacy domain-agent routing was removed.
+- Real write execution is disabled.
 
-## Remaining Bounded Residue
+## Local Run Settings
 
-These components remain intentionally narrow:
+Use `src/TILSOFTAI.Api/appsettings.Local.example.json` as the local template and create an untracked `src/TILSOFTAI.Api/appsettings.Local.json` for machine-specific values.
 
-- Legacy physical SQL storage names: compatibility-only storage behind capability-scope wrappers and usage telemetry.
-- `InMemoryCapabilityRegistry`: test fixture only.
+Local development SQL shape:
 
-The obsolete Model module was removed in Sprint 19. Do not reintroduce a technical model/provider module or pseudo-domain to own production behavior.
+```text
+Server=localhost;Database=TILSOFTAI;User Id=sa;Password=123;TrustServerCertificate=True;Encrypt=False;MultipleActiveResultSets=True
+```
 
-See `docs/compatibility_debt_report.md`, `docs/sql_compatibility_observability_runbook.md`, `docs/db_major_readiness_checklist.md`, and `docs/enterprise_readiness_gap_report.md` for removal conditions and blockers.
+This credential is for local development only. Do not commit real local secrets and do not use this connection string as a production-safe setting.
+
+Required local routing posture:
+
+```json
+{
+  "AiRouting": {
+    "MicrosoftAgentFrameworkRoutingEnabled": true,
+    "UseOfficialMicrosoftAgentFramework": true,
+    "Provider": "OpenAiCompatibleLocal",
+    "AllowedDomains": [ "model" ],
+    "MaxCandidateTools": 6,
+    "ToolCallingRequired": true,
+    "FallbackToLegacyPipeline": false
+  },
+  "Answering": {
+    "DefaultMode": "Structured"
+  }
+}
+```
+
+## Local SQL Migration
+
+The current local migration set lives in `sql/current/` and is executed in filename order by:
+
+```powershell
+./tools/sql/migrate-local-tilsoftai.ps1 -Server "localhost" -Database "TILSOFTAI" -User "sa" -Password "123"
+```
+
+or:
+
+```bash
+./tools/sql/migrate-local-tilsoftai.sh --server localhost --database TILSOFTAI --user sa --password 123
+```
+
+The migration creates the local database if it is missing, installs TILSOFTAI-owned framework objects, installs the read-only `ai_model_*` stored procedures, and runs `999_validate_model_runtime.sql`. Cleanup scripts are scoped to project-owned framework objects and must not drop unrelated ERP source tables.
+
+Required model procedures:
+
+- `dbo.ai_model_count`
+- `dbo.ai_model_get_overview`
+- `dbo.ai_model_get_pieces`
+- `dbo.ai_model_get_materials`
+- `dbo.ai_model_compare`
+- `dbo.ai_model_get_packaging`
+
+## Build And Test
+
+```bash
+dotnet build
+dotnet test
+```
+
+## API Smoke Tests
+
+Start the API with the local settings profile, then call the OpenAI-compatible chat surface. Use the actual route configured by the API host.
+
+Structured mode example:
+
+```bash
+curl -s http://localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d "{\"model\":\"local-tool-model\",\"messages\":[{\"role\":\"user\",\"content\":\"Co bao nhieu model?\"}],\"metadata\":{\"answerMode\":\"Structured\"}}"
+```
+
+RawJson mode example:
+
+```bash
+curl -s http://localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d "{\"model\":\"local-tool-model\",\"messages\":[{\"role\":\"user\",\"content\":\"Show materials for model ABC\"}],\"metadata\":{\"answerMode\":\"RawJson\"}}"
+```
+
+## Model Domain Acceptance Prompts
+
+Replace `ABC` and `XYZ` with model codes present in the local database:
+
+1. `Co bao nhieu model?`
+2. `Cho toi xem thong tin model ABC`
+3. `Model ABC gom nhung piece nao?`
+4. `Show materials for model ABC`
+5. `So sanh model ABC va XYZ`
+6. `Cho toi xem thong tin model`
+
+Expected behavior:
+
+- The first five prompts execute model-only tools through SQL stored procedures.
+- The missing-code prompt returns a follow-up answer and does not call SQL.
+- No non-model tools are advertised.
+- Legacy fallback is not used.
+- RawJson returns the tool envelope without a final LLM summary.
+- Structured returns text, blocks, tables when appropriate, and provenance.
+
+## Known Limitations Before More Domains
+
+- Only the `model` domain is active.
+- Tool-calling quality depends on the selected local model supporting reliable function calls.
+- Real ERP model data should be used when available; seeded model data must be labeled as test-only data.
+- Write approval state exists for future confirmation flows, but real write execution remains disabled.
+- Vector search and embedding knowledge-base work are outside the active runtime scope.
+- Additional domains should wait until the model E2E report and tuning backlog show stable routing, argument binding, SQL execution, observability, and answer composition.
 
 ## Documentation
 
+- `docs/reports/model_e2e_runtime_test_report.md`
+- `docs/reports/model_e2e_framework_tuning_backlog.md`
 - `docs/architecture_v3.md`
-- `docs/compatibility_debt_report.md`
-- `docs/enterprise_readiness_gap_report.md`
 - `docs/operational_runtime_observability.md`
 - `docs/runtime_readiness.md`
 - `docs/sql_compatibility_observability_runbook.md`
-- `docs/db_major_readiness_checklist.md`
-- `docs/compatibility_inventory.json`
-- `docs/db_major_readiness_evidence_packet.template.json`
-- `docs/certification_run_manifest.template.json`
-- `docs/certification_execution_session.template.json`
-- `docs/certification_acceptance.template.json`
-- `docs/release_evidence_bundles.md`
-- `docs/staging_prodlike_certification_execution.md`
-- `docs/live_certification_execution_capture.md`
-- `docs/live_certification_acceptance.md`
-- `docs/signed_artifact_verification_decision.md`
-- `docs/external_integration_governance.md`
 - `docs/platform_catalog_governance.md`
 - `docs/catalog_control_plane_runbook.md`
-- `docs/catalog_failure_drills.md`
-- `docs/catalog_contract_schema_lifecycle.md`
-- `docs/catalog_live_certification_evidence.md`
-- `docs/catalog_evidence_integrity.md`
-- `docs/catalog_artifact_trust_and_retention.md`
-- `docs/catalog_release_gates.md`
-- `docs/catalog_promotion_manifest_provenance.md`
-- `docs/catalog_promotion_audit_dossier.md`
-- `docs/catalog_control_plane_slos_alerts.md`
-- `docs/catalog_emergency_path_policy.md`
-- `docs/module_package_classification.md`
-- `docs/deep_analytics_validation_boundary.md`
-- `docs/cleanup_report.md`
-- `docs/WRITE_PATH_AUDIT.md`
 
 ## License
 

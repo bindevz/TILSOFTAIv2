@@ -598,8 +598,7 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
             return null;
         }
 
-        var trimmed = storedProcedure.Trim();
-        return trimmed.Contains('.', StringComparison.Ordinal) ? trimmed : $"dbo.{trimmed}";
+        return storedProcedure.Trim();
     }
 
     private static string GetStoredProcedure(CapabilityDescriptor capability) =>
@@ -774,14 +773,39 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
             return enumerableRows.ToArray();
         }
 
-        if (string.IsNullOrWhiteSpace(result.PayloadJson))
+        if (result.Payload is string payloadText)
+        {
+            var payloadRows = ReadRowsFromJson(payloadText);
+            if (payloadRows.Count > 0)
+            {
+                return payloadRows;
+            }
+        }
+
+        return ReadRowsFromJson(result.PayloadJson);
+    }
+
+    private static IReadOnlyList<IReadOnlyDictionary<string, object?>> ReadRowsFromJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
         {
             return Array.Empty<IReadOnlyDictionary<string, object?>>();
         }
 
         try
         {
-            var parsedRows = JsonSerializer.Deserialize<IReadOnlyList<Dictionary<string, object?>>>(result.PayloadJson, JsonOptions);
+            using var document = JsonDocument.Parse(json);
+            var rowsElement = document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("rows", out var envelopeRows)
+                ? envelopeRows
+                : document.RootElement;
+
+            if (rowsElement.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<IReadOnlyDictionary<string, object?>>();
+            }
+
+            var parsedRows = JsonSerializer.Deserialize<IReadOnlyList<Dictionary<string, object?>>>(rowsElement.GetRawText(), JsonOptions);
             return parsedRows?.Select(row => (IReadOnlyDictionary<string, object?>)row).ToArray()
                 ?? Array.Empty<IReadOnlyDictionary<string, object?>>();
         }
