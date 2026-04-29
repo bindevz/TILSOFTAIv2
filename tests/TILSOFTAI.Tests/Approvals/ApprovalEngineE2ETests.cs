@@ -271,40 +271,152 @@ public sealed class ApprovalEngineE2ETests
             var id = $"action-{Interlocked.Increment(ref _sequence)}";
             request.ActionId = id;
             request.RequestedAtUtc = DateTime.UtcNow;
+            request.CreatedAtUtc = request.RequestedAtUtc;
+            request.ExpiresAtUtc = request.ExpiresAtUtc == default ? request.RequestedAtUtc.AddHours(24) : request.ExpiresAtUtc;
+            request.UserId = string.IsNullOrWhiteSpace(request.UserId) ? request.RequestedByUserId : request.UserId;
+            request.CapabilityKey = string.IsNullOrWhiteSpace(request.CapabilityKey) ? request.ProposedToolName : request.CapabilityKey;
+            request.FunctionName = string.IsNullOrWhiteSpace(request.FunctionName) ? request.ProposedToolName : request.FunctionName;
             _records[id] = request;
             return Task.FromResult(request);
         }
 
+        public Task<ActionRequestRecord> CreateAsync(ActionRequestCreateRequest request, CancellationToken cancellationToken) =>
+            CreateAsync(ActionRequestRecord.FromCreateRequest(request, DateTime.UtcNow), cancellationToken);
+
         public Task<ActionRequestRecord?> GetAsync(string tenantId, string actionId, CancellationToken cancellationToken)
         {
             _records.TryGetValue(actionId, out var record);
+            if (record is not null && !string.Equals(record.TenantId, tenantId, StringComparison.OrdinalIgnoreCase))
+            {
+                record = null;
+            }
+
+            return Task.FromResult(record);
+        }
+
+        public Task<ActionRequestRecord?> GetActiveForConversationAsync(
+            string tenantId,
+            string userId,
+            string conversationId,
+            CancellationToken cancellationToken)
+        {
+            var record = _records.Values
+                .Where(record =>
+                    string.Equals(record.TenantId, tenantId, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(record.UserId, userId, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(record.ConversationId, conversationId, StringComparison.OrdinalIgnoreCase)
+                    && ActionRequestStatus.IsActivePending(record.Status)
+                    && !record.IsExpired(DateTime.UtcNow))
+                .OrderByDescending(record => record.RequestedAtUtc)
+                .FirstOrDefault();
+
+            return Task.FromResult(record);
+        }
+
+        public Task<ActionRequestRecord> ConfirmAsync(string tenantId, string userId, string actionId, CancellationToken cancellationToken)
+        {
+            var record = RequireUserScopedRecord(tenantId, userId, actionId);
+            if (!ActionRequestStatus.IsActivePending(record.Status) || record.IsExpired(DateTime.UtcNow))
+            {
+                return Task.FromResult(record);
+            }
+
+            record.Status = ActionRequestStatus.Confirmed;
+            record.ConfirmedAtUtc = DateTime.UtcNow;
             return Task.FromResult(record);
         }
 
         public Task<ActionRequestRecord> ApproveAsync(string tenantId, string actionId, string approvedByUserId, CancellationToken cancellationToken)
         {
             var record = _records[actionId];
-            record.Status = "Approved";
+            record.Status = ActionRequestStatus.Approved;
             record.ApprovedByUserId = approvedByUserId;
             record.ApprovedAtUtc = DateTime.UtcNow;
             return Task.FromResult(record);
         }
 
-        public Task<ActionRequestRecord> RejectAsync(string tenantId, string actionId, string approvedByUserId, CancellationToken cancellationToken)
+        public Task<ActionRequestRecord> RejectAsync(
+            string tenantId,
+            string userId,
+            string actionId,
+            string? reason,
+            CancellationToken cancellationToken)
         {
-            var record = _records[actionId];
-            record.Status = "Rejected";
-            record.ApprovedByUserId = approvedByUserId;
+            var record = RequireTenantScopedRecord(tenantId, actionId);
+            record.Status = ActionRequestStatus.Rejected;
+            record.ApprovedByUserId = userId;
+            record.ApprovedAtUtc = DateTime.UtcNow;
+            record.CancelledAtUtc = DateTime.UtcNow;
             return Task.FromResult(record);
         }
 
         public Task<ActionRequestRecord> MarkExecutedAsync(string tenantId, string actionId, string resultCompactJson, bool success, CancellationToken cancellationToken)
         {
             var record = _records[actionId];
-            record.Status = "Executed";
+            record.Status = success ? ActionRequestStatus.Executed : ActionRequestStatus.Failed;
             record.ExecutedAtUtc = DateTime.UtcNow;
             record.ExecutionResultCompactJson = resultCompactJson;
             return Task.FromResult(record);
+        }
+
+        public Task<ActionRequestRecord> MarkExecutedAsync(
+            string tenantId,
+            string actionId,
+            string executedByUserId,
+            CancellationToken cancellationToken)
+        {
+            var record = _records[actionId];
+            if (!string.Equals(record.Status, ActionRequestStatus.Approved, StringComparison.OrdinalIgnoreCase)
+                || record.ExecutedAtUtc.HasValue
+                || record.IsExpired(DateTime.UtcNow))
+            {
+                return Task.FromResult(record);
+            }
+
+            record.Status = ActionRequestStatus.Executed;
+            record.ExecutedAtUtc = DateTime.UtcNow;
+            record.ExecutedByUserId = executedByUserId;
+            return Task.FromResult(record);
+        }
+
+        public Task<int> ExpireOldAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken)
+        {
+            var count = 0;
+            foreach (var record in _records.Values)
+            {
+                if ((ActionRequestStatus.IsActivePending(record.Status)
+                        || string.Equals(record.Status, ActionRequestStatus.Confirmed, StringComparison.OrdinalIgnoreCase))
+                    && record.ExpiresAtUtc != default
+                    && record.ExpiresAtUtc <= nowUtc.UtcDateTime)
+                {
+                    record.Status = ActionRequestStatus.Expired;
+                    count++;
+                }
+            }
+
+            return Task.FromResult(count);
+        }
+
+        private ActionRequestRecord RequireUserScopedRecord(string tenantId, string userId, string actionId)
+        {
+            var record = RequireTenantScopedRecord(tenantId, actionId);
+            if (!string.Equals(record.UserId, userId, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new UnauthorizedAccessException();
+            }
+
+            return record;
+        }
+
+        private ActionRequestRecord RequireTenantScopedRecord(string tenantId, string actionId)
+        {
+            var record = _records[actionId];
+            if (!string.Equals(record.TenantId, tenantId, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new UnauthorizedAccessException();
+            }
+
+            return record;
         }
     }
 }

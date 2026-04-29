@@ -1,0 +1,80 @@
+@baseUrl = http://localhost:5000
+@contentType = application/json
+
+### Health - live
+GET {{baseUrl}}/health/live
+
+### Health - ready
+# Expected: Healthy when the local AI model is configured and Sprint 35 model-only routing is active.
+GET {{baseUrl}}/health/ready
+
+### Case 1 - Model Count, Structured
+# Expected:
+# - capability: model.count
+# - response mode: structured
+# - no legacy fallback
+# - logs include agent_route_started, tools_advertised, agent_tool_invoked, answer_composer_completed
+POST {{baseUrl}}/api/chats
+Content-Type: {{contentType}}
+
+{
+  "input": "Có bao nhiêu model?",
+  "preferredLanguage": "vi-VN",
+  "metadata": {
+    "answerMode": "structured"
+  }
+}
+
+### Case 2 - Model Overview, RawJson
+# Expected:
+# - capability: model.overview.by-code
+# - selected function: model_get_overview
+# - arguments include modelCode/model_code = ABC
+# - response mode: raw_json
+# - no final LLM summary after tool execution
+POST {{baseUrl}}/api/chats
+Content-Type: {{contentType}}
+
+{
+  "input": "Cho tôi xem thông tin model ABC",
+  "preferredLanguage": "vi-VN",
+  "metadata": {
+    "answerMode": "rawJson"
+  }
+}
+
+### Case 3 - Missing Parameter
+# Expected:
+# - answer type: follow_up
+# - asks for modelCode
+# - no CapabilityExecutionFacade SQL execution
+# - no agent_tool_invoked event with a SQL row result
+POST {{baseUrl}}/api/chats
+Content-Type: {{contentType}}
+
+{
+  "input": "Cho tôi xem thông tin model",
+  "preferredLanguage": "vi-VN",
+  "metadata": {
+    "answerMode": "structured"
+  }
+}
+
+### Case 4 - English Materials Prompt, Structured
+# Expected:
+# - capability: model.materials.by-code
+# - selected function: model_get_materials
+# - arguments include modelCode/model_code = ABC
+# - response mode: structured
+# - no legacy fallback
+POST {{baseUrl}}/api/chats
+Content-Type: {{contentType}}
+
+{
+  "input": "Show materials for model ABC",
+  "preferredLanguage": "en-US",
+  "metadata": {
+    "answerMode": "structured"
+  }
+}
+

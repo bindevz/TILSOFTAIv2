@@ -3,6 +3,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
+using TILSOFTAI.Orchestration.Semantic;
 
 namespace TILSOFTAI.Api.Health;
 
@@ -11,6 +12,8 @@ namespace TILSOFTAI.Api.Health;
 /// </summary>
 public sealed class OfficialAgentFrameworkHealthCheck : IHealthCheck
 {
+    private const string PlaceholderLocalModel = "CHANGE_ME_TOOL_CALLING_MODEL";
+
     private readonly AiRoutingOptions _aiRoutingOptions;
     private readonly LlmOptions _llmOptions;
     private readonly LocalAiOptions _localAiOptions;
@@ -40,6 +43,9 @@ public sealed class OfficialAgentFrameworkHealthCheck : IHealthCheck
         var enabled = _aiRoutingOptions.MicrosoftAgentFrameworkRoutingEnabled
             || _aiRoutingOptions.UseOfficialMicrosoftAgentFramework;
         var hasChatClient = _chatClients.Any();
+        var isLocalAiProvider = string.Equals(provider, OfficialAgentProviderFactory.OpenAiCompatibleLocalProvider, StringComparison.OrdinalIgnoreCase);
+        var isLocalAiModelPlaceholder = string.Equals(_localAiOptions.Model?.Trim(), PlaceholderLocalModel, StringComparison.OrdinalIgnoreCase);
+        var isModelOnlyRuntime = IsModelOnlyRuntime(_aiRoutingOptions.AllowedDomains);
         var data = new Dictionary<string, object>
         {
             ["enabled"] = enabled,
@@ -49,6 +55,8 @@ public sealed class OfficialAgentFrameworkHealthCheck : IHealthCheck
             ["max_candidate_tools"] = _aiRoutingOptions.MaxCandidateTools,
             ["fallback_enabled"] = _aiRoutingOptions.FallbackToLegacyPipeline,
             ["tool_calling_required"] = _aiRoutingOptions.ToolCallingRequired,
+            ["model_only_runtime"] = isModelOnlyRuntime,
+            ["local_ai_model_placeholder"] = isLocalAiModelPlaceholder,
             ["base_url_source"] = string.Equals(provider, OfficialAgentProviderFactory.OpenAiCompatibleLocalProvider, StringComparison.OrdinalIgnoreCase)
                 ? "LocalAi:BaseUrl"
                 : "Llm:Endpoint",
@@ -62,10 +70,45 @@ public sealed class OfficialAgentFrameworkHealthCheck : IHealthCheck
                 data));
         }
 
+        if (string.IsNullOrWhiteSpace(_aiRoutingOptions.Provider))
+        {
+            return Task.FromResult(HealthCheckResult.Unhealthy(
+                "Official Microsoft Agent Framework routing is enabled, but AiRouting:Provider is not configured.",
+                data: data));
+        }
+
         if (!OfficialAgentProviderFactory.IsAllowedProvider(provider))
         {
             return Task.FromResult(HealthCheckResult.Unhealthy(
                 "Official Microsoft Agent Framework routing is enabled, but AiRouting:Provider is not an allowed official provider.",
+                data: data));
+        }
+
+        if (!isModelOnlyRuntime)
+        {
+            return Task.FromResult(HealthCheckResult.Unhealthy(
+                "Official Microsoft Agent Framework routing is enabled, but AiRouting:AllowedDomains must contain only the model domain for Sprint 35.",
+                data: data));
+        }
+
+        if (_aiRoutingOptions.FallbackToLegacyPipeline)
+        {
+            return Task.FromResult(HealthCheckResult.Unhealthy(
+                "Official Microsoft Agent Framework routing is enabled, but AiRouting:FallbackToLegacyPipeline is still enabled.",
+                data: data));
+        }
+
+        if (isLocalAiProvider && string.IsNullOrWhiteSpace(_localAiOptions.Model))
+        {
+            return Task.FromResult(HealthCheckResult.Unhealthy(
+                "Official Microsoft Agent Framework routing is enabled for OpenAiCompatibleLocal, but LocalAi:Model is not configured.",
+                data: data));
+        }
+
+        if (isLocalAiProvider && isLocalAiModelPlaceholder)
+        {
+            return Task.FromResult(HealthCheckResult.Unhealthy(
+                "Official Microsoft Agent Framework routing is enabled for OpenAiCompatibleLocal, but LocalAi:Model still contains the placeholder value.",
                 data: data));
         }
 
@@ -86,5 +129,17 @@ public sealed class OfficialAgentFrameworkHealthCheck : IHealthCheck
         return Task.FromResult(HealthCheckResult.Healthy(
             "Official Microsoft Agent Framework provider is configured.",
             data));
+    }
+
+    private static bool IsModelOnlyRuntime(IEnumerable<string>? allowedDomains)
+    {
+        var normalizedDomains = (allowedDomains ?? Array.Empty<string>())
+            .Where(domain => !string.IsNullOrWhiteSpace(domain))
+            .Select(DomainGate.NormalizeDomain)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return normalizedDomains.Length == 1
+            && string.Equals(normalizedDomains[0], "model", StringComparison.OrdinalIgnoreCase);
     }
 }

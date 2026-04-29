@@ -26,12 +26,34 @@ BEGIN
         RETURN;
     END
     
-    DECLARE @modelId int = TRY_CONVERT(int, JSON_VALUE(@ArgsJson, '$.modelId'));
+    DECLARE @modelCode nvarchar(50) = NULLIF(LTRIM(RTRIM(JSON_VALUE(@ArgsJson, '$.modelCode'))), N'');
+    DECLARE @modelId int = NULL;
     
-    IF @modelId IS NULL
+    IF @modelCode IS NULL
     BEGIN
-        RAISERROR('modelId is required.', 16, 1);
+        RAISERROR('modelCode is required.', 16, 1);
         RETURN;
+    END
+
+    DECLARE @MatchingModelCount int = (
+        SELECT COUNT(DISTINCT ModelId)
+        FROM dbo.vw_ModelSemantic
+        WHERE ModelCode = @modelCode
+          AND (TenantId = @TenantId OR TenantId IS NULL)
+    );
+
+    IF @MatchingModelCount > 1
+    BEGIN
+        RAISERROR('modelCode is ambiguous.', 16, 1);
+        RETURN;
+    END
+
+    IF @MatchingModelCount = 1
+    BEGIN
+        SELECT @modelId = MAX(ModelId)
+        FROM dbo.vw_ModelSemantic
+        WHERE ModelCode = @modelCode
+          AND (TenantId = @TenantId OR TenantId IS NULL);
     END
     
     DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();
@@ -98,20 +120,47 @@ BEGIN
         RETURN;
     END
     
-    -- Extract modelIds array from ArgsJson
-    DECLARE @modelIdsJson nvarchar(max) = JSON_QUERY(@ArgsJson, '$.modelIds');
+    -- Extract modelCodes array from ArgsJson
+    DECLARE @modelCodesJson nvarchar(max) = JSON_QUERY(@ArgsJson, '$.modelCodes');
     
-    IF @modelIdsJson IS NULL OR ISJSON(@modelIdsJson) <> 1
+    IF @modelCodesJson IS NULL OR ISJSON(@modelCodesJson) <> 1
     BEGIN
-        RAISERROR('modelIds must be a valid JSON array.', 16, 1);
+        RAISERROR('modelCodes must be a valid JSON array.', 16, 1);
+        RETURN;
+    END
+
+    DECLARE @RequestedCodes TABLE (ModelCode nvarchar(50) NOT NULL PRIMARY KEY);
+    INSERT INTO @RequestedCodes (ModelCode)
+    SELECT DISTINCT NULLIF(LTRIM(RTRIM([value])), N'')
+    FROM OPENJSON(@modelCodesJson)
+    WHERE NULLIF(LTRIM(RTRIM([value])), N'') IS NOT NULL;
+
+    IF (SELECT COUNT(1) FROM @RequestedCodes) < 2
+    BEGIN
+        RAISERROR('modelCodes must contain at least two model codes.', 16, 1);
+        RETURN;
+    END
+
+    IF EXISTS (
+        SELECT 1
+        FROM @RequestedCodes requested
+        JOIN dbo.vw_ModelSemantic v
+          ON v.ModelCode = requested.ModelCode
+         AND (v.TenantId = @TenantId OR v.TenantId IS NULL)
+        GROUP BY requested.ModelCode
+        HAVING COUNT(DISTINCT v.ModelId) > 1
+    )
+    BEGIN
+        RAISERROR('modelCodes contain an ambiguous model code.', 16, 1);
         RETURN;
     END
     
     DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();
     DECLARE @RowCount int = (
         SELECT COUNT(1) FROM dbo.vw_ModelSemantic v
-        WHERE v.ModelId IN (SELECT TRY_CONVERT(int, value) FROM OPENJSON(@modelIdsJson))
-          AND (v.TenantId = @TenantId OR v.TenantId IS NULL)
+        JOIN @RequestedCodes requested
+          ON requested.ModelCode = v.ModelCode
+        WHERE (v.TenantId = @TenantId OR v.TenantId IS NULL)
     );
     
     SELECT (
@@ -144,8 +193,9 @@ BEGIN
                     ModelId, ModelCode, Name, TotalCbm, TotalWeightKg,
                     LoadabilityIndex, Qnt40HC, PieceCount, BoxInSet, PackagingName
                 FROM dbo.vw_ModelSemantic v
-                WHERE v.ModelId IN (SELECT TRY_CONVERT(int, value) FROM OPENJSON(@modelIdsJson))
-                  AND (v.TenantId = @TenantId OR v.TenantId IS NULL)
+                JOIN @RequestedCodes requested
+                  ON requested.ModelCode = v.ModelCode
+                WHERE (v.TenantId = @TenantId OR v.TenantId IS NULL)
                 FOR JSON PATH, INCLUDE_NULL_VALUES
             )
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
@@ -170,12 +220,34 @@ BEGIN
         RETURN;
     END
     
-    DECLARE @modelId int = TRY_CONVERT(int, JSON_VALUE(@ArgsJson, '$.modelId'));
+    DECLARE @modelCode nvarchar(50) = NULLIF(LTRIM(RTRIM(JSON_VALUE(@ArgsJson, '$.modelCode'))), N'');
+    DECLARE @modelId int = NULL;
     
-    IF @modelId IS NULL
+    IF @modelCode IS NULL
     BEGIN
-        RAISERROR('modelId is required.', 16, 1);
+        RAISERROR('modelCode is required.', 16, 1);
         RETURN;
+    END
+
+    DECLARE @MatchingModelCount int = (
+        SELECT COUNT(DISTINCT ModelId)
+        FROM dbo.vw_ModelSemantic
+        WHERE ModelCode = @modelCode
+          AND (TenantId = @TenantId OR TenantId IS NULL)
+    );
+
+    IF @MatchingModelCount > 1
+    BEGIN
+        RAISERROR('modelCode is ambiguous.', 16, 1);
+        RETURN;
+    END
+
+    IF @MatchingModelCount = 1
+    BEGIN
+        SELECT @modelId = MAX(ModelId)
+        FROM dbo.vw_ModelSemantic
+        WHERE ModelCode = @modelCode
+          AND (TenantId = @TenantId OR TenantId IS NULL);
     END
     
     DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();
@@ -237,12 +309,34 @@ BEGIN
         RETURN;
     END
     
-    DECLARE @modelId int = TRY_CONVERT(int, JSON_VALUE(@ArgsJson, '$.modelId'));
+    DECLARE @modelCode nvarchar(50) = NULLIF(LTRIM(RTRIM(JSON_VALUE(@ArgsJson, '$.modelCode'))), N'');
+    DECLARE @modelId int = NULL;
     
-    IF @modelId IS NULL
+    IF @modelCode IS NULL
     BEGIN
-        RAISERROR('modelId is required.', 16, 1);
+        RAISERROR('modelCode is required.', 16, 1);
         RETURN;
+    END
+
+    DECLARE @MatchingModelCount int = (
+        SELECT COUNT(DISTINCT ModelId)
+        FROM dbo.vw_ModelSemantic
+        WHERE ModelCode = @modelCode
+          AND (TenantId = @TenantId OR TenantId IS NULL)
+    );
+
+    IF @MatchingModelCount > 1
+    BEGIN
+        RAISERROR('modelCode is ambiguous.', 16, 1);
+        RETURN;
+    END
+
+    IF @MatchingModelCount = 1
+    BEGIN
+        SELECT @modelId = MAX(ModelId)
+        FROM dbo.vw_ModelSemantic
+        WHERE ModelCode = @modelCode
+          AND (TenantId = @TenantId OR TenantId IS NULL);
     END
     
     DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();
@@ -312,12 +406,34 @@ BEGIN
         RETURN;
     END
     
-    DECLARE @modelId int = TRY_CONVERT(int, JSON_VALUE(@ArgsJson, '$.modelId'));
+    DECLARE @modelCode nvarchar(50) = NULLIF(LTRIM(RTRIM(JSON_VALUE(@ArgsJson, '$.modelCode'))), N'');
+    DECLARE @modelId int = NULL;
     
-    IF @modelId IS NULL
+    IF @modelCode IS NULL
     BEGIN
-        RAISERROR('modelId is required.', 16, 1);
+        RAISERROR('modelCode is required.', 16, 1);
         RETURN;
+    END
+
+    DECLARE @MatchingModelCount int = (
+        SELECT COUNT(DISTINCT ModelId)
+        FROM dbo.vw_ModelSemantic
+        WHERE ModelCode = @modelCode
+          AND (TenantId = @TenantId OR TenantId IS NULL)
+    );
+
+    IF @MatchingModelCount > 1
+    BEGIN
+        RAISERROR('modelCode is ambiguous.', 16, 1);
+        RETURN;
+    END
+
+    IF @MatchingModelCount = 1
+    BEGIN
+        SELECT @modelId = MAX(ModelId)
+        FROM dbo.vw_ModelSemantic
+        WHERE ModelCode = @modelCode
+          AND (TenantId = @TenantId OR TenantId IS NULL);
     END
     
     DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();

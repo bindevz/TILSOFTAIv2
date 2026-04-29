@@ -47,7 +47,7 @@ public sealed class OfficialAgentFunctionProviderTests
             executionFacade,
             new StubCompositeCapabilityExecutor());
         var functions = await dynamicFactory.BuildFunctionsAsync(
-            [Candidate("warehouse.inventory.by-item", "read", "read")],
+            [Candidate("model.inventory.by-item", "read", "read", domain: "model")],
             new TilsoftExecutionContext { CorrelationId = "corr-32-3" },
             "en-US",
             CancellationToken.None);
@@ -62,15 +62,15 @@ public sealed class OfficialAgentFunctionProviderTests
             CancellationToken.None);
 
         result.Should().BeOfType<CapabilityExecutionEnvelope>();
-        function.Name.Should().Be("warehouse_inventory_by_item");
+        function.Name.Should().Be("model_inventory_by_item");
         function.Description.Should().Contain("Loaded from SQL metadata.");
         function.JsonSchema.GetProperty("properties").TryGetProperty("item_no", out _).Should().BeTrue();
         var invocation = function.Should().BeAssignableTo<ICapabilityBackedAIFunction>().Subject.LastInvocation;
         invocation.Should().NotBeNull();
         invocation!.ModelFacingArguments["item_no"]!.GetValue<string>().Should().Be("CHAIR-001");
-        executionFacade.LastCapabilityKey.Should().Be("warehouse.inventory.by-item");
+        executionFacade.LastCapabilityKey.Should().Be("model.inventory.by-item");
         executionFacade.LastArguments.Should().ContainKey("item").WhoseValue.Should().Be("CHAIR-001");
-        executionFacade.LastArguments.Should().ContainKey("__functionName").WhoseValue.Should().Be("warehouse_inventory_by_item");
+        executionFacade.LastArguments.Should().ContainKey("__functionName").WhoseValue.Should().Be("model_inventory_by_item");
     }
 
     [Fact]
@@ -83,8 +83,8 @@ public sealed class OfficialAgentFunctionProviderTests
             new StubCompositeCapabilityExecutor());
         var functions = await dynamicFactory.BuildFunctionsAsync(
             [
-                Candidate("warehouse.inventory.by-item", "read", "read"),
-                Candidate("warehouse.stock.available", "read", "read")
+                Candidate("model.inventory.by-item", "read", "read", domain: "model"),
+                Candidate("model.stock.available", "read", "read", domain: "model")
             ],
             new TilsoftExecutionContext { CorrelationId = "corr-32-4" },
             "en-US",
@@ -101,9 +101,9 @@ public sealed class OfficialAgentFunctionProviderTests
 
         result.Should().BeOfType<CapabilityExecutionEnvelope>();
         functions.Should().HaveCount(2);
-        secondFunction.Name.Should().Be("warehouse_stock_available");
+        secondFunction.Name.Should().Be("model_stock_available");
         secondFunction.Should().BeAssignableTo<ICapabilityBackedAIFunction>().Subject.LastInvocation.Should().NotBeNull();
-        executionFacade.LastCapabilityKey.Should().Be("warehouse.stock.available");
+        executionFacade.LastCapabilityKey.Should().Be("model.stock.available");
         executionFacade.LastArguments.Should().ContainKey("item").WhoseValue.Should().Be("TABLE-002");
     }
 
@@ -113,7 +113,7 @@ public sealed class OfficialAgentFunctionProviderTests
         var factory = CreateFactory();
         var candidates = new[]
         {
-            Candidate("warehouse.inventory.by-item", "read", "read"),
+            Candidate("model.inventory.by-item", "read", "read", domain: "model"),
             Candidate("sales.order.cancel", "write", "write")
         };
 
@@ -124,18 +124,18 @@ public sealed class OfficialAgentFunctionProviderTests
             CancellationToken.None);
 
         functions.Should().ContainSingle();
-        functions[0].Name.Should().Be("warehouse_inventory_by_item");
+        functions[0].Name.Should().Be("model_inventory_by_item");
         var capabilityFunction = functions[0].Should().BeAssignableTo<ICapabilityBackedAIFunction>().Subject;
-        capabilityFunction.Descriptor.Capability.CapabilityKey.Should().Be("warehouse.inventory.by-item");
+        capabilityFunction.Descriptor.Capability.CapabilityKey.Should().Be("model.inventory.by-item");
         capabilityFunction.Descriptor.ParameterSchema["properties"]!["item_no"].Should().NotBeNull();
         capabilityFunction.Descriptor.ModelToCapabilityArgumentMap["item_no"].Should().Be("item");
-        functions[0].Description.Should().Contain("Business domain: warehouse");
+        functions[0].Description.Should().Contain("Business domain: model");
         functions[0].Description.Should().Contain("Aliases: item");
         functions[0].Description.Should().Contain("Examples: stock for CHAIR-001");
     }
 
     [Fact]
-    public async Task BuildFunctionsAsync_ShouldExposeMutationAsPreviewOnlyWhenEnabled()
+    public async Task BuildFunctionsAsync_ShouldExposeModelMutationAsPreviewOnlyWhenEnabled()
     {
         var executionFacade = new StubCapabilityExecutionFacade();
         var factory = new DynamicFunctionToolFactory(
@@ -145,7 +145,7 @@ public sealed class OfficialAgentFunctionProviderTests
             Options.Create(new AiRoutingOptions { EnableWritePreviewTools = true }));
 
         var functions = await factory.BuildFunctionsAsync(
-            [Candidate("sales.order.create-preview", "write_preview", "write_preview")],
+            [Candidate("model.action.create-preview", "write_preview", "write_preview", domain: "model")],
             new TilsoftExecutionContext { CorrelationId = "corr-32-6" },
             "en-US",
             CancellationToken.None);
@@ -158,7 +158,7 @@ public sealed class OfficialAgentFunctionProviderTests
 
         result.Should().BeOfType<CapabilityExecutionEnvelope>()
             .Which.Status.Should().Be("preview");
-        executionFacade.LastPreviewCapabilityKey.Should().Be("sales.order.create-preview");
+        executionFacade.LastPreviewCapabilityKey.Should().Be("model.action.create-preview");
         executionFacade.LastApprovedWriteCapabilityKey.Should().BeNull("model-callable mutation tools must not execute final writes");
         executionFacade.LastArguments.Should().ContainKey("item").WhoseValue.Should().Be("SO-001");
     }
@@ -182,6 +182,115 @@ public sealed class OfficialAgentFunctionProviderTests
         functions.Should().BeEmpty("the agent may prepare preview actions but must never see execute-write tools");
     }
 
+    [Fact]
+    public async Task BuildFunctionsAsync_ShouldNotAdvertiseNonModelCapabilities()
+    {
+        var factory = CreateFactory();
+
+        var functions = await factory.BuildFunctionsAsync(
+            [
+                Candidate("model.count", "read", "read", domain: "model"),
+                Candidate("sales.order.status", "read", "read", domain: "sales"),
+                Candidate("warehouse.stock.available", "read", "read", domain: "warehouse")
+            ],
+            new TilsoftExecutionContext(),
+            "en-US",
+            CancellationToken.None);
+
+        functions.Should().ContainSingle();
+        functions[0].Name.Should().Be("model_count");
+        functions[0].Should().BeAssignableTo<ICapabilityBackedAIFunction>()
+            .Subject.Descriptor.Capability.Domain.Should().Be("model");
+    }
+
+    [Fact]
+    public async Task BuildFunctionsAsync_ShouldCapAdvertisedModelToolsAtConfiguredLimit()
+    {
+        var factory = new DynamicFunctionToolFactory(
+            CreateDescriptorFactory(),
+            new StubCapabilityExecutionFacade(),
+            new StubCompositeCapabilityExecutor(),
+            Options.Create(new AiRoutingOptions
+            {
+                MaxCandidateTools = 6,
+                MaxTotalCandidateTools = 6
+            }));
+
+        var functions = await factory.BuildFunctionsAsync(
+            Enumerable.Range(1, 8)
+                .Select(index => Candidate($"model.tool-{index}", "read", "read", domain: "model"))
+                .ToArray(),
+            new TilsoftExecutionContext(),
+            "en-US",
+            CancellationToken.None);
+
+        functions.Should().HaveCount(6);
+        functions.Select(function => function.Name)
+            .Should()
+            .Equal("model_tool_1", "model_tool_2", "model_tool_3", "model_tool_4", "model_tool_5", "model_tool_6");
+    }
+
+    [Fact]
+    public async Task BuildFunctionsAsync_ShouldExposeModelCodeInsteadOfModelId()
+    {
+        var executionFacade = new StubCapabilityExecutionFacade();
+        var factory = new DynamicFunctionToolFactory(
+            CreateDescriptorFactory(),
+            executionFacade,
+            new StubCompositeCapabilityExecutor());
+
+        var functions = await factory.BuildFunctionsAsync(
+            [ModelCodeCandidate("model.overview.by-code", "modelCode")],
+            new TilsoftExecutionContext { CorrelationId = "corr-35-2" },
+            "en-US",
+            CancellationToken.None);
+
+        var function = functions.Should().ContainSingle().Subject;
+        var schema = function.JsonSchema;
+
+        function.Name.Should().Be("model_overview_by_code");
+        schema.GetProperty("properties").TryGetProperty("model_code", out var modelCodeSchema).Should().BeTrue();
+        modelCodeSchema.GetProperty("type").GetString().Should().Be("string");
+        schema.GetProperty("properties").TryGetProperty("model_id", out _).Should().BeFalse();
+        schema.GetProperty("required").EnumerateArray().Select(item => item.GetString())
+            .Should()
+            .ContainSingle("model_code");
+
+        await function.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>
+            {
+                ["model_code"] = "ABC"
+            }),
+            CancellationToken.None);
+
+        function.Should().BeAssignableTo<ICapabilityBackedAIFunction>()
+            .Subject.Descriptor.ModelToCapabilityArgumentMap["model_code"].Should().Be("modelCode");
+        executionFacade.LastCapabilityKey.Should().Be("model.overview.by-code");
+        executionFacade.LastArguments.Should().ContainKey("modelCode").WhoseValue.Should().Be("ABC");
+        executionFacade.LastArguments.Should().NotContainKey("modelId");
+    }
+
+    [Fact]
+    public async Task BuildFunctionsAsync_ShouldExposeModelCodesForCompare()
+    {
+        var factory = CreateFactory();
+
+        var functions = await factory.BuildFunctionsAsync(
+            [ModelCodeCandidate("model.compare", "modelCodes", "array")],
+            new TilsoftExecutionContext(),
+            "en-US",
+            CancellationToken.None);
+
+        var function = functions.Should().ContainSingle().Subject;
+        var schema = function.JsonSchema;
+
+        schema.GetProperty("properties").TryGetProperty("model_codes", out var modelCodesSchema).Should().BeTrue();
+        modelCodesSchema.GetProperty("type").GetString().Should().Be("array");
+        schema.GetProperty("properties").TryGetProperty("model_ids", out _).Should().BeFalse();
+        function.Should().BeAssignableTo<ICapabilityBackedAIFunction>()
+            .Subject.Descriptor.ModelToCapabilityArgumentMap["model_codes"].Should().Be("modelCodes");
+    }
+
     private static DynamicFunctionToolFactory CreateFactory() => new(
         CreateDescriptorFactory(),
         new StubCapabilityExecutionFacade(),
@@ -199,13 +308,14 @@ public sealed class OfficialAgentFunctionProviderTests
         string useWhen = "Use when loaded from SQL.",
         string argumentDescription = "Item code from SQL.",
         string aliases = """["item","sku"]""",
-        string examples = """["stock for CHAIR-001"]""") => new()
+        string examples = """["stock for CHAIR-001"]""",
+        string domain = "warehouse") => new()
     {
         Score = 1,
         Metadata = new CapabilitySemanticMetadata
         {
             CapabilityKey = key,
-            Domain = "warehouse",
+            Domain = domain,
             FunctionName = key.Replace('.', '_').Replace('-', '_'),
             AdapterType = "sql",
             Operation = operation,
@@ -233,6 +343,53 @@ public sealed class OfficialAgentFunctionProviderTests
                         Description = argumentDescription,
                         Aliases = aliases,
                         Examples = examples
+                    }
+                }
+            ]
+        }
+    };
+
+    private static CapabilityCandidate ModelCodeCandidate(
+        string key,
+        string argumentName,
+        string dataType = "string") => new()
+    {
+        Score = 1,
+        Metadata = new CapabilitySemanticMetadata
+        {
+            CapabilityKey = key,
+            Domain = "model",
+            FunctionName = key.Replace('.', '_').Replace('-', '_'),
+            AdapterType = "sql",
+            Operation = "read",
+            ExecutionMode = "read",
+            Text = new CapabilityTextMetadata
+            {
+                Locale = "en-US",
+                Description = "Loaded from SQL metadata.",
+                UseWhen = "Use when loaded from SQL.",
+                DoNotUseWhen = "Do not use when loaded from C#."
+            },
+            Arguments =
+            [
+                new CapabilityArgumentMetadata
+                {
+                    ArgumentName = argumentName,
+                    ProcParameterName = argumentName,
+                    DataType = dataType,
+                    IsRequired = true,
+                    ValidationRule = dataType.Equals("array", StringComparison.OrdinalIgnoreCase)
+                        ? """{"minLength":2}"""
+                        : """{"minLength":1}""",
+                    DisplayOrder = 1,
+                    Text = new CapabilityArgumentTextMetadata
+                    {
+                        Locale = "en-US",
+                        Description = dataType.Equals("array", StringComparison.OrdinalIgnoreCase)
+                            ? "Business model codes used by users, such as ABC, MD-123, or CHAIR-001."
+                            : "Business model code used by users, such as ABC, MD-123, or CHAIR-001.",
+                        Aliases = """["model code","model number"]""",
+                        Examples = """["ABC","MD-123","CHAIR-001"]"""
                     }
                 }
             ]

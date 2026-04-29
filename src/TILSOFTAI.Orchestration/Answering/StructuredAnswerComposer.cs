@@ -80,7 +80,7 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
 
         var blocks = new List<AnswerBlock>
         {
-            new TextBlock(summary),
+            new SummaryBlock(summary),
             BuildTableBlock(request, visibleRows, truncated)
         };
 
@@ -91,7 +91,7 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
         }
 
         var followUps = truncated
-            ? new[] { IsVietnamese(request.Locale) ? "Thu hep bo loc hoac xuat ket qua day du." : "Narrow the filters or export the full result set." }
+            ? new[] { IsVietnamese(request.Locale) ? "Thu hẹp bộ lọc hoặc xuất kết quả đầy đủ." : "Narrow the filters or export the full result set." }
             : Array.Empty<string>();
 
         return new AssistantAnswer
@@ -102,13 +102,7 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
             FollowUpQuestions = followUps,
             Provenance = CreateProvenance(request),
             SelectedAgentId = "microsoft-agent-router",
-            Detail = new
-            {
-                request.CapabilityKey,
-                request.RowCount,
-                truncated,
-                blocks
-            }
+            Detail = CreateStructuredDetail(request, "structured", blocks, followUps, truncated)
         };
     }
 
@@ -123,13 +117,7 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
             FollowUpQuestions = [question],
             Provenance = CreateProvenance(request),
             SelectedAgentId = "microsoft-agent-router",
-            Detail = new
-            {
-                request.CapabilityKey,
-                request.ErrorCode,
-                request.MissingArguments,
-                request.InvalidArguments
-            }
+            Detail = CreateStructuredDetail(request, "follow_up", [new FollowUpBlock(question, options)], [question], text: question)
         };
 
     private static AssistantAnswer TextOnly(
@@ -142,19 +130,14 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
             Blocks = [new TextBlock(text)],
             Provenance = CreateProvenance(request),
             SelectedAgentId = "microsoft-agent-router",
-            Detail = new
-            {
-                request.CapabilityKey,
-                request.ErrorCode,
-                request.RowCount
-            }
+            Detail = CreateStructuredDetail(request, answerType, [new TextBlock(text)], text: text)
         };
 
     private static AssistantAnswer Confirmation(AnswerComposerRequest request)
     {
-        var title = IsVietnamese(request.Locale) ? "Xac nhan thao tac" : "Confirm action";
+        var title = IsVietnamese(request.Locale) ? "Xác nhận thao tác" : "Confirm action";
         var summary = IsVietnamese(request.Locale)
-            ? $"Kiem tra truoc thao tac {request.CapabilityKey}."
+            ? $"Kiểm tra trước thao tác {request.CapabilityKey}."
             : $"Review the proposed {request.CapabilityKey} action.";
         var draftAction = AnswerDataSanitizer.ApplySensitivity(
             request.DraftAction ?? new Dictionary<string, object?>(request.Arguments, StringComparer.OrdinalIgnoreCase),
@@ -173,22 +156,22 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
             ],
             Provenance = CreateProvenance(request),
             SelectedAgentId = "microsoft-agent-router",
-            Detail = new
-            {
-                request.CapabilityKey,
-                Arguments = AnswerDataSanitizer.ApplySensitivity(request.Arguments, request.SensitivityPolicy),
-                DraftAction = draftAction
-            }
+            Detail = CreateStructuredDetail(
+                request,
+                "confirmation",
+                [new ConfirmationBlock(title, summary, draftAction)],
+                draftAction: draftAction,
+                text: summary)
         };
     }
 
     private static AssistantAnswer Composite(AnswerComposerRequest request, CompositeResultBundle bundle)
     {
         var text = IsVietnamese(request.Locale)
-            ? $"Tong hop {bundle.Sections.Count} phan cho {request.CapabilityKey}."
+            ? $"Tổng hợp {bundle.Sections.Count} phần cho {request.CapabilityKey}."
             : $"Compiled {bundle.Sections.Count} sections for {request.CapabilityKey}.";
 
-        var blocks = new List<AnswerBlock> { new TextBlock(text) };
+        var blocks = new List<AnswerBlock> { new SummaryBlock(text) };
         foreach (var section in bundle.Sections)
         {
             var sectionText = section.Success
@@ -220,7 +203,12 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
             Blocks = blocks,
             Provenance = CreateProvenance(request),
             SelectedAgentId = "microsoft-agent-router",
-            Detail = AnswerDataSanitizer.ApplySensitivity(bundle, request.SensitivityPolicy)
+            Detail = CreateStructuredDetail(
+                request,
+                "composite",
+                blocks,
+                result: AnswerDataSanitizer.ApplySensitivity(bundle, request.SensitivityPolicy),
+                text: text)
         };
     }
 
@@ -231,10 +219,12 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
     {
         var columns = ResolveVisibleColumns(request, rows);
         var tableRows = rows
-            .Select(row => (IReadOnlyList<object?>)columns.Select(column => FormatValue(row.TryGetValue(column, out var value) ? value : null, request.Locale)).ToArray())
+            .Select(row => (IReadOnlyList<object?>)columns
+                .Select(column => FormatValue(row.TryGetValue(column.Name, out var value) ? value : null, request.Locale))
+                .ToArray())
             .ToArray();
 
-        return new TableBlock(columns, tableRows, request.RowCount, truncated);
+        return new TableBlock(columns.Select(column => column.Label).ToArray(), tableRows, request.RowCount, truncated);
     }
 
     private static ChartBlock? TryBuildChartBlock(
@@ -264,14 +254,14 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
         return new ChartBlock(chartType, category.Name, measure.Name, rows);
     }
 
-    private static IReadOnlyList<string> ResolveVisibleColumns(
+    private static IReadOnlyList<TableColumnSpec> ResolveVisibleColumns(
         AnswerComposerRequest request,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
     {
         var hidden = request.SensitivityPolicy.HiddenColumns.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var schemaColumns = request.ResultSchema?.Columns
             .Where(column => column.Visible && !hidden.Contains(column.Name))
-            .Select(column => column.Name)
+            .Select(column => new TableColumnSpec(column.Name, string.IsNullOrWhiteSpace(column.Label) ? column.Name : column.Label!))
             .ToArray();
 
         if (schemaColumns is { Length: > 0 })
@@ -281,8 +271,9 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
 
         return rows.FirstOrDefault()?.Keys
             .Where(column => !hidden.Contains(column))
+            .Select(column => new TableColumnSpec(column, column))
             .ToArray()
-            ?? Array.Empty<string>();
+            ?? Array.Empty<TableColumnSpec>();
     }
 
     private static string BuildValidationQuestion(AnswerComposerRequest request)
@@ -290,12 +281,12 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
         if (request.MissingArguments.Count > 0)
         {
             return IsVietnamese(request.Locale)
-                ? $"Vui long cung cap: {string.Join(", ", request.MissingArguments)}."
-                : $"Please provide: {string.Join(", ", request.MissingArguments)}.";
+                ? $"Vui lòng cung cấp: {string.Join(", ", request.MissingArguments.Select(FormatArgumentName))}."
+                : $"Please provide: {string.Join(", ", request.MissingArguments.Select(FormatArgumentName))}.";
         }
 
         return IsVietnamese(request.Locale)
-            ? "Vui long kiem tra lai tham so."
+            ? "Vui lòng kiểm tra lại tham số."
             : "Please correct the capability arguments.";
     }
 
@@ -308,7 +299,7 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
                 .Select(pair => $"{pair.Key}={FormatValue(pair.Value, request.Locale)}"))})";
 
         return IsVietnamese(request.Locale)
-            ? $"Khong tim thay du lieu cho {request.CapabilityKey}{filters}."
+            ? $"Không tìm thấy dữ liệu cho {request.CapabilityKey}{filters}."
             : $"No data was found for {request.CapabilityKey}{filters}.";
     }
 
@@ -364,6 +355,14 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
     private static bool IsVietnamese(string locale) =>
         locale.StartsWith("vi", StringComparison.OrdinalIgnoreCase);
 
+    private static string FormatArgumentName(string argumentName)
+    {
+        var trimmed = argumentName.TrimStart('@');
+        return string.Equals(trimmed, "model_code", StringComparison.OrdinalIgnoreCase)
+            ? "modelCode"
+            : trimmed;
+    }
+
     private static AnswerProvenance CreateProvenance(AnswerComposerRequest request) => new()
     {
         CapabilityKey = request.CapabilityKey,
@@ -371,6 +370,43 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
         CorrelationId = request.ExecutionMetadata.CorrelationId,
         ProcedureName = request.ProcedureName
     };
+
+    private static object CreateStructuredDetail(
+        AnswerComposerRequest request,
+        string answerType,
+        IReadOnlyList<AnswerBlock> blocks,
+        IReadOnlyList<string>? followUpQuestions = null,
+        bool truncated = false,
+        object? result = null,
+        IReadOnlyDictionary<string, object?>? draftAction = null,
+        string? text = null)
+    {
+        var provenance = CreateProvenance(request);
+        return new
+        {
+            mode = "structured",
+            answerType,
+            text = text
+                ?? blocks.OfType<SummaryBlock>().FirstOrDefault()?.Content
+                ?? blocks.OfType<TextBlock>().FirstOrDefault()?.Content
+                ?? string.Empty,
+            blocks,
+            followUpQuestions = followUpQuestions ?? Array.Empty<string>(),
+            provenance,
+            capabilityKey = request.CapabilityKey,
+            procedureName = request.ProcedureName,
+            arguments = AnswerDataSanitizer.ApplySensitivity(request.Arguments, request.SensitivityPolicy),
+            rowCount = request.RowCount,
+            errorCode = request.ErrorCode,
+            missingArguments = request.MissingArguments.Select(FormatArgumentName).ToArray(),
+            invalidArguments = request.InvalidArguments.Select(FormatArgumentName).ToArray(),
+            truncated,
+            result,
+            draftAction
+        };
+    }
+
+    private sealed record TableColumnSpec(string Name, string Label);
 }
 
 internal static class AnswerDataSanitizer

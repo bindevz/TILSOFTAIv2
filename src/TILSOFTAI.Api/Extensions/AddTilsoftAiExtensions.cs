@@ -549,7 +549,7 @@ public static class AddTilsoftAiExtensions
                 "AiRouting:MaxTotalCandidateTools must be >= AiRouting:MaxCandidateToolsPerDomain.")
             .Validate(options => options.AllowedDomains.Length > 0
                     && options.AllowedDomains.All(domain => string.Equals(domain, "model", StringComparison.OrdinalIgnoreCase)),
-                "AiRouting:AllowedDomains must be [\"model\"] for Sprint 34.")
+                "AiRouting:AllowedDomains must be [\"model\"] for Sprint 35.")
             .Validate(options => !(options.UseOfficialMicrosoftAgentFramework || options.MicrosoftAgentFrameworkRoutingEnabled)
                     || OfficialAgentProviderFactory.IsAllowedProvider(options.Provider),
                 "AiRouting:Provider must be AzureOpenAI, OpenAI, OpenAiCompatibleLocal, or OllamaOfficialProviderForDevOnly when official Agent Framework routing is enabled.")

@@ -55,9 +55,7 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
 
         var domains = _domainGate.SelectDomains(initialChunks, effectiveOptions);
 
-        var allowedDomains = effectiveOptions.AllowedDomains.Count == 0
-            ? DomainGate.DefaultAllowedDomains
-            : effectiveOptions.AllowedDomains;
+        var allowedDomains = DomainGate.BuildRuntimeAllowedDomainSet(effectiveOptions.AllowedDomains);
         var domainNames = domains
             .Select(domain => DomainGate.NormalizeDomain(domain.Domain))
             .Where(allowedDomains.Contains)
@@ -113,7 +111,9 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
                 cancellationToken);
 
             var metadataDomain = DomainGate.NormalizeDomain(metadata?.Domain ?? string.Empty);
-            if (metadata is null || !domainNames.Contains(metadataDomain, StringComparer.OrdinalIgnoreCase))
+            if (metadata is null
+                || !DomainGate.IsRuntimeAllowedDomain(metadataDomain)
+                || !domainNames.Contains(metadataDomain, StringComparer.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -132,7 +132,8 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
         }
 
         var cappedCapabilities = candidates
-            .GroupBy(candidate => candidate.Metadata.Domain, StringComparer.OrdinalIgnoreCase)
+            .Where(candidate => DomainGate.IsRuntimeAllowedDomain(candidate.Metadata.Domain))
+            .GroupBy(candidate => DomainGate.NormalizeDomain(candidate.Metadata.Domain), StringComparer.OrdinalIgnoreCase)
             .SelectMany(group => group
                 .OrderByDescending(candidate => candidate.Score)
                 .ThenBy(candidate => candidate.Metadata.CapabilityKey, StringComparer.OrdinalIgnoreCase)
@@ -182,7 +183,7 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
 
         return new CapabilityRetrievalOptions
         {
-            AllowedDomains = BuildAllowedDomainSet(_options.AllowedDomains),
+            AllowedDomains = DomainGate.BuildRuntimeAllowedDomainSet(_options.AllowedDomains),
             MaxDomainsPerRequest = EffectiveLimit(options.MaxDomainsPerRequest, _options.MaxCandidateDomains),
             MaxToolsPerDomain = EffectiveLimit(options.MaxToolsPerDomain, _options.MaxCandidateToolsPerDomain),
             MaxTotalTools = EffectiveLimit(options.MaxTotalTools, EffectiveMaxCandidateTools())
@@ -195,18 +196,6 @@ public sealed class SemanticCapabilityRetriever : ISemanticCapabilityRetriever
             ? _options.MaxCandidateTools
             : _options.MaxTotalCandidateTools;
         return Math.Max(0, Math.Min(maxCandidateTools, _options.MaxTotalCandidateTools));
-    }
-
-    private static IReadOnlySet<string> BuildAllowedDomainSet(IEnumerable<string>? domains)
-    {
-        var normalized = (domains ?? Array.Empty<string>())
-            .Where(domain => !string.IsNullOrWhiteSpace(domain))
-            .Select(DomainGate.NormalizeDomain)
-            .ToArray();
-
-        return normalized.Length == 0
-            ? DomainGate.DefaultAllowedDomains
-            : new HashSet<string>(normalized, StringComparer.OrdinalIgnoreCase);
     }
 
     private static int EffectiveLimit(int requestLimit, int configuredLimit)

@@ -20,8 +20,8 @@ BEGIN
         'ai_model_get_overview',
         1,
         NULL,
-        '{"type":"object","required":["modelId"],"properties":{"modelId":{"type":"integer","minimum":1}},"additionalProperties":false}',
-        'Call when the user asks for a model summary or packaging/logistics metrics. Interpret DefaultCbm (Model.Cbm), Qnt40HC (Model.Qnt40HC), BoxInSet (Packaging.BoxInSet), and FSC/RCS flags. Follow-up: if PieceCount > 0 call model_get_pieces; if materials are needed call model_get_materials; if packaging details are needed call model_get_packaging; if comparing multiple models call model_compare_models. Safety: use only the provided modelId; avoid PII; keep scope tight.',
+        '{"type":"object","required":["modelCode"],"properties":{"modelCode":{"type":"string","minLength":1,"maxLength":50}},"additionalProperties":false}',
+        'Call when the user asks for a model summary or packaging/logistics metrics by business model code. Interpret DefaultCbm (Model.Cbm), Qnt40HC (Model.Qnt40HC), BoxInSet (Packaging.BoxInSet), and FSC/RCS flags. Follow-up: if PieceCount > 0 call model_get_pieces; if materials are needed call model_get_materials; if packaging details are needed call model_get_packaging; if comparing multiple models call model_compare_models. Safety: use only the provided modelCode; avoid PII; keep scope tight.',
         'Get model overview, logistics metrics, and piece counts.'
     );
 END;
@@ -40,7 +40,7 @@ BEGIN
     (
         'model_get_overview',
         'en',
-        'Call when the user asks for a model summary or packaging/logistics metrics. Interpret DefaultCbm (Model.Cbm), Qnt40HC (Model.Qnt40HC), BoxInSet (Packaging.BoxInSet), and FSC/RCS flags. Follow-up: if PieceCount > 0 call model_get_pieces; if materials are needed call model_get_materials; if packaging details are needed call model_get_packaging; if comparing multiple models call model_compare_models. Safety: use only the provided modelId; avoid PII; keep scope tight.',
+        'Call when the user asks for a model summary or packaging/logistics metrics by business model code. Interpret DefaultCbm (Model.Cbm), Qnt40HC (Model.Qnt40HC), BoxInSet (Packaging.BoxInSet), and FSC/RCS flags. Follow-up: if PieceCount > 0 call model_get_pieces; if materials are needed call model_get_materials; if packaging details are needed call model_get_packaging; if comparing multiple models call model_compare_models. Safety: use only the provided modelCode; avoid PII; keep scope tight.',
         'Get model overview, logistics metrics, and piece counts.'
     );
 END;
@@ -59,7 +59,7 @@ BEGIN
     (
         'model_get_overview',
         'vi',
-        'Goi khi nguoi dung hoi tom tat model hoac chi so dong goi/logistics. Dien giai DefaultCbm (Model.Cbm), Qnt40HC (Model.Qnt40HC), BoxInSet (Packaging.BoxInSet), va co FSC/RCS. Theo sau: neu PieceCount > 0 goi model_get_pieces; neu can vat lieu goi model_get_materials; neu can dong goi goi model_get_packaging; neu so sanh nhieu model goi model_compare_models. An toan: chi dung modelId duoc cung cap; tranh PII; gioi han pham vi.',
+        'Goi khi nguoi dung hoi tom tat model hoac chi so dong goi/logistics bang ma model nghiep vu. Dien giai DefaultCbm (Model.Cbm), Qnt40HC (Model.Qnt40HC), BoxInSet (Packaging.BoxInSet), va co FSC/RCS. Theo sau: neu PieceCount > 0 goi model_get_pieces; neu can vat lieu goi model_get_materials; neu can dong goi goi model_get_packaging; neu so sanh nhieu model goi model_compare_models. An toan: chi dung modelCode duoc cung cap; tranh PII; gioi han pham vi.',
         'Lay tong quan model, chi so logistics, va so luong piece.'
     );
 END;
@@ -83,8 +83,8 @@ BEGIN
         'ai_model_get_pieces',
         1,
         NULL,
-        '{"type":"object","required":["modelId"],"properties":{"modelId":{"type":"integer","minimum":1}},"additionalProperties":false}',
-        'Call when you need the piece list or hierarchy for a model. Use ChildModelId to detect nested sets and recursively call model_get_pieces for child model ids until the recursion policy limit. Follow-up: if materials are requested for a piece model, call model_get_materials with that child model id. Safety: do not traverse beyond max recursion depth.',
+        '{"type":"object","required":["modelCode"],"properties":{"modelCode":{"type":"string","minLength":1,"maxLength":50}},"additionalProperties":false}',
+        'Call when you need the piece list or hierarchy for a model by business model code. Use ChildModelCode to detect nested sets. Follow-up: if materials are requested for a piece model, call model_get_materials with that child model code. Safety: do not traverse beyond max recursion depth.',
         'List model pieces and nested model references.'
     );
 END;
@@ -103,7 +103,7 @@ BEGIN
     (
         'model_get_pieces',
         'en',
-        'Call when you need the piece list or hierarchy for a model. Use ChildModelId to detect nested sets and recursively call model_get_pieces for child model ids until the recursion policy limit. Follow-up: if materials are requested for a piece model, call model_get_materials with that child model id. Safety: do not traverse beyond max recursion depth.',
+        'Call when you need the piece list or hierarchy for a model by business model code. Use ChildModelCode to detect nested sets. Follow-up: if materials are requested for a piece model, call model_get_materials with that child model code. Safety: do not traverse beyond max recursion depth.',
         'List model pieces and nested model references.'
     );
 END;
@@ -122,7 +122,7 @@ BEGIN
     (
         'model_get_pieces',
         'vi',
-        'Goi khi can danh sach piece hoac phan cap cho model. Dung ChildModelId de nhan biet bo long nhau va goi de quy model_get_pieces cho model con den khi dat gioi han de quy. Theo sau: neu can vat lieu cho piece model, goi model_get_materials voi model con do. An toan: khong vuot qua do sau de quy toi da.',
+        'Goi khi can danh sach piece hoac phan cap cho model bang ma model nghiep vu. Dung ChildModelCode de nhan biet bo long nhau. Theo sau: neu can vat lieu cho piece model, goi model_get_materials voi ma model con do. An toan: khong vuot qua do sau de quy toi da.',
         'Liet ke piece model va tham chieu model long nhau.'
     );
 END;
@@ -146,7 +146,7 @@ BEGIN
         'ai_model_get_materials',
         1,
         NULL,
-        '{"type":"object","required":["modelId"],"properties":{"modelId":{"type":"integer","minimum":1}},"additionalProperties":false}',
+        '{"type":"object","required":["modelCode"],"properties":{"modelCode":{"type":"string","minLength":1,"maxLength":50}},"additionalProperties":false}',
         'Call when the user asks for material composition or sustainability flags. Group results by ProductWizardSectionNM and cite IsFSCEnabled/IsRCSEnabled with MaterialGroupID. Follow-up: use model_compare_models for cross-model comparisons. Safety: avoid inference; rely on returned metrics.',
         'Get model material configuration and quantities.'
     );
@@ -209,7 +209,7 @@ BEGIN
         'ai_model_compare_models',
         1,
         NULL,
-        '{"type":"object","required":["modelIds"],"properties":{"modelIds":{"type":"array","minItems":2,"items":{"type":"integer","minimum":1}}},"additionalProperties":false}',
+        '{"type":"object","required":["modelCodes"],"properties":{"modelCodes":{"type":"array","minItems":2,"items":{"type":"string","minLength":1,"maxLength":50}}},"additionalProperties":false}',
         'Call when the user asks to compare two or more models (packaging or loadability differences). Explain differences using DefaultCbm, Qnt40HC, BoxInSet, and CbmPer40HC; note FSC/RCS flags when relevant. Follow-up: if needed, drill into pieces, materials, or packaging for each model. Safety: do not speculate; stick to computed values.',
         'Compare models across logistics and packaging metrics.'
     );
@@ -272,8 +272,8 @@ BEGIN
         'ai_model_get_packaging',
         1,
         NULL,
-        '{"type":"object","required":["modelId"],"properties":{"modelId":{"type":"integer","minimum":1}},"additionalProperties":false}',
-        'Call when the user asks for packaging method, carton dimensions, CBM, BoxInSet, or container quantities. Uses the default packaging option for the model. Safety: use only the provided modelId; avoid PII.',
+        '{"type":"object","required":["modelCode"],"properties":{"modelCode":{"type":"string","minLength":1,"maxLength":50}},"additionalProperties":false}',
+        'Call when the user asks for packaging method, carton dimensions, CBM, BoxInSet, or container quantities by business model code. Uses the default packaging option for the model. Safety: use only the provided modelCode; avoid PII.',
         'Get default packaging metrics for a model.'
     );
 END;
@@ -292,7 +292,7 @@ BEGIN
     (
         'model_get_packaging',
         'en',
-        'Call when the user asks for packaging method, carton dimensions, CBM, BoxInSet, or container quantities. Uses the default packaging option for the model. Safety: use only the provided modelId; avoid PII.',
+        'Call when the user asks for packaging method, carton dimensions, CBM, BoxInSet, or container quantities by business model code. Uses the default packaging option for the model. Safety: use only the provided modelCode; avoid PII.',
         'Get default packaging metrics for a model.'
     );
 END;
@@ -311,7 +311,7 @@ BEGIN
     (
         'model_get_packaging',
         'vi',
-        'Goi khi nguoi dung hoi phuong phap dong goi, kich thuoc thung, CBM, BoxInSet, hoac so luong container. Su dung packaging option mac dinh cua model. An toan: chi dung modelId duoc cung cap; tranh PII.',
+        'Goi khi nguoi dung hoi phuong phap dong goi, kich thuoc thung, CBM, BoxInSet, hoac so luong container bang ma model nghiep vu. Su dung packaging option mac dinh cua model. An toan: chi dung modelCode duoc cung cap; tranh PII.',
         'Lay chi so dong goi mac dinh cua model.'
     );
 END;

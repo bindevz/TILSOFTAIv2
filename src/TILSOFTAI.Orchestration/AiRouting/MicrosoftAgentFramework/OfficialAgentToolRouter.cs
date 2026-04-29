@@ -10,6 +10,7 @@ using TILSOFTAI.Domain.Metrics;
 using TILSOFTAI.Orchestration.Answering;
 using TILSOFTAI.Orchestration.AiRouting.Tools;
 using TILSOFTAI.Orchestration.Execution;
+using TILSOFTAI.Orchestration.Observability;
 using TILSOFTAI.Orchestration.Semantic;
 
 namespace TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
@@ -69,6 +70,15 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
         IReadOnlyList<AIFunction>? tools = null;
 
         RecordRequest(request);
+        _logger.LogInformation(
+            "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | allowedDomains: {AllowedDomains} | answerMode: {AnswerMode} | fallbackUsed: false",
+            Sprint35TraceEvents.AgentRouteStarted,
+            request.ExecutionContext.CorrelationId,
+            request.ExecutionContext.TenantId,
+            request.ExecutionContext.UserId,
+            request.ExecutionContext.ConversationId,
+            string.Join(",", _options.AllowedDomains ?? Array.Empty<string>()),
+            request.RequestedAnswerMode);
 
         try
         {
@@ -99,9 +109,21 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
                 cancellationToken);
             retrieval = ToRetrievalResult(selectedCandidates);
             MarkStage(stageLatencyMs, "semantic_retrieval", ref stageStartedAt);
+            _metrics?.RecordGauge(MetricNames.AgentRoutingCandidateCount, retrieval.Capabilities.Count, BaseLabels(request));
+            _logger.LogInformation(
+                "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | candidate_count: {CandidateCount} | candidateCapabilityKeys: {CandidateCapabilityKeys} | durationMs: {DurationMs}",
+                Sprint35TraceEvents.CandidateSelectionCompleted,
+                request.ExecutionContext.CorrelationId,
+                request.ExecutionContext.TenantId,
+                request.ExecutionContext.UserId,
+                request.ExecutionContext.ConversationId,
+                retrieval.Capabilities.Count,
+                string.Join(",", retrieval.Capabilities.Select(candidate => candidate.Metadata.CapabilityKey)),
+                StageDuration(stageLatencyMs, "semantic_retrieval"));
 
             if (retrieval.Capabilities.Count == 0)
             {
+                LogFailedClosed(request, "NO_CANDIDATE_CAPABILITIES", startedAt);
                 await SaveNotHandledTraceAsync(
                     request,
                     hardSignals,
@@ -126,9 +148,21 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
                 cancellationToken);
             MarkStage(stageLatencyMs, "tool_building", ref stageStartedAt);
             RecordCandidateTools(request, tools.Count);
+            _metrics?.RecordGauge(MetricNames.AgentRoutingAdvertisedToolCount, tools.Count, BaseLabels(request));
+            _logger.LogInformation(
+                "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | advertised_tool_count: {AdvertisedToolCount} | advertisedFunctionNames: {AdvertisedFunctionNames} | durationMs: {DurationMs}",
+                Sprint35TraceEvents.ToolsAdvertised,
+                request.ExecutionContext.CorrelationId,
+                request.ExecutionContext.TenantId,
+                request.ExecutionContext.UserId,
+                request.ExecutionContext.ConversationId,
+                tools.Count,
+                string.Join(",", tools.Select(tool => tool.Name)),
+                StageDuration(stageLatencyMs, "tool_building"));
 
             if (tools.Count == 0)
             {
+                LogFailedClosed(request, "NO_ADVERTISED_TOOLS", startedAt);
                 await SaveNotHandledTraceAsync(
                     request,
                     hardSignals,
@@ -152,6 +186,15 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
                 retrieval.Capabilities.Count,
                 tools.Count);
 
+            _logger.LogInformation(
+                "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | advertisedFunctionNames: {AdvertisedFunctionNames}",
+                Sprint35TraceEvents.AgentRunStarted,
+                request.ExecutionContext.CorrelationId,
+                request.ExecutionContext.TenantId,
+                request.ExecutionContext.UserId,
+                request.ExecutionContext.ConversationId,
+                string.Join(",", tools.Select(tool => tool.Name)));
+
             var agentResult = await _agentRuntime.RunAsync(
                     new OfficialMicrosoftAgentRunRequest(
                         tools,
@@ -162,14 +205,59 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
                     cancellationToken)
                 .ConfigureAwait(false);
             MarkStage(stageLatencyMs, "agent_tool_selection", ref stageStartedAt);
+            _metrics?.RecordHistogram(MetricNames.AgentRoutingAgentDurationMs, StageDuration(stageLatencyMs, "agent_tool_selection"), BaseLabels(request));
+            _logger.LogInformation(
+                "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | selectedFunctionName: {SelectedFunctionName} | capabilityKey: {CapabilityKey} | argumentsMasked: {ArgumentsMasked} | rowCount: {RowCount} | durationMs: {DurationMs}",
+                Sprint35TraceEvents.AgentToolInvoked,
+                request.ExecutionContext.CorrelationId,
+                request.ExecutionContext.TenantId,
+                request.ExecutionContext.UserId,
+                request.ExecutionContext.ConversationId,
+                agentResult.SelectedToolName ?? "none",
+                agentResult.SelectedCapabilityKey ?? agentResult.ToolResult?.CapabilityKey ?? "none",
+                MaskArguments(agentResult.Arguments.ToJsonString()),
+                agentResult.ToolResult?.RowCount ?? 0,
+                StageDuration(stageLatencyMs, "agent_tool_selection"));
 
             var answerRequest = AgentToolCallResultMapper.ToAnswerComposerRequest(
                 agentResult,
                 request,
                 retrieval);
 
+            _logger.LogInformation(
+                "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | answerMode: {AnswerMode} | capabilityKey: {CapabilityKey} | rowCount: {RowCount}",
+                Sprint35TraceEvents.AnswerComposerStarted,
+                request.ExecutionContext.CorrelationId,
+                request.ExecutionContext.TenantId,
+                request.ExecutionContext.UserId,
+                request.ExecutionContext.ConversationId,
+                request.RequestedAnswerMode,
+                answerRequest.CapabilityKey,
+                answerRequest.RowCount);
             var answer = await _answerComposer.ComposeAsync(answerRequest, cancellationToken);
             MarkStage(stageLatencyMs, "answer_composition", ref stageStartedAt);
+            _metrics?.RecordHistogram(MetricNames.AgentRoutingAnswerComposerDurationMs, StageDuration(stageLatencyMs, "answer_composition"), BaseLabels(request));
+            _metrics?.RecordGauge(MetricNames.AgentRoutingRowCount, answer.Provenance.RowCount, BaseLabels(request));
+            if (string.Equals(answer.AnswerType, "follow_up", StringComparison.OrdinalIgnoreCase))
+            {
+                _metrics?.IncrementCounter(MetricNames.AgentRoutingFollowUpTotal, BaseLabels(request));
+            }
+            if (string.Equals(answerRequest.ErrorCode, CapabilityExecutionFacade.ArgumentValidationFailedCode, StringComparison.OrdinalIgnoreCase))
+            {
+                _metrics?.IncrementCounter(MetricNames.AgentRoutingValidationFailureTotal, BaseLabels(request));
+            }
+            _logger.LogInformation(
+                "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | answerMode: {AnswerMode} | answerType: {AnswerType} | capabilityKey: {CapabilityKey} | rowCount: {RowCount} | durationMs: {DurationMs}",
+                Sprint35TraceEvents.AnswerComposerCompleted,
+                request.ExecutionContext.CorrelationId,
+                request.ExecutionContext.TenantId,
+                request.ExecutionContext.UserId,
+                request.ExecutionContext.ConversationId,
+                request.RequestedAnswerMode,
+                answer.AnswerType,
+                answer.Provenance.CapabilityKey,
+                answer.Provenance.RowCount,
+                StageDuration(stageLatencyMs, "answer_composition"));
 
             await _traceStore.SaveAsync(
                 ToolRoutingTraceFactory.FromSuccess(request, hardSignals, retrieval, tools, agentResult, answer, stageLatencyMs, startedAt),
@@ -189,7 +277,16 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "OfficialAgentToolRouterFailed");
+            _logger.LogWarning(
+                ex,
+                "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | errorCode: {ErrorCode} | durationMs: {DurationMs} | fallbackUsed: false",
+                Sprint35TraceEvents.AgentRouteFailedClosed,
+                request.ExecutionContext.CorrelationId,
+                request.ExecutionContext.TenantId,
+                request.ExecutionContext.UserId,
+                request.ExecutionContext.ConversationId,
+                ex.GetType().Name,
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
 
             try
             {
@@ -210,6 +307,19 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
                 FailureReason = ex.Message
             };
         }
+    }
+
+    private void LogFailedClosed(AgentToolRoutingRequest request, string errorCode, long startedAt)
+    {
+        _logger.LogWarning(
+            "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | errorCode: {ErrorCode} | durationMs: {DurationMs} | fallbackUsed: false",
+            Sprint35TraceEvents.AgentRouteFailedClosed,
+            request.ExecutionContext.CorrelationId,
+            request.ExecutionContext.TenantId,
+            request.ExecutionContext.UserId,
+            request.ExecutionContext.ConversationId,
+            errorCode,
+            Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
     }
 
     private async Task SaveNotHandledTraceAsync(
@@ -318,6 +428,9 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
         }
     }
 
+    private static double StageDuration(IReadOnlyDictionary<string, double> stageLatencyMs, string stage) =>
+        stageLatencyMs.TryGetValue(stage, out var durationMs) ? durationMs : 0d;
+
     private static Dictionary<string, string> BaseLabels(AgentToolRoutingRequest request) => new(StringComparer.OrdinalIgnoreCase)
     {
         ["locale"] = NormalizeLabel(request.Locale),
@@ -326,6 +439,14 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
 
     private static string NormalizeLabel(string? value) =>
         string.IsNullOrWhiteSpace(value) ? "unknown" : value.Trim().ToLowerInvariant();
+
+    private static string MaskArguments(string? argumentsJson) =>
+        string.IsNullOrWhiteSpace(argumentsJson)
+            ? "{}"
+            : argumentsJson
+                .Replace("password", "***", StringComparison.OrdinalIgnoreCase)
+                .Replace("secret", "***", StringComparison.OrdinalIgnoreCase)
+                .Replace("token", "***", StringComparison.OrdinalIgnoreCase);
 
     private async Task<AgentToolRoutingResult> HandleConfirmationTurnAsync(
         AgentToolRoutingRequest request,

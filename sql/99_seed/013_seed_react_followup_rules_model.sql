@@ -12,8 +12,8 @@ BEGIN
     VALUES
         ('model.overview.pieces', NULL, 'model', NULL, 'model_get_overview', 10, 1,
          '$.PieceCount', '>', '0', 'model_get_pieces',
-         N'{"modelId":"{{$.ModelId}}"}',
-         'If PieceCount > 0, call model_get_pieces(modelId) before final answer to list pieces summary.',
+         N'{"modelCode":"{{$.ModelCode}}"}',
+         'If PieceCount > 0, call model_get_pieces(modelCode) before final answer to list pieces summary.',
          'patch_35_seed');
 END
 
@@ -26,8 +26,8 @@ BEGIN
     VALUES
         ('model.overview.materials', NULL, 'model', NULL, 'model_get_overview', 20, 1,
          '$.HasMaterials', '==', 'true', 'model_get_materials',
-         N'{"modelId":"{{$.ModelId}}"}',
-         'If materials exist, call model_get_materials(modelId) and include materials in analysis.',
+         N'{"modelCode":"{{$.ModelCode}}"}',
+         'If materials exist, call model_get_materials(modelCode) and include materials in analysis.',
          'patch_35_seed');
 END
 
@@ -40,8 +40,8 @@ BEGIN
     VALUES
         ('model.overview.packaging', NULL, 'model', NULL, 'model_get_overview', 30, 1,
          '$.PackagingMethodId', 'exists', NULL, 'model_get_packaging',
-         N'{"packagingMethodId":"{{$.PackagingMethodId}}"}',
-         'If PackagingMethodId is present, call model_get_packaging(packagingMethodId) and include packaging details.',
+         N'{"modelCode":"{{$.ModelCode}}"}',
+         'If PackagingMethodId is present, call model_get_packaging(modelCode) and include packaging details.',
          'patch_35_seed');
 END
 GO

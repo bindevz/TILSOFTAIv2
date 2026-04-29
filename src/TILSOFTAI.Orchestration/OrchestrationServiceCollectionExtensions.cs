@@ -3,6 +3,7 @@ using TILSOFTAI.Agents;
 using TILSOFTAI.Agents.Abstractions;
 using TILSOFTAI.Agents.Domain;
 using TILSOFTAI.Approvals;
+using TILSOFTAI.Orchestration.Actions;
 using TILSOFTAI.Orchestration.Answering;
 using TILSOFTAI.Orchestration.AiRouting;
 using TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
@@ -41,6 +42,7 @@ public static class OrchestrationServiceCollectionExtensions
         services.AddSingleton<RawJsonAnswerComposer>();
         services.AddSingleton<AiSummaryService>();
         services.AddSingleton<IAnswerComposer, StructuredAnswerComposer>();
+        services.AddSingleton<IPendingActionConfirmationResolver, PendingActionConfirmationResolver>();
         services.AddSingleton<ISemanticCapabilityRetriever, SemanticCapabilityRetriever>();
         services.AddSingleton<ICapabilityCandidateSelector, SemanticCapabilityCandidateSelector>();
         services.AddSingleton<IAgentToolRouter, NoOpAgentToolRouter>();

@@ -20,13 +20,13 @@ public sealed class AiSummaryService
         if (request.RowCount == 0)
         {
             return IsVietnamese(request.Locale)
-                ? $"Khong tim thay du lieu cho {request.CapabilityKey} voi bo loc da cung cap."
+                ? $"Không tìm thấy dữ liệu cho {request.CapabilityKey} với bộ lọc đã cung cấp."
                 : $"No data was found for {request.CapabilityKey} with the provided filters.";
         }
 
         var displayed = Math.Min(safeRows.Count, request.RowCount);
         return IsVietnamese(request.Locale)
-            ? $"Tim thay {request.RowCount} dong cho {request.CapabilityKey}; hien thi {displayed} dong dau tien."
+            ? $"Tìm thấy {request.RowCount} dòng cho {request.CapabilityKey}; hiển thị {displayed} dòng đầu tiên."
             : $"Found {request.RowCount} rows for {request.CapabilityKey}; showing the first {displayed}.";
     }
 

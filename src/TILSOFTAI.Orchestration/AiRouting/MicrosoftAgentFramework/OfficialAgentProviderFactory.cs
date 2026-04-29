@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Orchestration.Observability;
 
 namespace TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
 
@@ -65,12 +66,16 @@ public sealed class OfficialAgentProviderFactory : IOfficialAgentProviderFactory
         }
 
         _logger.LogInformation(
-            "OfficialAgentProviderCreateAgent | Provider: {Provider} | Model: {Model} | ToolCount: {ToolCount} | TenantId: {TenantId} | UserId: {UserId}",
+            "{EventName} | correlationId: {CorrelationId} | provider: {Provider} | model: {Model} | advertised_tool_count: {ToolCount} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | advertisedFunctionNames: {AdvertisedFunctionNames}",
+            Sprint35TraceEvents.AgentCreated,
+            executionContext.CorrelationId,
             provider,
             string.IsNullOrWhiteSpace(model) ? "unspecified" : model,
             tools.Count,
             string.IsNullOrWhiteSpace(executionContext.TenantId) ? "unknown" : executionContext.TenantId,
-            string.IsNullOrWhiteSpace(executionContext.UserId) ? "unknown" : executionContext.UserId);
+            string.IsNullOrWhiteSpace(executionContext.UserId) ? "unknown" : executionContext.UserId,
+            string.IsNullOrWhiteSpace(executionContext.ConversationId) ? "unknown" : executionContext.ConversationId,
+            string.Join(",", tools.Select(tool => tool.Name)));
 
         return _chatClient.AsAIAgent(
             instructions,

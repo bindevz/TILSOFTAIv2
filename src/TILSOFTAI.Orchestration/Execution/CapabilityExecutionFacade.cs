@@ -1,10 +1,13 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TILSOFTAI.Approvals;
 using TILSOFTAI.Domain.ExecutionContext;
+using TILSOFTAI.Domain.Metrics;
 using TILSOFTAI.Orchestration.Answering;
 using TILSOFTAI.Orchestration.Capabilities;
+using TILSOFTAI.Orchestration.Observability;
 using TILSOFTAI.Orchestration.Semantic;
 using TILSOFTAI.Tools.Abstractions;
 
@@ -28,6 +31,7 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
     private readonly CapabilityArgumentMapper _argumentMapper;
     private readonly CapabilityExecutionPolicy _executionPolicy;
     private readonly ILogger<CapabilityExecutionFacade> _logger;
+    private readonly IMetricsService? _metrics;
 
     public CapabilityExecutionFacade(
         ICapabilityRegistry capabilityRegistry,
@@ -37,7 +41,8 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
         IToolAdapterRegistry toolAdapterRegistry,
         CapabilityArgumentMapper argumentMapper,
         CapabilityExecutionPolicy executionPolicy,
-        ILogger<CapabilityExecutionFacade>? logger = null)
+        ILogger<CapabilityExecutionFacade>? logger = null,
+        IEnumerable<IMetricsService>? metricsServices = null)
     {
         _capabilityRegistry = capabilityRegistry ?? throw new ArgumentNullException(nameof(capabilityRegistry));
         _metadataRepository = metadataRepositories?.FirstOrDefault();
@@ -47,6 +52,7 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
         _argumentMapper = argumentMapper ?? throw new ArgumentNullException(nameof(argumentMapper));
         _executionPolicy = executionPolicy ?? throw new ArgumentNullException(nameof(executionPolicy));
         _logger = logger ?? NullLogger<CapabilityExecutionFacade>.Instance;
+        _metrics = metricsServices?.FirstOrDefault();
     }
 
     public async Task<CapabilityExecutionEnvelope> ExecuteReadAsync(
@@ -54,6 +60,7 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
+        var startedAt = Stopwatch.GetTimestamp();
         var loaded = await LoadCapabilityAsync(capabilityKey, cancellationToken).ConfigureAwait(false);
         if (loaded.Capability is null)
         {
@@ -61,31 +68,35 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
         }
 
         var context = CurrentContext();
+        LogFacadeStarted(loaded.Capability, context, arguments);
         var access = CapabilityAccessPolicy.Evaluate(loaded.Capability, context);
         if (!access.Allowed)
         {
-            return AccessDenied(loaded.Capability, arguments, context, access);
+            return Complete(AccessDenied(loaded.Capability, arguments, context, access), context, startedAt);
         }
 
         if (!_executionPolicy.CanExecuteRead(loaded.Capability))
         {
-            return Blocked(
+            return Complete(Blocked(
                 loaded.Capability,
                 arguments,
                 context,
                 UnsupportedExecutionModeCode,
-                "Capability is not read-only. Use preview/approval flow.");
+                "Capability is not read-only. Use preview/approval flow."), context, startedAt);
         }
 
         var procArgs = _argumentMapper.MapModelArgsToProcArgs(loaded.Capability, arguments, loaded.Metadata);
         var validation = ValidateArguments(loaded.Capability, procArgs);
         if (!validation.IsValid)
         {
-            return ValidationFailed(loaded.Capability, procArgs, context, validation);
+            var failed = ValidationFailed(loaded.Capability, procArgs, context, validation);
+            LogValidationFailed(loaded.Capability, context, failed);
+            return Complete(failed, context, startedAt);
         }
 
-        return await ExecuteAdapterAsync(loaded.Capability, loaded.Metadata, procArgs, context, null, cancellationToken)
+        var envelope = await ExecuteAdapterAsync(loaded.Capability, loaded.Metadata, procArgs, context, null, cancellationToken)
             .ConfigureAwait(false);
+        return Complete(envelope, context, startedAt);
     }
 
     public async Task<CapabilityExecutionEnvelope> PreviewWriteAsync(
@@ -93,6 +104,7 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
+        var startedAt = Stopwatch.GetTimestamp();
         var loaded = await LoadCapabilityAsync(capabilityKey, cancellationToken).ConfigureAwait(false);
         if (loaded.Capability is null)
         {
@@ -100,36 +112,40 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
         }
 
         var context = CurrentContext();
+        LogFacadeStarted(loaded.Capability, context, arguments);
         var access = CapabilityAccessPolicy.Evaluate(loaded.Capability, context);
         if (!access.Allowed)
         {
-            return AccessDenied(loaded.Capability, arguments, context, access);
+            return Complete(AccessDenied(loaded.Capability, arguments, context, access), context, startedAt);
         }
 
         if (!_executionPolicy.CanPreviewWrite(loaded.Capability))
         {
-            return Blocked(
+            return Complete(Blocked(
                 loaded.Capability,
                 arguments,
                 context,
                 UnsupportedExecutionModeCode,
-                "Capability does not support write preview.");
+                "Capability does not support write preview."), context, startedAt);
         }
 
         var procArgs = _argumentMapper.MapModelArgsToProcArgs(loaded.Capability, arguments, loaded.Metadata);
         var validation = ValidateArguments(loaded.Capability, procArgs);
         if (!validation.IsValid)
         {
-            return ValidationFailed(loaded.Capability, procArgs, context, validation);
+            var failed = ValidationFailed(loaded.Capability, procArgs, context, validation);
+            LogValidationFailed(loaded.Capability, context, failed);
+            return Complete(failed, context, startedAt);
         }
 
-        return await CreateWritePreviewAsync(
+        var envelope = await CreateWritePreviewAsync(
                 loaded.Capability,
                 loaded.Metadata,
                 procArgs,
                 context,
                 cancellationToken)
             .ConfigureAwait(false);
+        return Complete(envelope, context, startedAt);
     }
 
     public async Task<CapabilityExecutionEnvelope> ExecuteApprovedWriteAsync(
@@ -138,6 +154,7 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
+        var startedAt = Stopwatch.GetTimestamp();
         var loaded = await LoadCapabilityAsync(capabilityKey, cancellationToken).ConfigureAwait(false);
         if (loaded.Capability is null)
         {
@@ -145,42 +162,45 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
         }
 
         var context = CurrentContext();
+        LogFacadeStarted(loaded.Capability, context, arguments);
         var access = CapabilityAccessPolicy.Evaluate(loaded.Capability, context);
         if (!access.Allowed)
         {
-            return AccessDenied(loaded.Capability, arguments, context, access);
+            return Complete(AccessDenied(loaded.Capability, arguments, context, access), context, startedAt);
         }
 
         if (!_executionPolicy.CanExecuteApprovedWrite(loaded.Capability))
         {
-            return Blocked(
+            return Complete(Blocked(
                 loaded.Capability,
                 arguments,
                 context,
                 UnsupportedExecutionModeCode,
-                "Capability is not an approved write operation.");
+                "Capability is not an approved write operation."), context, startedAt);
         }
 
         if (string.IsNullOrWhiteSpace(approvedActionId))
         {
-            return Blocked(
+            return Complete(Blocked(
                 loaded.Capability,
                 arguments,
                 context,
                 WriteApprovalRequiredCode,
-                "Write operations require an approved action ID.");
+                "Write operations require an approved action ID."), context, startedAt);
         }
 
         var procArgs = _argumentMapper.MapModelArgsToProcArgs(loaded.Capability, arguments, loaded.Metadata);
         var validation = ValidateArguments(loaded.Capability, procArgs);
         if (!validation.IsValid)
         {
-            return ValidationFailed(loaded.Capability, procArgs, context, validation);
+            var failed = ValidationFailed(loaded.Capability, procArgs, context, validation);
+            LogValidationFailed(loaded.Capability, context, failed);
+            return Complete(failed, context, startedAt);
         }
 
         if (_approvalEngine is not null)
         {
-            return await ExecuteApprovedActionAsync(
+            var approvedEnvelope = await ExecuteApprovedActionAsync(
                     loaded.Capability,
                     loaded.Metadata,
                     procArgs,
@@ -188,10 +208,77 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
                     approvedActionId,
                     cancellationToken)
                 .ConfigureAwait(false);
+            return Complete(approvedEnvelope, context, startedAt);
         }
 
-        return await ExecuteAdapterAsync(loaded.Capability, loaded.Metadata, procArgs, context, approvedActionId, cancellationToken)
+        var envelope = await ExecuteAdapterAsync(loaded.Capability, loaded.Metadata, procArgs, context, approvedActionId, cancellationToken)
             .ConfigureAwait(false);
+        return Complete(envelope, context, startedAt);
+    }
+
+    private CapabilityExecutionEnvelope Complete(
+        CapabilityExecutionEnvelope envelope,
+        TilsoftExecutionContext context,
+        long startedAt)
+    {
+        var durationMs = Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
+        _metrics?.RecordHistogram(
+            MetricNames.CapabilityFacadeDurationMs,
+            durationMs,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["capability"] = envelope.CapabilityKey,
+                ["status"] = envelope.Status ?? "unknown"
+            });
+        _logger.LogInformation(
+            "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | capabilityKey: {CapabilityKey} | procedureName: {ProcedureName} | rowCount: {RowCount} | durationMs: {DurationMs} | errorCode: {ErrorCode}",
+            Sprint35TraceEvents.CapabilityExecutionCompleted,
+            context.CorrelationId,
+            context.TenantId,
+            context.UserId,
+            envelope.CapabilityKey,
+            envelope.ProcedureName ?? "none",
+            envelope.RowCount,
+            durationMs,
+            envelope.ErrorCode ?? "none");
+        return envelope;
+    }
+
+    private void LogFacadeStarted(
+        CapabilityDescriptor capability,
+        TilsoftExecutionContext context,
+        IReadOnlyDictionary<string, object?> arguments)
+    {
+        _logger.LogInformation(
+            "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | capabilityKey: {CapabilityKey} | procedureName: {ProcedureName} | argumentsMasked: {ArgumentsMasked}",
+            Sprint35TraceEvents.CapabilityFacadeStarted,
+            context.CorrelationId,
+            context.TenantId,
+            context.UserId,
+            capability.CapabilityKey,
+            capability.IntegrationBinding.TryGetValue("storedProcedure", out var sp) ? sp : "none",
+            JsonSerializer.Serialize(arguments, JsonOptions));
+    }
+
+    private void LogValidationFailed(
+        CapabilityDescriptor capability,
+        TilsoftExecutionContext context,
+        CapabilityExecutionEnvelope envelope)
+    {
+        _metrics?.IncrementCounter(
+            MetricNames.AgentRoutingValidationFailureTotal,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["capability"] = capability.CapabilityKey
+            });
+        _logger.LogWarning(
+            "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | capabilityKey: {CapabilityKey} | errorCode: {ErrorCode}",
+            Sprint35TraceEvents.CapabilityValidationFailed,
+            context.CorrelationId,
+            context.TenantId,
+            context.UserId,
+            capability.CapabilityKey,
+            envelope.ErrorCode ?? ArgumentValidationFailedCode);
     }
 
     private async Task<CapabilityExecutionEnvelope> CreateWritePreviewAsync(

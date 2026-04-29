@@ -81,22 +81,43 @@ public sealed class ApprovalEngine : IApprovalEngine
             ValidateRoles(catalogEntry.RequiredRoles, context.Roles, executionPhase: false);
             ValidatePayloadSchema(catalogEntry.JsonSchema, action.PayloadJson, executionPhase: false);
 
-            var requestRecord = new ActionRequestRecord
+            var requestRecord = new ActionRequestCreateRequest
             {
                 TenantId = context.TenantId,
+                UserId = context.UserId,
                 ConversationId = context.ConversationId,
-                Status = "Pending",
+                CapabilityKey = action.CapabilityKey,
+                FunctionName = action.ToolName ?? action.CapabilityKey,
                 ProposedToolName = action.ToolName ?? action.CapabilityKey,
-                ProposedSpName = proposedSpName,
-                ArgsJson = action.PayloadJson,
-                RequestedByUserId = context.UserId
+                ProposedProcedureName = proposedSpName,
+                ProposedArgumentsJson = action.PayloadJson,
+                PreviewResultJson = action.DiffPreviewJson,
+                ExpiresAtUtc = DateTime.UtcNow.AddHours(24),
+                RequestedByUserId = context.UserId,
+                CorrelationId = context.CorrelationId,
+                MetadataJson = JsonSerializer.Serialize(new Dictionary<string, object?>
+                {
+                    ["actionType"] = action.ActionType,
+                    ["agentId"] = action.AgentId,
+                    ["targetSystem"] = action.TargetSystem,
+                    ["riskLevel"] = action.RiskLevel,
+                    ["approvalRequirement"] = action.ApprovalRequirement
+                })
             };
 
             var created = await _requestStore.CreateAsync(requestRecord, ct);
 
             _logger.LogInformation(
-                "ApprovalCreate | ActionId: {ActionId} | Tenant: {TenantId} | Agent: {AgentId} | SP: {StoredProcedure} | RequestedBy: {UserId}",
-                created.ActionId, context.TenantId, action.AgentId, proposedSpName, context.UserId);
+                "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | actionId: {ActionId} | capabilityKey: {CapabilityKey} | procedureName: {ProcedureName} | requestedByUserId: {RequestedByUserId}",
+                Sprint35TraceEvents.PendingActionCreated,
+                context.CorrelationId,
+                context.TenantId,
+                context.UserId,
+                context.ConversationId,
+                created.ActionId,
+                action.CapabilityKey,
+                proposedSpName,
+                context.UserId);
 
             _instrumentation?.RecordApprovalExecution("create", SqlAdapterType, sw.Elapsed, success: true);
             return MapRecord(created, action, context.AgentId);
@@ -134,7 +155,7 @@ public sealed class ApprovalEngine : IApprovalEngine
         var sw = Stopwatch.StartNew();
         try
         {
-            var record = await _requestStore.RejectAsync(context.TenantId, actionId, context.UserId, ct);
+            var record = await _requestStore.RejectAsync(context.TenantId, context.UserId, actionId, reason: null, ct);
 
             _logger.LogInformation(
                 "ApprovalReject | ActionId: {ActionId} | Tenant: {TenantId} | RejectedBy: {UserId}",
@@ -173,7 +194,7 @@ public sealed class ApprovalEngine : IApprovalEngine
                 throw new InvalidOperationException(Resources.Ex_ActionRequestNotFound);
             }
 
-            if (!string.Equals(request.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(request.Status, ActionRequestStatus.Approved, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(Resources.Ex_ActionRequestMustBeApproved);
             }
@@ -303,6 +324,11 @@ public sealed class ApprovalEngine : IApprovalEngine
 
     private static void ValidateNotExpired(ActionRequestRecord request)
     {
+        if (request.IsExpired(DateTime.UtcNow))
+        {
+            throw new InvalidOperationException("Action request has expired and must be previewed again.");
+        }
+
         if (request.RequestedAtUtc == default)
         {
             return;
@@ -527,7 +553,7 @@ public sealed class ApprovalEngine : IApprovalEngine
         ToolName = record.ProposedToolName,
         StoredProcedure = record.ProposedSpName,
         PayloadJson = record.ArgsJson,
-        DiffPreviewJson = action.DiffPreviewJson,
+        DiffPreviewJson = action.DiffPreviewJson ?? record.PreviewResultJson,
         RiskLevel = action.RiskLevel,
         ApprovalRequirement = action.ApprovalRequirement,
         RequestedByUserId = record.RequestedByUserId,
@@ -551,10 +577,11 @@ public sealed class ApprovalEngine : IApprovalEngine
         ActionType = actionType,
         AgentId = agentId ?? string.Empty,
         TargetSystem = targetSystem,
-        CapabilityKey = record.ProposedToolName,
+        CapabilityKey = string.IsNullOrWhiteSpace(record.CapabilityKey) ? record.ProposedToolName : record.CapabilityKey,
         ToolName = record.ProposedToolName,
         StoredProcedure = record.ProposedSpName,
         PayloadJson = record.ArgsJson,
+        DiffPreviewJson = record.PreviewResultJson,
         RequestedByUserId = record.RequestedByUserId,
         ApprovedByUserId = record.ApprovedByUserId,
         ApprovedAtUtc = record.ApprovedAtUtc,

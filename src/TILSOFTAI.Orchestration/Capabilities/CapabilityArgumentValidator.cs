@@ -9,6 +9,7 @@ public static class CapabilityArgumentValidator
     private static readonly Regex CurrencyCodeRegex = new("^[A-Z]{3}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ItemNumberRegex = new("^[A-Za-z0-9._-]{1,50}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex InvoiceNumberRegex = new("^[A-Za-z0-9._/-]{1,50}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex ModelCodeRegex = new("^[A-Za-z0-9._/-]{1,50}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex TenantIdRegex = new("^[A-Za-z0-9._:-]{1,80}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public static CapabilityArgumentValidationResult Validate(
@@ -184,6 +185,34 @@ public static class CapabilityArgumentValidator
 
         if (rule.MinLength is not null || rule.MaxLength is not null)
         {
+            if (value.ValueKind == JsonValueKind.Array)
+            {
+                var actualLength = value.GetArrayLength();
+                if (rule.MinLength is not null && actualLength < rule.MinLength.Value)
+                {
+                    return CapabilityArgumentValidationResult.Invalid(new
+                    {
+                        capabilityKey,
+                        reason = "invalid_argument_min_length",
+                        argument = argumentName,
+                        minLength = rule.MinLength.Value
+                    });
+                }
+
+                if (rule.MaxLength is not null && actualLength > rule.MaxLength.Value)
+                {
+                    return CapabilityArgumentValidationResult.Invalid(new
+                    {
+                        capabilityKey,
+                        reason = "invalid_argument_max_length",
+                        argument = argumentName,
+                        maxLength = rule.MaxLength.Value
+                    });
+                }
+
+                return CapabilityArgumentValidationResult.Valid();
+            }
+
             var actual = ValueAsString(value);
             if (actual is null)
             {
@@ -273,24 +302,40 @@ public static class CapabilityArgumentValidator
             "integer" => value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out _),
             "number" => value.ValueKind == JsonValueKind.Number,
             "boolean" => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+            "array" => value.ValueKind == JsonValueKind.Array,
+            "object" => value.ValueKind == JsonValueKind.Object,
             _ => true
         };
     }
 
     private static bool ValidateFormat(JsonElement value, string format)
     {
+        var normalizedFormat = format.Trim().ToLowerInvariant();
+        if (value.ValueKind == JsonValueKind.Array)
+        {
+            return normalizedFormat switch
+            {
+                "model-code-list" => value.EnumerateArray().All(item =>
+                    item.ValueKind == JsonValueKind.String
+                    && item.GetString() is { } modelCode
+                    && ModelCodeRegex.IsMatch(modelCode)),
+                _ => true
+            };
+        }
+
         var actual = ValueAsString(value);
         if (actual is null)
         {
             return false;
         }
 
-        return format.Trim().ToLowerInvariant() switch
+        return normalizedFormat switch
         {
             "non-empty" => !string.IsNullOrWhiteSpace(actual),
             "currency-code" => CurrencyCodeRegex.IsMatch(actual),
             "item-number" => ItemNumberRegex.IsMatch(actual),
             "invoice-number" => InvoiceNumberRegex.IsMatch(actual),
+            "model-code" => ModelCodeRegex.IsMatch(actual),
             "tenant-id" => TenantIdRegex.IsMatch(actual),
             _ => true
         };

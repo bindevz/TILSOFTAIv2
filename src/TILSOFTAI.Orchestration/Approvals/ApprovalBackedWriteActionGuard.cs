@@ -41,7 +41,24 @@ public sealed class ApprovalBackedWriteActionGuard : IWriteActionGuard
             return WriteActionGuardResult.Rejected($"Action '{actionId}' not found for tenant.");
         }
 
-        if (!string.Equals(record.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+        if (record.IsExpired(DateTime.UtcNow))
+        {
+            _logger.LogWarning(
+                "WriteActionGuard | Rejected | ActionId: {ActionId} | Reason: expired",
+                actionId);
+            return WriteActionGuardResult.Rejected($"Action '{actionId}' has expired and must be previewed again.");
+        }
+
+        if (ActionRequestStatus.IsTerminal(record.Status))
+        {
+            _logger.LogWarning(
+                "WriteActionGuard | Rejected | ActionId: {ActionId} | Status: {Status} | Reason: terminal",
+                actionId, record.Status);
+            return WriteActionGuardResult.Rejected(
+                $"Action '{actionId}' has terminal status '{record.Status}' and cannot execute again.");
+        }
+
+        if (!string.Equals(record.Status, ActionRequestStatus.Approved, StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogWarning(
                 "WriteActionGuard | Rejected | ActionId: {ActionId} | Status: {Status} | Reason: not_approved",

@@ -56,6 +56,15 @@ namespace TILSOFTAI.Domain.Metrics
         public const string AgentRoutingCandidateTools = "tilsoftai_agent_routing_candidate_tools";
         public const string AgentRoutingLatencySeconds = "tilsoftai_agent_routing_latency_seconds";
         public const string AgentRoutingStageLatencySeconds = "tilsoftai_agent_routing_stage_latency_seconds";
+        public const string AgentRoutingCandidateCount = "tilsoftai_agent_routing_candidate_count";
+        public const string AgentRoutingAdvertisedToolCount = "tilsoftai_agent_routing_advertised_tool_count";
+        public const string AgentRoutingAgentDurationMs = "tilsoftai_agent_routing_agent_duration_ms";
+        public const string AgentRoutingAnswerComposerDurationMs = "tilsoftai_agent_routing_answer_composer_duration_ms";
+        public const string AgentRoutingRowCount = "tilsoftai_agent_routing_row_count";
+        public const string AgentRoutingFallbackTotal = "tilsoftai_agent_routing_fallback_total";
+        public const string AgentRoutingFollowUpTotal = "tilsoftai_agent_routing_follow_up_total";
+        public const string AgentRoutingValidationFailureTotal = "tilsoftai_agent_routing_validation_failure_total";
+        public const string CapabilityFacadeDurationMs = "tilsoftai_capability_facade_duration_ms";
         public const string AgentRoutingFunctionSelectionAccuracy = "tilsoftai_agent_routing_function_selection_accuracy";
         public const string AgentRoutingArgumentExtractionAccuracy = "tilsoftai_agent_routing_argument_extraction_accuracy";
         public const string AgentRoutingMissingRequiredArgumentDetection = "tilsoftai_agent_routing_missing_required_argument_detection";

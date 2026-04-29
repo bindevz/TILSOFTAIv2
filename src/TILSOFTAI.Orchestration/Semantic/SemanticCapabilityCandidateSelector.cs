@@ -32,12 +32,13 @@ public sealed class SemanticCapabilityCandidateSelector : ICapabilityCandidateSe
         ArgumentNullException.ThrowIfNull(hardSignals);
         ArgumentNullException.ThrowIfNull(context);
 
+        var allowedDomains = DomainGate.BuildRuntimeAllowedDomainSet(_options.AllowedDomains);
         var options = new CapabilityRetrievalOptions
         {
-            AllowedDomains = BuildAllowedDomainSet(_options.AllowedDomains),
+            AllowedDomains = allowedDomains,
             MaxDomainsPerRequest = Math.Min(
                 _options.MaxCandidateDomains,
-                BuildAllowedDomainSet(_options.AllowedDomains).Count),
+                allowedDomains.Count),
             MaxToolsPerDomain = Math.Min(_options.MaxCandidateToolsPerDomain, EffectiveMaxCandidateTools()),
             MaxTotalTools = EffectiveMaxCandidateTools()
         };
@@ -51,6 +52,7 @@ public sealed class SemanticCapabilityCandidateSelector : ICapabilityCandidateSe
             .ConfigureAwait(false);
 
         var selected = retrieval.Capabilities
+            .Where(candidate => DomainGate.IsRuntimeAllowedDomain(candidate.Metadata.Domain))
             .Take(Math.Max(0, _options.MaxTotalCandidateTools))
             .ToArray();
 
@@ -74,15 +76,4 @@ public sealed class SemanticCapabilityCandidateSelector : ICapabilityCandidateSe
         return Math.Max(0, Math.Min(maxCandidateTools, _options.MaxTotalCandidateTools));
     }
 
-    private static IReadOnlySet<string> BuildAllowedDomainSet(IEnumerable<string>? domains)
-    {
-        var normalized = (domains ?? Array.Empty<string>())
-            .Where(domain => !string.IsNullOrWhiteSpace(domain))
-            .Select(DomainGate.NormalizeDomain)
-            .ToArray();
-
-        return normalized.Length == 0
-            ? DomainGate.DefaultAllowedDomains
-            : new HashSet<string>(normalized, StringComparer.OrdinalIgnoreCase);
-    }
 }

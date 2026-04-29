@@ -4,6 +4,8 @@ public abstract record AnswerBlock(string Type);
 
 public sealed record TextBlock(string Content) : AnswerBlock("text");
 
+public sealed record SummaryBlock(string Content) : AnswerBlock("summary");
+
 public sealed record TableBlock(
     IReadOnlyList<string> Columns,
     IReadOnlyList<IReadOnlyList<object?>> Rows,

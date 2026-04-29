@@ -60,6 +60,40 @@ public sealed class PlatformCatalogTests
     }
 
     [Fact]
+    public void ActivePlatformCatalog_ShouldExposeModelCodeContractsForModelTools()
+    {
+        var path = Path.Combine(FindRepositoryRoot(), "catalog", "platform-catalog.json");
+        var provider = new FilePlatformCatalogProvider(
+            Options.Create(new PlatformCatalogOptions { CatalogPath = path }),
+            new Mock<ILogger<FilePlatformCatalogProvider>>().Object);
+
+        var snapshot = provider.Load();
+        var singleModelCapabilities = snapshot.Capabilities
+            .Where(capability => capability.CapabilityKey is
+                "model.overview.by-code"
+                or "model.pieces.by-code"
+                or "model.materials.by-code"
+                or "model.packaging.by-code")
+            .ToArray();
+
+        snapshot.IsValid.Should().BeTrue();
+        singleModelCapabilities.Should().HaveCount(4);
+        foreach (var capability in singleModelCapabilities)
+        {
+            capability.ArgumentContract!.RequiredArguments.Should().Equal("modelCode");
+            capability.ArgumentContract.AllowedArguments.Should().Equal("modelCode");
+            capability.ArgumentContract.Arguments.Single().Name.Should().Be("modelCode");
+            capability.ArgumentContract.Arguments.Single().Type.Should().Be("string");
+        }
+
+        var compare = snapshot.Capabilities.Single(capability => capability.CapabilityKey == "model.compare");
+        compare.ArgumentContract!.RequiredArguments.Should().Equal("modelCodes");
+        compare.ArgumentContract.AllowedArguments.Should().Equal("modelCodes");
+        compare.ArgumentContract.Arguments.Single().Name.Should().Be("modelCodes");
+        compare.ArgumentContract.Arguments.Single().Type.Should().Be("array");
+    }
+
+    [Fact]
     public void CompositeCapabilityRegistry_ShouldLetPlatformCatalogOverrideBootstrapConfiguration()
     {
         var staticCapability = new CapabilityDescriptor
@@ -220,6 +254,22 @@ public sealed class PlatformCatalogTests
         }
         """);
         return path;
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "TILSOFTAI.slnx")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Could not locate repository root.");
     }
 }
 

@@ -36,6 +36,7 @@ public sealed class DynamicFunctionToolFactory : IOfficialAgentFunctionProvider
         var tools = candidates
             .Where(candidate => IsModelCallable(candidate.Metadata, _options))
             .Select(candidate => BuildFunction(candidate.Metadata, context, locale))
+            .Take(EffectiveMaxCandidateTools(_options))
             .ToArray();
 
         return Task.FromResult<IReadOnlyList<AIFunction>>(tools);
@@ -117,9 +118,18 @@ public sealed class DynamicFunctionToolFactory : IOfficialAgentFunctionProvider
     }
 
     private static bool IsModelCallable(CapabilitySemanticMetadata capability, AiRoutingOptions options) =>
-        IsReadMode(capability.ExecutionMode)
-        || options.EnableWritePreviewTools && IsWritePreviewMode(capability.ExecutionMode)
-        || capability.ExecutionMode.Equals("composite", StringComparison.OrdinalIgnoreCase);
+        DomainGate.IsRuntimeAllowedDomain(capability.Domain)
+        && (IsReadMode(capability.ExecutionMode)
+            || options.EnableWritePreviewTools && IsWritePreviewMode(capability.ExecutionMode)
+            || capability.ExecutionMode.Equals("composite", StringComparison.OrdinalIgnoreCase));
+
+    private static int EffectiveMaxCandidateTools(AiRoutingOptions options)
+    {
+        var maxCandidateTools = options.MaxCandidateTools > 0
+            ? options.MaxCandidateTools
+            : options.MaxTotalCandidateTools;
+        return Math.Max(0, Math.Min(maxCandidateTools, options.MaxTotalCandidateTools));
+    }
 
     private static bool IsReadMode(string executionMode) =>
         executionMode.Equals("read", StringComparison.OrdinalIgnoreCase)

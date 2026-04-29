@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -68,7 +69,13 @@ public sealed class ChatController : ControllerBase
         }
         var sensitivityResult = _sensitivityClassifier.Classify(input);
         
-        var supervisorRequest = BuildSupervisorRequest(input, request?.AllowCache ?? true, sensitivityResult, stream: false);
+        ApplyPreferredLanguage(context, request?.PreferredLanguage);
+        var supervisorRequest = BuildSupervisorRequest(
+            input,
+            request?.AllowCache ?? true,
+            sensitivityResult,
+            stream: false,
+            request?.Metadata);
 
         var result = await _supervisorRuntime.RunAsync(supervisorRequest, context, cancellationToken);
         
@@ -117,7 +124,13 @@ public sealed class ChatController : ControllerBase
         }
         var sensitivityResult = _sensitivityClassifier.Classify(input);
 
-        var supervisorRequest = BuildSupervisorRequest(input, request?.AllowCache ?? true, sensitivityResult, stream: true);
+        ApplyPreferredLanguage(context, request?.PreferredLanguage);
+        var supervisorRequest = BuildSupervisorRequest(
+            input,
+            request?.AllowCache ?? true,
+            sensitivityResult,
+            stream: true,
+            request?.Metadata);
 
 #if DEBUG
         // Test-only hook: Trigger deterministic error for contract testing
@@ -170,7 +183,8 @@ public sealed class ChatController : ControllerBase
         string input,
         bool allowCache,
         SensitivityResult sensitivityResult,
-        bool stream)
+        bool stream,
+        JsonElement? metadata)
     {
         return new SupervisorRequest
         {
@@ -186,8 +200,41 @@ public sealed class ChatController : ControllerBase
                 DisableToolResultPersistenceWhenSensitive = _sensitiveDataOptions.DisableToolResultPersistenceWhenSensitive
             },
             IntentType = "chat",
-            Stream = stream
+            Stream = stream,
+            Metadata = ToSupervisorMetadata(metadata)
         };
+    }
+
+    private static void ApplyPreferredLanguage(TilsoftExecutionContext context, string? preferredLanguage)
+    {
+        if (string.IsNullOrWhiteSpace(preferredLanguage))
+        {
+            return;
+        }
+
+        context.Language = preferredLanguage.Trim();
+    }
+
+    private static IReadOnlyDictionary<string, string?> ToSupervisorMetadata(JsonElement? metadata)
+    {
+        if (metadata is null || metadata.Value.ValueKind != JsonValueKind.Object)
+        {
+            return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in metadata.Value.EnumerateObject())
+        {
+            values[property.Name] = property.Value.ValueKind switch
+            {
+                JsonValueKind.String => property.Value.GetString(),
+                JsonValueKind.Null => null,
+                JsonValueKind.Undefined => null,
+                _ => property.Value.GetRawText()
+            };
+        }
+
+        return values;
     }
 
     private static ChatStreamEvent ToChatStreamEvent(SupervisorStreamEvent evt) =>

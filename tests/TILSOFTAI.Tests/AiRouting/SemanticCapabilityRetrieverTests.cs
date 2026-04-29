@@ -29,6 +29,27 @@ public sealed class SemanticCapabilityRetrieverTests
     }
 
     [Fact]
+    public void DomainGate_ShouldFailClosedToModelOnlyEvenWhenNonModelDomainsAreConfigured()
+    {
+        var gate = new DomainGate();
+
+        var domains = gate.SelectDomains(
+            [
+                Chunk("sales.order.status", "sales", 0.99),
+                Chunk("warehouse.stock.available", "warehouse", 0.98),
+                Chunk("model.overview.by-code", "product_model", 0.70)
+            ],
+            new CapabilityRetrievalOptions
+            {
+                MaxDomainsPerRequest = 3,
+                AllowedDomains = new HashSet<string>(["sales", "warehouse"], StringComparer.OrdinalIgnoreCase)
+            });
+
+        domains.Select(domain => domain.Domain).Should().Equal("model");
+        domains.Select(domain => domain.Score).Should().Equal(0.70);
+    }
+
+    [Fact]
     public async Task RetrieveAsync_ShouldEnforceDomainAndToolLimits()
     {
         var knowledgeRepository = new StubSemanticKnowledgeRepository(
@@ -67,6 +88,60 @@ public sealed class SemanticCapabilityRetrieverTests
             .GroupBy(candidate => candidate.Metadata.Domain)
             .Should()
             .OnlyContain(group => group.Count() <= 1);
+        knowledgeRepository.Requests.Should().HaveCount(2);
+        knowledgeRepository.Requests[1].Domains.Should().Equal("model");
+    }
+
+    [Fact]
+    public async Task RetrieveAsync_ShouldNeverReturnNonModelCapabilitiesEvenIfConfigured()
+    {
+        var knowledgeRepository = new StubSemanticKnowledgeRepository(
+            [
+                Chunk("sales.order.status", "sales", 0.99),
+                Chunk("warehouse.stock.available", "warehouse", 0.98),
+                Chunk("model.overview.by-code", "product_model", 0.70),
+                Chunk("model.materials.by-code", "model", 0.69)
+            ]);
+        var metadataRepository = new StubCapabilityMetadataRepository(
+            Metadata("sales.order.status", "sales"),
+            Metadata("warehouse.stock.available", "warehouse"),
+            Metadata("model.overview.by-code", "product_model"),
+            Metadata("model.materials.by-code", "model"));
+        var options = Options.Create(new AiRoutingOptions
+        {
+            AllowedDomains = ["sales", "warehouse"],
+            MaxCandidateDomains = 3,
+            MaxCandidateToolsPerDomain = 6,
+            MaxTotalCandidateTools = 6,
+            MaxCandidateTools = 6
+        });
+        var retriever = new SemanticCapabilityRetriever(
+            knowledgeRepository,
+            metadataRepository,
+            new StubEntityAliasRepository(),
+            new DomainGate(),
+            options);
+
+        var result = await retriever.RetrieveAsync(
+            "show stock and sales",
+            new HardSignalSet(),
+            new TilsoftExecutionContext { TenantId = "tenant-35" },
+            "en-US",
+            new CapabilityRetrievalOptions
+            {
+                MaxDomainsPerRequest = 3,
+                MaxToolsPerDomain = 6,
+                MaxTotalTools = 6
+            },
+            CancellationToken.None);
+
+        result.Domains.Select(domain => domain.Domain).Should().Equal("model");
+        result.Capabilities.Select(candidate => DomainGate.NormalizeDomain(candidate.Metadata.Domain))
+            .Should()
+            .OnlyContain(domain => domain == "model");
+        result.Capabilities.Select(candidate => candidate.Metadata.CapabilityKey)
+            .Should()
+            .Equal("model.materials.by-code");
         knowledgeRepository.Requests.Should().HaveCount(2);
         knowledgeRepository.Requests[1].Domains.Should().Equal("model");
     }

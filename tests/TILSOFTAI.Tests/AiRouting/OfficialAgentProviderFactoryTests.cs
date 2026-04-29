@@ -43,6 +43,7 @@ public sealed class OfficialAgentProviderFactoryTests
 
         agent.Should().BeAssignableTo<AIAgent>();
         agent.GetType().FullName.Should().Be("Microsoft.Agents.AI.ChatClientAgent");
+        agent.GetType().FullName.Should().NotContain("CandidateGatedToolCallingAgent");
     }
 
     [Fact]

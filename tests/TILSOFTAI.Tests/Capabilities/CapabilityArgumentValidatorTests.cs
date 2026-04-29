@@ -66,6 +66,21 @@ public sealed class CapabilityArgumentValidatorTests
         CapabilityArgumentValidator.Validate(capability, "{}").IsValid.Should().BeTrue();
     }
 
+    [Fact]
+    public void Validate_ShouldApplyMinLengthToArrayArguments()
+    {
+        var capability = ModelCapabilities.All.Single(c => c.CapabilityKey == "model.compare");
+
+        CapabilityArgumentValidator.Validate(capability, """{"modelCodes":["ABC","DEF"]}""")
+            .IsValid.Should().BeTrue();
+
+        var result = CapabilityArgumentValidator.Validate(capability, """{"modelCodes":["ABC"]}""");
+
+        result.IsValid.Should().BeFalse();
+        DetailJson(result).Should().Contain("invalid_argument_min_length");
+        DetailJson(result).Should().Contain("modelCodes");
+    }
+
     private static string DetailJson(CapabilityArgumentValidationResult result) =>
         JsonSerializer.Serialize(result.Detail);
 }

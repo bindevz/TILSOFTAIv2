@@ -35,6 +35,7 @@ public static class CapabilityFunctionNameMapper
         if (argumentName.Equals("supplier", StringComparison.OrdinalIgnoreCase)) return "supplier_code";
         if (argumentName.Equals("warehouse", StringComparison.OrdinalIgnoreCase)) return "warehouse_code";
         if (argumentName.Equals("modelCode", StringComparison.OrdinalIgnoreCase)) return "model_code";
+        if (argumentName.Equals("modelCodes", StringComparison.OrdinalIgnoreCase)) return "model_codes";
         return ToSnakeCase(argumentName);
     }
 

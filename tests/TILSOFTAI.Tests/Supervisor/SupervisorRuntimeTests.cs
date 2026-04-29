@@ -272,12 +272,18 @@ public sealed class SupervisorRuntimeTests
 
         var result = await runtime.RunAsync(
             new SupervisorRequest { Input = "show receivables" },
-            new TilsoftExecutionContext(),
+            new TilsoftExecutionContext { CorrelationId = "corr-phase-1" },
             CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Code.Should().Be("AGENT_ROUTING_FAILED");
         result.Error.Should().Be("stub failed");
+        result.SelectedAgentId.Should().Be("microsoft-agent-router");
+        result.Detail.Should().BeEquivalentTo(new
+        {
+            correlationId = "corr-phase-1",
+            fallbackUsed = false
+        });
         registry.Verify(x => x.ResolveCandidates(It.IsAny<AgentTask>()), Times.Never);
     }
 

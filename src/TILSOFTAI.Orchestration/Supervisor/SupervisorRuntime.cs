@@ -8,6 +8,7 @@ using TILSOFTAI.Approvals;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Answering;
+using TILSOFTAI.Orchestration.Actions;
 using TILSOFTAI.Orchestration.AiRouting;
 using TILSOFTAI.Orchestration.Capabilities;
 using TILSOFTAI.Orchestration.Observability;
@@ -26,6 +27,7 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
     private readonly RuntimeExecutionInstrumentation? _instrumentation;
     private readonly IAgentToolRouter? _agentToolRouter;
     private readonly AiRoutingOptions _aiRoutingOptions;
+    private readonly IPendingActionConfirmationResolver? _pendingActionConfirmationResolver;
 
     public SupervisorRuntime(
         IIntentClassifier intentClassifier,
@@ -35,7 +37,8 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
         ILogger<SupervisorRuntime> logger,
         RuntimeExecutionInstrumentation? instrumentation = null,
         IAgentToolRouter? agentToolRouter = null,
-        IOptions<AiRoutingOptions>? aiRoutingOptions = null)
+        IOptions<AiRoutingOptions>? aiRoutingOptions = null,
+        IPendingActionConfirmationResolver? pendingActionConfirmationResolver = null)
     {
         _intentClassifier = intentClassifier ?? throw new ArgumentNullException(nameof(intentClassifier));
         _agentRegistry = agentRegistry ?? throw new ArgumentNullException(nameof(agentRegistry));
@@ -45,6 +48,7 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
         _instrumentation = instrumentation;
         _agentToolRouter = agentToolRouter;
         _aiRoutingOptions = aiRoutingOptions?.Value ?? new AiRoutingOptions();
+        _pendingActionConfirmationResolver = pendingActionConfirmationResolver;
     }
 
     public async Task<SupervisorResult> RunAsync(SupervisorRequest request, TilsoftExecutionContext ctx, CancellationToken ct)
@@ -57,6 +61,22 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
         if (string.IsNullOrWhiteSpace(request.Input))
         {
             return SupervisorResult.Fail("Input is required.");
+        }
+
+        if (_pendingActionConfirmationResolver is not null)
+        {
+            var confirmation = await _pendingActionConfirmationResolver
+                .TryResolveAsync(request.Input, ctx, ct)
+                .ConfigureAwait(false);
+
+            if (confirmation?.Handled == true && confirmation.Answer is not null)
+            {
+                _logger.LogInformation(
+                    "PendingActionConfirmationHandled | AnswerType: {AnswerType}",
+                    confirmation.Answer.AnswerType);
+
+                return SupervisorResult.FromAssistantAnswer(confirmation.Answer);
+            }
         }
 
         if (IsOfficialAgentRoutingEnabled() && IsAgentRoutingRolloutAllowed(ctx))
@@ -78,7 +98,8 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
 
             if (MustFailClosedForOfficialRouting() || !_aiRoutingOptions.FallbackToLegacyPipeline)
             {
-                return SupervisorResult.Fail(
+                return FailClosedAgentRouting(
+                    ctx,
                     routed.FailureReason ?? "Agent routing failed.",
                     "AGENT_ROUTING_FAILED");
             }
@@ -92,7 +113,8 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
 
             if (MustFailClosedForOfficialRouting())
             {
-                return SupervisorResult.Fail(
+                return FailClosedAgentRouting(
+                    ctx,
                     "Official Agent Framework routing is enabled, but this tenant or user is outside the rollout gate.",
                     "AGENT_ROUTING_ROLLOUT_BLOCKED");
             }
@@ -398,6 +420,20 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
 
     private bool MustFailClosedForOfficialRouting() =>
         _aiRoutingOptions.UseOfficialMicrosoftAgentFramework;
+
+    private static SupervisorResult FailClosedAgentRouting(
+        TilsoftExecutionContext ctx,
+        string error,
+        string code) =>
+        SupervisorResult.Fail(
+            error,
+            code,
+            new
+            {
+                correlationId = string.IsNullOrWhiteSpace(ctx.CorrelationId) ? null : ctx.CorrelationId,
+                fallbackUsed = false
+            },
+            selectedAgentId: "microsoft-agent-router");
 
     /// <summary>
     /// Sprint 5: Build a structured CapabilityRequestHint from request metadata and classification.

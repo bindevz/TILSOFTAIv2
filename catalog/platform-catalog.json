@@ -1,7 +1,7 @@
 {
-  "Version": "2026.04-sprint-34",
+  "Version": "2026.04-sprint-35",
   "Owner": "TILSOFTAI Platform",
-  "ChangeControl": "Sprint 34 active runtime is model-only. Non-model capabilities are intentionally absent from this active catalog.",
+  "ChangeControl": "Sprint 35 active runtime is model-only. Non-model capabilities are intentionally absent from this active catalog. Single-model tools accept business model codes, not internal model IDs.",
   "ExternalConnections": {
     "Connections": {}
   },
@@ -46,15 +46,16 @@
       },
       "ArgumentContract": {
         "ContractVersion": "1",
-        "RequiredArguments": [ "modelId" ],
-        "AllowedArguments": [ "modelId" ],
+        "RequiredArguments": [ "modelCode" ],
+        "AllowedArguments": [ "modelCode" ],
         "AllowAdditionalArguments": false,
         "Arguments": [
           {
-            "Name": "modelId",
-            "Type": "integer",
-            "Format": "model-id",
-            "Min": 1
+            "Name": "modelCode",
+            "Type": "string",
+            "Format": "model-code",
+            "MinLength": 1,
+            "MaxLength": 50
           }
         ]
       }
@@ -72,15 +73,16 @@
       },
       "ArgumentContract": {
         "ContractVersion": "1",
-        "RequiredArguments": [ "modelId" ],
-        "AllowedArguments": [ "modelId" ],
+        "RequiredArguments": [ "modelCode" ],
+        "AllowedArguments": [ "modelCode" ],
         "AllowAdditionalArguments": false,
         "Arguments": [
           {
-            "Name": "modelId",
-            "Type": "integer",
-            "Format": "model-id",
-            "Min": 1
+            "Name": "modelCode",
+            "Type": "string",
+            "Format": "model-code",
+            "MinLength": 1,
+            "MaxLength": 50
           }
         ]
       }
@@ -98,15 +100,16 @@
       },
       "ArgumentContract": {
         "ContractVersion": "1",
-        "RequiredArguments": [ "modelId" ],
-        "AllowedArguments": [ "modelId" ],
+        "RequiredArguments": [ "modelCode" ],
+        "AllowedArguments": [ "modelCode" ],
         "AllowAdditionalArguments": false,
         "Arguments": [
           {
-            "Name": "modelId",
-            "Type": "integer",
-            "Format": "model-id",
-            "Min": 1
+            "Name": "modelCode",
+            "Type": "string",
+            "Format": "model-code",
+            "MinLength": 1,
+            "MaxLength": 50
           }
         ]
       }
@@ -124,14 +127,14 @@
       },
       "ArgumentContract": {
         "ContractVersion": "1",
-        "RequiredArguments": [ "modelIds" ],
-        "AllowedArguments": [ "modelIds" ],
+        "RequiredArguments": [ "modelCodes" ],
+        "AllowedArguments": [ "modelCodes" ],
         "AllowAdditionalArguments": false,
         "Arguments": [
           {
-            "Name": "modelIds",
+            "Name": "modelCodes",
             "Type": "array",
-            "Format": "model-id-list",
+            "Format": "model-code-list",
             "MinLength": 2
           }
         ]
@@ -150,15 +153,16 @@
       },
       "ArgumentContract": {
         "ContractVersion": "1",
-        "RequiredArguments": [ "modelId" ],
-        "AllowedArguments": [ "modelId" ],
+        "RequiredArguments": [ "modelCode" ],
+        "AllowedArguments": [ "modelCode" ],
         "AllowAdditionalArguments": false,
         "Arguments": [
           {
-            "Name": "modelId",
-            "Type": "integer",
-            "Format": "model-id",
-            "Min": 1
+            "Name": "modelCode",
+            "Type": "string",
+            "Format": "model-code",
+            "MinLength": 1,
+            "MaxLength": 50
           }
         ]
       }
