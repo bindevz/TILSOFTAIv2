@@ -10,56 +10,68 @@ public sealed class CapabilityArgumentValidatorTests
     [Fact]
     public void Validate_ShouldRejectInvalidStringType()
     {
-        var capability = WarehouseCapabilities.All.Single(c => c.CapabilityKey == "warehouse.inventory.by-item");
+        var capability = ModelCapabilities.All.Single(c => c.CapabilityKey == "model.overview.by-code");
 
-        var result = CapabilityArgumentValidator.Validate(capability, "{\"@ItemNo\":123}");
+        var result = CapabilityArgumentValidator.Validate(capability, "{\"modelCode\":123}");
 
         result.IsValid.Should().BeFalse();
         DetailJson(result).Should().Contain("invalid_argument_type");
-        DetailJson(result).Should().Contain("ItemNo");
+        DetailJson(result).Should().Contain("modelCode");
     }
 
     [Fact]
-    public void Validate_ShouldRejectInvalidCurrencyFormat()
+    public void Validate_ShouldRejectInvalidModelCodeFormat()
     {
-        var capability = AccountingCapabilities.All.Single(c => c.CapabilityKey == "accounting.exchange-rate.lookup");
+        var capability = ModelCapabilities.All.Single(c => c.CapabilityKey == "model.overview.by-code");
 
-        var result = CapabilityArgumentValidator.Validate(capability, "{\"@CurrencyCode\":\"usd\"}");
+        var result = CapabilityArgumentValidator.Validate(capability, "{\"modelCode\":\"bad code\"}");
 
         result.IsValid.Should().BeFalse();
         DetailJson(result).Should().Contain("invalid_argument_format");
-        DetailJson(result).Should().Contain("currency-code");
+        DetailJson(result).Should().Contain("model-code");
     }
 
     [Fact]
-    public void Validate_ShouldRejectCurrencyOutsideAllowedEnum()
+    public void Validate_ShouldRejectUnexpectedArguments()
     {
-        var capability = AccountingCapabilities.All.Single(c => c.CapabilityKey == "accounting.exchange-rate.lookup");
+        var capability = ModelCapabilities.All.Single(c => c.CapabilityKey == "model.count");
 
-        var result = CapabilityArgumentValidator.Validate(capability, "{\"@CurrencyCode\":\"JPY\"}");
+        var result = CapabilityArgumentValidator.Validate(capability, "{\"modelCode\":\"CHAIR-001\"}");
 
         result.IsValid.Should().BeFalse();
-        DetailJson(result).Should().Contain("invalid_argument_enum");
+        DetailJson(result).Should().Contain("unexpected_arguments");
     }
 
     [Fact]
     public void Validate_ShouldAcceptTypedRepresentativeArguments()
     {
-        var warehouse = WarehouseCapabilities.All.Single(c => c.CapabilityKey == "warehouse.inventory.by-item");
-        var accounting = AccountingCapabilities.All.Single(c => c.CapabilityKey == "accounting.exchange-rate.lookup");
+        var byCode = ModelCapabilities.All.Single(c => c.CapabilityKey == "model.overview.by-code");
+        var count = ModelCapabilities.All.Single(c => c.CapabilityKey == "model.count");
 
-        CapabilityArgumentValidator.Validate(warehouse, "{\"@ItemNo\":\"CHAIR-001\",\"@TenantId\":\"tenant-1\"}")
+        CapabilityArgumentValidator.Validate(byCode, "{\"modelCode\":\"CHAIR-001\"}")
             .IsValid.Should().BeTrue();
-        CapabilityArgumentValidator.Validate(accounting, "{\"@CurrencyCode\":\"USD\"}")
+        CapabilityArgumentValidator.Validate(count, "{\"season\":\"2026\"}")
             .IsValid.Should().BeTrue();
     }
 
     [Fact]
     public void Validate_ShouldRejectUnexpectedArgumentsForNoArgumentContract()
     {
-        var capability = WarehouseCapabilities.All.Single(c => c.CapabilityKey == "warehouse.inventory.summary");
+        var capability = new CapabilityDescriptor
+        {
+            CapabilityKey = "model.synthetic",
+            Domain = "model",
+            AdapterType = "sql",
+            Operation = "execute_tool",
+            TargetSystemId = "sql",
+            ExecutionMode = "readonly",
+            ArgumentContract = new CapabilityArgumentContract
+            {
+                AllowAdditionalArguments = false
+            }
+        };
 
-        var result = CapabilityArgumentValidator.Validate(capability, "{\"@ItemNo\":\"CHAIR-001\"}");
+        var result = CapabilityArgumentValidator.Validate(capability, "{\"modelCode\":\"CHAIR-001\"}");
 
         result.IsValid.Should().BeFalse();
         DetailJson(result).Should().Contain("unexpected_arguments");

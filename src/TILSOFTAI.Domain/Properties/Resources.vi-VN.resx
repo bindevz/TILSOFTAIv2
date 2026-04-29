@@ -63,21 +63,6 @@
   <data name="Val_ToolNameRequired" xml:space="preserve">
     <value>Tên công cụ là bắt buộc.</value>
   </data>
-  <data name="Val_HandlerTypeMustImplementIToolHandler" xml:space="preserve">
-    <value>Kiểu xử lý phải triển khai IToolHandler.</value>
-  </data>
-  <data name="Val_ToolDefinitionNameRequired" xml:space="preserve">
-    <value>ToolDefinition.Name là bắt buộc.</value>
-  </data>
-  <data name="Val_ToolDefinitionInstructionRequired" xml:space="preserve">
-    <value>ToolDefinition.Instruction là bắt buộc.</value>
-  </data>
-  <data name="Val_ToolDefinitionJsonSchemaRequired" xml:space="preserve">
-    <value>ToolDefinition.JsonSchema là bắt buộc.</value>
-  </data>
-  <data name="Val_ToolDefinitionSpNameMustStartWithAi" xml:space="preserve">
-    <value>ToolDefinition.SpName phải bắt đầu bằng 'ai_'.</value>
-  </data>
   <data name="Val_ArgumentsJsonRequired" xml:space="preserve">
     <value>Arguments JSON là bắt buộc.</value>
   </data>
@@ -116,9 +101,6 @@
   </data>
   <data name="Val_DatasetKeyRequiredForCatalogGetDataset" xml:space="preserve">
     <value>DatasetKey là bắt buộc cho catalog_get_dataset</value>
-  </data>
-  <data name="Val_PlanJsonRequiredForAnalyticsValidatePlan" xml:space="preserve">
-    <value>PlanJson là bắt buộc cho analytics_validate_plan</value>
   </data>
   <data name="Val_IdRequired" xml:space="preserve">
     <value>id là bắt buộc.</value>

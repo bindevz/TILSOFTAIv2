@@ -1,15 +1,9 @@
 using System.Collections.Concurrent;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Moq;
 using TILSOFTAI.Approvals;
-using TILSOFTAI.Domain.Configuration;
-using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Actions;
-using TILSOFTAI.Orchestration.Compaction;
-using TILSOFTAI.Orchestration.Conversations;
-using TILSOFTAI.Orchestration.Tools;
 using TILSOFTAI.Tools.Abstractions;
 using Xunit;
 
@@ -148,46 +142,19 @@ public sealed class ApprovalLifecycleIntegrationTests
             .ReturnsAsync(ToolExecutionResult.Ok(
                 "[{\"ActionName\":\"test_write\",\"RequiredRoles\":\"ai_user\",\"JsonSchema\":null}]"));
 
-        // Write execution: succeed
-        stubAdapter.Setup(a => a.ExecuteAsync(
-                It.Is<ToolExecutionRequest>(r => r.Operation == "execute_write_action"),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ToolExecutionResult.Ok("{\"affected\": 1}"));
-
-        var adapterRegistry = new ToolAdapterRegistry(new[] { stubAdapter.Object });
-
-        var chatOptions = Options.Create(new ChatOptions
-        {
-            CompactionLimits = new Dictionary<string, int> { ["ToolResultMaxBytes"] = 16000 },
-            CompactionRules = new CompactionRules()
-        });
-
-        var schemaValidator = new Mock<IJsonSchemaValidator>();
-        schemaValidator.Setup(v => v.Validate(It.IsAny<string>(), It.IsAny<string>()))
-            .Returns(new JsonSchemaValidationResult(true, Array.Empty<string>(), null));
-
-        var conversationStore = new Mock<IConversationStore>();
-        conversationStore.Setup(s => s.SaveToolExecutionAsync(
-                It.IsAny<TilsoftExecutionContext>(),
-                It.IsAny<ToolExecutionRecord>(),
-                It.IsAny<RequestPolicy>(),
-                It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+        var adapterRegistry = new Mock<IToolAdapterRegistry>();
+        adapterRegistry.Setup(r => r.Resolve("sql")).Returns(stubAdapter.Object);
 
         var engine = new ApprovalEngine(
             store,
-            adapterRegistry,
-            new ToolResultCompactor(),
-            conversationStore.Object,
-            chatOptions,
-            schemaValidator.Object,
+            adapterRegistry.Object,
             new Mock<ILogger<ApprovalEngine>>().Object);
 
         return (engine, store);
     }
 
     [Fact]
-    public async Task FullLifecycle_Create_Approve_Execute_ShouldSucceed()
+    public async Task FullLifecycle_Create_Approve_Execute_ShouldFailClosed()
     {
         var (engine, store) = BuildEngine();
 
@@ -222,11 +189,11 @@ public sealed class ApprovalLifecycleIntegrationTests
 
         approved.Status.Should().Be("Confirmed");
 
-        // Step 3: Execute
-        var executed = await engine.ExecuteAsync(created.ActionId, context, CancellationToken.None);
+        // Step 3: Execute is intentionally blocked until the official MAF write path exists.
+        var act = () => engine.ExecuteAsync(created.ActionId, context, CancellationToken.None);
 
-        executed.Action.Status.Should().Be("Executed");
-        executed.RawResult.Should().Contain("affected");
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Real write execution is disabled*");
     }
 
     [Fact]
@@ -260,6 +227,6 @@ public sealed class ApprovalLifecycleIntegrationTests
         var act = () => engine.ExecuteAsync(created.ActionId, context, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*must be*Approved*");
+            .WithMessage("*must be approved*");
     }
 }

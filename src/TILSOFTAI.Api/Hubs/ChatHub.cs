@@ -7,7 +7,6 @@ using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Sensitivity;
-using TILSOFTAI.Orchestration.Pipeline;
 using TILSOFTAI.Supervisor;
 
 namespace TILSOFTAI.Api.Hubs;
@@ -82,7 +81,7 @@ public sealed class ChatHub : Hub
         {
             await foreach (var evt in _supervisorRuntime.RunStreamAsync(supervisorRequest, context, linkedToken))
             {
-                var envelope = _envelopeFactory.Create(ToChatStreamEvent(evt), context);
+                var envelope = _envelopeFactory.Create(evt, context);
 
                 try
                 {
@@ -201,6 +200,4 @@ public sealed class ChatHub : Hub
         };
     }
 
-    private static ChatStreamEvent ToChatStreamEvent(SupervisorStreamEvent evt) =>
-        new(evt.Type, evt.Payload);
 }

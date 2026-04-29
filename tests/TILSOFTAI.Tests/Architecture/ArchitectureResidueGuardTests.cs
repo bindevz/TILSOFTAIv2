@@ -514,10 +514,99 @@ public sealed class ArchitectureResidueGuardTests
         registrations.Should().Contain("new InMemoryCapabilityRegistry(ModelCapabilities.All)");
         registrations.Should().Contain("IOfficialMicrosoftAgentRuntime, OfficialMicrosoftAgentRuntime");
         registrations.Should().NotContain("AddLegacyFallbackOnlyServices");
-        registrations.Should().NotContain("KeywordIntentClassifier");
-        registrations.Should().NotContain("StructuredCapabilityResolver");
-        registrations.Should().NotContain("AccountingAgent");
-        registrations.Should().NotContain("WarehouseAgent");
+        registrations.Should().NotContain(string.Concat("Keyword", "IntentClassifier"));
+        registrations.Should().NotContain(string.Concat("Structured", "CapabilityResolver"));
+        registrations.Should().NotContain(string.Concat("Accounting", "Agent"));
+        registrations.Should().NotContain(string.Concat("Warehouse", "Agent"));
+    }
+
+    [Fact]
+    public void Architecture_NoLegacyDomainAgents()
+    {
+        AssertNoSourceResidue(
+            string.Concat("Accounting", "Agent"),
+            string.Concat("Warehouse", "Agent"),
+            string.Concat("Domain", "AgentBase"),
+            string.Concat("Domain", "AgentRegistry"),
+            string.Concat("General", "ChatAgent"),
+            string.Concat("Bridge", "FallbackReasons"));
+    }
+
+    [Fact]
+    public void Architecture_NoKeyword\u0049ntentClassifier()
+    {
+        AssertNoSourceResidue(
+            string.Concat("Keyword", "IntentClassifier"),
+            string.Concat("I", "IntentClassifier"),
+            string.Concat("Intent", "Classification"));
+    }
+
+    [Fact]
+    public void Architecture_NoStructured\u0043apabilityResolver()
+    {
+        AssertNoSourceResidue(
+            string.Concat("Structured", "CapabilityResolver"),
+            string.Concat("I", "CapabilityResolver"),
+            string.Concat("Capability", "RequestHint"));
+    }
+
+    [Fact]
+    public void Architecture_NoOldTool\u0052egistry()
+    {
+        AssertNoSourceResidue(
+            string.Concat("Tool", "Registry"),
+            string.Concat("Tool", "Governance"),
+            string.Concat("Tool", "Definition"),
+            string.Concat("I", "ToolHandler"),
+            string.Concat("Named", "ToolHandlerRegistry"));
+    }
+
+    [Fact]
+    public void Architecture_NoManualOpenAiToolLoop()
+    {
+        AssertNoSourceResidue(
+            string.Concat("OpenAi", "CompatibleLlmClient"),
+            string.Concat("OpenAi", "ResponseParser"),
+            string.Concat("I", "LlmClient"));
+    }
+
+    [Fact]
+    public void Architecture_ModelOnlyCapabilities()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var capabilitySource = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "Capabilities", "ModelCapabilities.cs"),
+            Encoding.UTF8);
+        var registrations = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "OrchestrationServiceCollectionExtensions.cs"),
+            Encoding.UTF8);
+
+        capabilitySource.Should().Contain("public static class ModelCapabilities");
+        capabilitySource.Should().Contain("model.count");
+        capabilitySource.Should().NotContain("accounting", "the active capability set must stay model-only");
+        capabilitySource.Should().NotContain("warehouse", "the active capability set must stay model-only");
+        registrations.Should().Contain("new InMemoryCapabilityRegistry(ModelCapabilities.All)");
+        registrations.Should().NotContain(string.Concat("ICapability", "Source"));
+    }
+
+    [Fact]
+    public void Architecture_OfficialAgentFrameworkOnly()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var registrations = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "OrchestrationServiceCollectionExtensions.cs"),
+            Encoding.UTF8);
+        var supervisor = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "Supervisor", "SupervisorRuntime.cs"),
+            Encoding.UTF8);
+
+        registrations.Should().Contain("IOfficialMicrosoftAgentRuntime, OfficialMicrosoftAgentRuntime");
+        registrations.Should().Contain("IOfficialAgentToolRouter, OfficialAgentToolRouter");
+        registrations.Should().Contain("ISupervisorRuntime, SupervisorRuntime");
+        supervisor.Should().Contain("_agentToolRouter.TryRouteAsync");
+        supervisor.Should().NotContain(string.Concat("Extract", "SubjectKeywords"));
+        supervisor.Should().NotContain(string.Concat("Build", "CapabilityHint"));
+        supervisor.Should().NotContain(string.Concat("Map", "Request"));
     }
 
     [Fact]
@@ -869,6 +958,21 @@ public sealed class ArchitectureResidueGuardTests
         var relativePath = Path.GetRelativePath(FindRepositoryRoot(), path);
         return relativePath.StartsWith("src" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             || relativePath.StartsWith("tests" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AssertNoSourceResidue(params string[] forbidden)
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var offenders = Directory
+            .EnumerateFiles(repositoryRoot, "*", SearchOption.AllDirectories)
+            .Where(ShouldScanSource)
+            .SelectMany(path => forbidden
+                .Where(token => File.ReadAllText(path, Encoding.UTF8).Contains(token, StringComparison.Ordinal))
+                .Select(token => $"{Path.GetRelativePath(repositoryRoot, path)} contains {token}"))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        offenders.Should().BeEmpty("deleted legacy routing pieces must not return to source or tests");
     }
 
     private static IEnumerable<string> EnumerateForwardFacingTextFiles(string repositoryRoot)

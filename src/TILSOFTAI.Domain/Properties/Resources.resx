@@ -63,21 +63,6 @@
   <data name="Val_ToolNameRequired" xml:space="preserve">
     <value>Tool name is required.</value>
   </data>
-  <data name="Val_HandlerTypeMustImplementIToolHandler" xml:space="preserve">
-    <value>Handler type must implement IToolHandler.</value>
-  </data>
-  <data name="Val_ToolDefinitionNameRequired" xml:space="preserve">
-    <value>ToolDefinition.Name is required.</value>
-  </data>
-  <data name="Val_ToolDefinitionInstructionRequired" xml:space="preserve">
-    <value>ToolDefinition.Instruction is required.</value>
-  </data>
-  <data name="Val_ToolDefinitionJsonSchemaRequired" xml:space="preserve">
-    <value>ToolDefinition.JsonSchema is required.</value>
-  </data>
-  <data name="Val_ToolDefinitionSpNameMustStartWithAi" xml:space="preserve">
-    <value>ToolDefinition.SpName must start with 'ai_'.</value>
-  </data>
   <data name="Val_ArgumentsJsonRequired" xml:space="preserve">
     <value>Arguments JSON is required.</value>
   </data>
@@ -116,9 +101,6 @@
   </data>
   <data name="Val_DatasetKeyRequiredForCatalogGetDataset" xml:space="preserve">
     <value>DatasetKey is required for catalog_get_dataset</value>
-  </data>
-  <data name="Val_PlanJsonRequiredForAnalyticsValidatePlan" xml:space="preserve">
-    <value>PlanJson is required for analytics_validate_plan</value>
   </data>
   <data name="Val_IdRequired" xml:space="preserve">
     <value>id is required.</value>

@@ -8,7 +8,6 @@ using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Sensitivity;
-using TILSOFTAI.Orchestration.Pipeline;
 using TILSOFTAI.Supervisor;
 
 namespace TILSOFTAI.Api.Controllers;
@@ -149,7 +148,7 @@ public sealed class ChatController : ControllerBase
         {
             await foreach (var evt in _supervisorRuntime.RunStreamAsync(supervisorRequest, context, linkedToken))
             {
-                var envelope = _envelopeFactory.Create(ToChatStreamEvent(evt), context);
+                var envelope = _envelopeFactory.Create(evt, context);
                 await SseWriter.WriteEventAsync(Response, envelope.Type, envelope, linkedToken);
 
                 if (IsTerminal(evt.Type))
@@ -237,6 +236,4 @@ public sealed class ChatController : ControllerBase
         return values;
     }
 
-    private static ChatStreamEvent ToChatStreamEvent(SupervisorStreamEvent evt) =>
-        new(evt.Type, evt.Payload);
 }

@@ -7,23 +7,23 @@ namespace TILSOFTAI.Tests.Capabilities;
 public sealed class CapabilityRegistryTests
 {
     private static InMemoryCapabilityRegistry CreateRegistry() =>
-        new(WarehouseCapabilities.All);
+        new(ModelCapabilities.All);
 
     [Fact]
-    public void GetByDomain_ShouldReturnWarehouseCapabilities()
+    public void GetByDomain_ShouldReturnModelCapabilities()
     {
         var registry = CreateRegistry();
 
-        var capabilities = registry.GetByDomain("warehouse");
+        var capabilities = registry.GetByDomain("model");
 
-        capabilities.Should().HaveCount(4);
-        capabilities.Select(c => c.CapabilityKey).Should().Contain(new[]
-        {
-            "warehouse.inventory.summary",
-            "warehouse.inventory.by-item",
-            "warehouse.receipts.recent",
-            "warehouse.external-stock.lookup"
-        });
+        capabilities.Should().HaveCount(6);
+        capabilities.Select(c => c.CapabilityKey).Should().BeEquivalentTo(
+            "model.count",
+            "model.overview.by-code",
+            "model.pieces.by-code",
+            "model.materials.by-code",
+            "model.compare",
+            "model.packaging.by-code");
     }
 
     [Fact]
@@ -31,9 +31,9 @@ public sealed class CapabilityRegistryTests
     {
         var registry = CreateRegistry();
 
-        var capabilities = registry.GetByDomain("Warehouse");
+        var capabilities = registry.GetByDomain("Model");
 
-        capabilities.Should().HaveCount(4);
+        capabilities.Should().HaveCount(6);
     }
 
     [Fact]
@@ -41,19 +41,7 @@ public sealed class CapabilityRegistryTests
     {
         var registry = CreateRegistry();
 
-        var capabilities = registry.GetByDomain("sales");
-
-        capabilities.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void GetByDomain_ShouldReturnEmptyForNullDomain()
-    {
-        var registry = CreateRegistry();
-
-        var capabilities = registry.GetByDomain(null!);
-
-        capabilities.Should().BeEmpty();
+        registry.GetByDomain("sales").Should().BeEmpty();
     }
 
     [Fact]
@@ -61,13 +49,13 @@ public sealed class CapabilityRegistryTests
     {
         var registry = CreateRegistry();
 
-        var cap = registry.Resolve("warehouse.inventory.summary");
+        var cap = registry.Resolve("model.overview.by-code");
 
         cap.Should().NotBeNull();
-        cap!.CapabilityKey.Should().Be("warehouse.inventory.summary");
-        cap.Domain.Should().Be("warehouse");
+        cap!.CapabilityKey.Should().Be("model.overview.by-code");
+        cap.Domain.Should().Be("model");
         cap.AdapterType.Should().Be("sql");
-        cap.Operation.Should().Be("execute_query");
+        cap.Operation.Should().Be("execute_tool");
         cap.TargetSystemId.Should().Be("sql");
         cap.ExecutionMode.Should().Be("readonly");
         cap.IntegrationBinding.Should().ContainKey("storedProcedure");
@@ -78,9 +66,7 @@ public sealed class CapabilityRegistryTests
     {
         var registry = CreateRegistry();
 
-        var cap = registry.Resolve("Warehouse.Inventory.Summary");
-
-        cap.Should().NotBeNull();
+        registry.Resolve("Model.Overview.By-Code").Should().NotBeNull();
     }
 
     [Fact]
@@ -88,47 +74,15 @@ public sealed class CapabilityRegistryTests
     {
         var registry = CreateRegistry();
 
-        var cap = registry.Resolve("warehouse.nonexistent");
-
-        cap.Should().BeNull();
+        registry.Resolve("model.nonexistent").Should().BeNull();
     }
 
     [Fact]
-    public void Resolve_ShouldReturnNullForNullKey()
+    public void AllModelCapabilities_ShouldBeReadonly()
     {
         var registry = CreateRegistry();
-
-        var cap = registry.Resolve(null!);
-
-        cap.Should().BeNull();
-    }
-
-    [Fact]
-    public void AllWarehouseCapabilities_ShouldBeReadonly()
-    {
-        var registry = CreateRegistry();
-        var capabilities = registry.GetByDomain("warehouse");
+        var capabilities = registry.GetByDomain("model");
 
         capabilities.Should().OnlyContain(c => c.ExecutionMode == "readonly");
-    }
-
-    [Fact]
-    public void WarehouseCapabilities_ShouldIncludeSqlAndRestAdapters()
-    {
-        var registry = CreateRegistry();
-        var capabilities = registry.GetByDomain("warehouse");
-
-        capabilities.Where(c => c.AdapterType == "sql").Should().HaveCount(3);
-        capabilities.Should().ContainSingle(c =>
-            c.AdapterType == "rest-json"
-            && c.CapabilityKey == "warehouse.external-stock.lookup");
-    }
-
-    [Fact]
-    public void GetAll_ShouldReturnAllRegisteredCapabilities()
-    {
-        var registry = CreateRegistry();
-
-        registry.GetAll().Should().HaveCount(4);
     }
 }

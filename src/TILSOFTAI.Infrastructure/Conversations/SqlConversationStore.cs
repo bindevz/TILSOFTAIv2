@@ -7,7 +7,6 @@ using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Conversations;
 using TILSOFTAI.Orchestration.Observability;
-using TILSOFTAI.Orchestration.Tools;
 
 namespace TILSOFTAI.Infrastructure.Conversations;
 
@@ -43,79 +42,6 @@ public sealed class SqlConversationStore : IConversationStore
         CancellationToken cancellationToken = default)
     {
         await SaveMessageAsync(context, message, policy, cancellationToken);
-    }
-
-    public async Task SaveToolExecutionAsync(
-        TilsoftExecutionContext context,
-        ToolExecutionRecord execution,
-        RequestPolicy policy,
-        CancellationToken cancellationToken = default)
-    {
-        if (!ShouldPersistConversation() || !_observabilityOptions.EnableSqlToolLog)
-        {
-            return;
-        }
-
-        policy ??= RequestPolicy.Default;
-        ValidateContext(context);
-
-        await UpsertConversationAsync(context, cancellationToken);
-
-        if (policy.DisablePersistence)
-        {
-            return;
-        }
-
-        var executionId = Guid.NewGuid().ToString("N");
-
-        // Redact tool execution data if enabled
-        var argsJson = execution.ArgumentsJson;
-        var resultJson = execution.Result;
-        var compactedJson = execution.CompactedResult;
-
-        if (policy.ShouldDisableToolResultPersistence)
-        {
-            argsJson = "{}";
-            resultJson = null;
-            compactedJson = null;
-        }
-        else
-        {
-            var shouldRedact = _observabilityOptions.RedactLogs || policy.ShouldRedact;
-            if (shouldRedact)
-            {
-                argsJson = _logRedactor.RedactJson(argsJson ?? string.Empty).redacted;
-                if (resultJson != null)
-                {
-                    resultJson = _logRedactor.RedactJson(resultJson).redacted;
-                }
-                if (compactedJson != null)
-                {
-                    compactedJson = _logRedactor.RedactJson(compactedJson).redacted;
-                }
-            }
-        }
-
-        await ExecuteAsync(
-            "dbo.app_toolexecution_insert",
-            new Dictionary<string, object?>
-            {
-                ["@TenantId"] = context.TenantId,
-                ["@ConversationId"] = context.ConversationId,
-                ["@ExecutionId"] = executionId,
-                ["@ToolName"] = execution.ToolName,
-                ["@SpName"] = execution.SpName ?? string.Empty,
-                ["@ArgumentsJson"] = argsJson,
-                ["@ResultJson"] = resultJson,
-                ["@CompactedResultJson"] = compactedJson,
-                ["@Success"] = execution.Success,
-                ["@DurationMs"] = execution.DurationMs,
-                ["@CorrelationId"] = context.CorrelationId,
-                ["@TraceId"] = context.TraceId,
-                ["@RequestId"] = context.RequestId,
-                ["@UserId"] = context.UserId
-            },
-            cancellationToken);
     }
 
     private async Task SaveMessageAsync(

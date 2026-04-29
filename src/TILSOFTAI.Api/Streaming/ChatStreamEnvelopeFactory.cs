@@ -6,7 +6,7 @@ using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Observability;
-using TILSOFTAI.Orchestration.Pipeline;
+using TILSOFTAI.Supervisor;
 
 namespace TILSOFTAI.Api.Streaming;
 
@@ -29,7 +29,7 @@ public sealed class ChatStreamEnvelopeFactory
         _logRedactor = logRedactor ?? throw new ArgumentNullException(nameof(logRedactor));
     }
 
-    public ChatStreamEventEnvelope Create(ChatStreamEvent streamEvent, TilsoftExecutionContext context)
+    public ChatStreamEventEnvelope Create(SupervisorStreamEvent streamEvent, TilsoftExecutionContext context)
     {
         if (streamEvent is null)
         {

@@ -1,15 +1,10 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Properties;
 using TILSOFTAI.Orchestration.Actions;
-using TILSOFTAI.Orchestration.Compaction;
-using TILSOFTAI.Orchestration.Conversations;
 using TILSOFTAI.Orchestration.Observability;
-using TILSOFTAI.Orchestration.Tools;
 using TILSOFTAI.Tools.Abstractions;
 
 namespace TILSOFTAI.Approvals;
@@ -18,32 +13,21 @@ public sealed class ApprovalEngine : IApprovalEngine
 {
     private const string SqlAdapterType = "sql";
     private const string WriteActionCatalogStoredProcedure = "dbo.app_writeactioncatalog_get";
+    private const string RealWriteExecutionDisabledMessage = "Real write execution is disabled.";
 
     private readonly IActionRequestStore _requestStore;
     private readonly IToolAdapterRegistry _toolAdapterRegistry;
-    private readonly ToolResultCompactor _toolResultCompactor;
-    private readonly IConversationStore _conversationStore;
-    private readonly ChatOptions _chatOptions;
-    private readonly IJsonSchemaValidator _schemaValidator;
     private readonly ILogger<ApprovalEngine> _logger;
     private readonly RuntimeExecutionInstrumentation? _instrumentation;
 
     public ApprovalEngine(
         IActionRequestStore requestStore,
         IToolAdapterRegistry toolAdapterRegistry,
-        ToolResultCompactor toolResultCompactor,
-        IConversationStore conversationStore,
-        IOptions<ChatOptions> chatOptions,
-        IJsonSchemaValidator schemaValidator,
         ILogger<ApprovalEngine> logger,
         RuntimeExecutionInstrumentation? instrumentation = null)
     {
         _requestStore = requestStore ?? throw new ArgumentNullException(nameof(requestStore));
         _toolAdapterRegistry = toolAdapterRegistry ?? throw new ArgumentNullException(nameof(toolAdapterRegistry));
-        _toolResultCompactor = toolResultCompactor ?? throw new ArgumentNullException(nameof(toolResultCompactor));
-        _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
-        _chatOptions = chatOptions?.Value ?? throw new ArgumentNullException(nameof(chatOptions));
-        _schemaValidator = schemaValidator ?? throw new ArgumentNullException(nameof(schemaValidator));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _instrumentation = instrumentation;
     }
@@ -218,94 +202,7 @@ public sealed class ApprovalEngine : IApprovalEngine
             ValidateSameConversation(request, context);
             ValidateNotExpired(request);
             ValidateExpectedPayload(request, expectedPayloadJson);
-
-            var catalogEntry = await GetCatalogEntryAsync(context, request.ProposedSpName, ct);
-            if (catalogEntry == null)
-            {
-                throw new InvalidOperationException(string.Format(Resources.Ex_WriteActionNoLongerAllowed, request.ProposedSpName));
-            }
-
-            if (!catalogEntry.IsEnabled)
-            {
-                throw new InvalidOperationException(string.Format(Resources.Ex_WriteActionHasBeenDisabled, request.ProposedSpName));
-            }
-
-            ValidateRoles(catalogEntry.RequiredRoles, context.Roles, executionPhase: true);
-            ValidatePayloadSchema(catalogEntry.JsonSchema, request.ArgsJson, executionPhase: true);
-
-            var adapter = _toolAdapterRegistry.Resolve(SqlAdapterType);
-            var execution = await adapter.ExecuteAsync(
-                new ToolExecutionRequest
-                {
-                    TenantId = context.TenantId,
-                    AgentId = context.AgentId ?? "approval-engine",
-                    SystemId = SqlAdapterType,
-                    CapabilityKey = request.ProposedToolName,
-                    Operation = ToolAdapterOperationNames.ExecuteWriteAction,
-                    ArgumentsJson = request.ArgsJson,
-                    CorrelationId = context.CorrelationId,
-                    Metadata = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                    {
-                        ["storedProcedure"] = request.ProposedSpName,
-                        ["approvedActionId"] = actionId
-                    }
-                },
-                ct);
-
-            if (!execution.Success)
-            {
-                throw new InvalidOperationException(
-                    $"Write action execution failed: {execution.ErrorCode ?? "UNKNOWN_ERROR"}");
-            }
-
-            var rawResult = execution.PayloadJson ?? string.Empty;
-            var maxBytes = _chatOptions.CompactionLimits.TryGetValue("ToolResultMaxBytes", out var limit) && limit > 0
-                ? limit
-                : 16000;
-            var compacted = _toolResultCompactor.CompactJson(rawResult, maxBytes, _chatOptions.CompactionRules);
-
-            sw.Stop();
-            var updated = await _requestStore.MarkExecutedAsync(
-                context.TenantId,
-                actionId,
-                context.UserId,
-                compacted,
-                success: true,
-                ct);
-
-            _logger.LogInformation(
-                "ApprovalExecute | ActionId: {ActionId} | Tenant: {TenantId} | SP: {StoredProcedure} | DurationMs: {DurationMs} | Success: true",
-                actionId, context.TenantId, request.ProposedSpName, sw.ElapsedMilliseconds);
-
-            await _conversationStore.SaveToolExecutionAsync(
-                new Domain.ExecutionContext.TilsoftExecutionContext
-                {
-                    TenantId = context.TenantId,
-                    UserId = context.UserId,
-                    Roles = context.Roles.ToArray(),
-                    ConversationId = context.ConversationId,
-                    CorrelationId = context.CorrelationId
-                },
-                new ToolExecutionRecord
-                {
-                    ToolName = request.ProposedToolName,
-                    SpName = request.ProposedSpName,
-                    ArgumentsJson = request.ArgsJson,
-                    Result = rawResult,
-                    CompactedResult = compacted,
-                    Success = true,
-                    DurationMs = 0
-                },
-                RequestPolicy.Default,
-                ct);
-
-            _instrumentation?.RecordApprovalExecution("execute", SqlAdapterType, sw.Elapsed, success: true);
-            return new ActionExecutionResult
-            {
-                Action = MapRecord(updated, actionType: "write", agentId: context.AgentId, targetSystem: SqlAdapterType),
-                RawResult = rawResult,
-                CompactedResult = compacted
-            };
+            throw new InvalidOperationException(RealWriteExecutionDisabledMessage);
         }
         catch
         {
@@ -516,32 +413,8 @@ public sealed class ApprovalEngine : IApprovalEngine
             $"User does not have required roles ({requiredRoles}){suffix}");
     }
 
-    private void ValidatePayloadSchema(string? jsonSchema, string payloadJson, bool executionPhase)
+    private static void ValidatePayloadSchema(string? jsonSchema, string payloadJson, bool executionPhase)
     {
-        if (!string.IsNullOrWhiteSpace(jsonSchema))
-        {
-            var validation = _schemaValidator.Validate(jsonSchema, payloadJson);
-            if (!validation.IsValid)
-            {
-                var errorDetail = validation.Errors.Count > 0
-                    ? string.Join("; ", validation.Errors)
-                    : string.IsNullOrWhiteSpace(validation.Summary)
-                        ? executionPhase
-                            ? "Arguments no longer match the current schema."
-                            : "Arguments do not match the required schema."
-                        : validation.Summary;
-
-                throw new ArgumentException(
-                    string.Format(
-                        executionPhase
-                            ? Resources.Val_SchemaValidationFailedAtExecutionTime
-                            : Resources.Val_SchemaValidationFailed,
-                        errorDetail));
-            }
-
-            return;
-        }
-
         try
         {
             using var _ = JsonDocument.Parse(payloadJson);

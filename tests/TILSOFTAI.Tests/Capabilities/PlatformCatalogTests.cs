@@ -120,33 +120,6 @@ public sealed class PlatformCatalogTests
     }
 
     [Fact]
-    public void CompositeCapabilityRegistry_ShouldLetPlatformCatalogOverrideBootstrapConfiguration()
-    {
-        var staticCapability = new CapabilityDescriptor
-        {
-            CapabilityKey = "warehouse.inventory.summary",
-            Domain = "warehouse",
-            AdapterType = "sql",
-            Operation = "execute_query",
-            TargetSystemId = "sql",
-            ExecutionMode = "readonly"
-        };
-        var bootstrapCapability = staticCapability.WithAdapter("rest-bootstrap");
-        var platformCapability = staticCapability.WithAdapter("rest-platform");
-
-        var registry = new CompositeCapabilityRegistry(
-            new ICapabilitySource[]
-            {
-                new StaticCapabilitySource("static", new[] { staticCapability }),
-                new StaticCapabilitySource("bootstrap-config", new[] { bootstrapCapability }),
-                new StaticCapabilitySource("platform-catalog", new[] { platformCapability })
-            },
-            new Mock<ILogger<CompositeCapabilityRegistry>>().Object);
-
-        registry.Resolve("warehouse.inventory.summary")!.AdapterType.Should().Be("rest-platform");
-    }
-
-    [Fact]
     public void CompositeExternalConnectionCatalog_ShouldPreferPlatformConnectionThenFallbackToBootstrap()
     {
         var platformProvider = new Mock<IPlatformCatalogProvider>();

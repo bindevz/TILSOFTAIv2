@@ -8,7 +8,6 @@ using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Sensitivity;
 using TILSOFTAI.Orchestration.Conversations;
-using TILSOFTAI.Orchestration.Pipeline;
 using TILSOFTAI.Supervisor;
 
 namespace TILSOFTAI.Api.Controllers;
@@ -107,7 +106,7 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
             {
                 await foreach (var evt in _supervisorRuntime.RunStreamAsync(supervisorRequest, context, linkedToken))
                 {
-                    var envelope = _envelopeFactory.Create(ToChatStreamEvent(evt), context);
+                    var envelope = _envelopeFactory.Create(evt, context);
                     var hasChunk = translator.TryTranslate(envelope, out var chunk, out var isTerminal, out var isError);
 
                     if (hasChunk && chunk is not null)
@@ -274,6 +273,4 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
         };
     }
 
-    private static ChatStreamEvent ToChatStreamEvent(SupervisorStreamEvent evt) =>
-        new(evt.Type, evt.Payload);
 }

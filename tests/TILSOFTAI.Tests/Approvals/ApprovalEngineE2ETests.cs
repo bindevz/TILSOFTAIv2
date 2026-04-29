@@ -1,14 +1,8 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Moq;
 using TILSOFTAI.Approvals;
-using TILSOFTAI.Domain.Configuration;
-using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Actions;
-using TILSOFTAI.Orchestration.Compaction;
-using TILSOFTAI.Orchestration.Conversations;
-using TILSOFTAI.Orchestration.Tools;
 using TILSOFTAI.Tools.Abstractions;
 using Xunit;
 
@@ -24,17 +18,16 @@ public sealed class ApprovalEngineE2ETests
 
     private readonly InMemoryActionRequestStore _store;
     private readonly ApprovalEngine _engine;
-    private readonly Mock<IToolAdapter> _mockAdapter;
 
     public ApprovalEngineE2ETests()
     {
         _store = new InMemoryActionRequestStore();
 
-        _mockAdapter = new Mock<IToolAdapter>();
-        _mockAdapter.SetupGet(a => a.AdapterType).Returns("sql");
+        var mockAdapter = new Mock<IToolAdapter>();
+        mockAdapter.SetupGet(a => a.AdapterType).Returns("sql");
 
         // Catalog lookup: return enabled entry with no required roles and no schema
-        _mockAdapter.Setup(a => a.ExecuteAsync(
+        mockAdapter.Setup(a => a.ExecuteAsync(
                 It.Is<ToolExecutionRequest>(r => r.Operation == ToolAdapterOperationNames.ExecuteQuery
                     && r.CapabilityKey == "writeaction.catalog.get"),
                 It.IsAny<CancellationToken>()))
@@ -50,41 +43,12 @@ public sealed class ApprovalEngineE2ETests
                     }
                 }));
 
-        // Write execution: return success
-        _mockAdapter.Setup(a => a.ExecuteAsync(
-                It.Is<ToolExecutionRequest>(r => r.Operation == ToolAdapterOperationNames.ExecuteWriteAction),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ToolExecutionResult.Ok("{\"receiptId\": \"R-001\"}"));
-
         var mockAdapterRegistry = new Mock<IToolAdapterRegistry>();
-        mockAdapterRegistry.Setup(r => r.Resolve("sql")).Returns(_mockAdapter.Object);
-
-        var chatOptions = Options.Create(new ChatOptions
-        {
-            CompactionLimits = new Dictionary<string, int> { ["ToolResultMaxBytes"] = 16000 },
-            CompactionRules = new CompactionRules()
-        });
-
-        var compactor = new ToolResultCompactor();
-        var conversationStore = new Mock<IConversationStore>();
-        conversationStore.Setup(c => c.SaveToolExecutionAsync(
-                It.IsAny<Domain.ExecutionContext.TilsoftExecutionContext>(),
-                It.IsAny<ToolExecutionRecord>(),
-                It.IsAny<RequestPolicy>(),
-                It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        var schemaValidator = new Mock<IJsonSchemaValidator>();
-        schemaValidator.Setup(v => v.Validate(It.IsAny<string>(), It.IsAny<string>()))
-            .Returns(new JsonSchemaValidationResult(true, Array.Empty<string>(), null));
+        mockAdapterRegistry.Setup(r => r.Resolve("sql")).Returns(mockAdapter.Object);
 
         _engine = new ApprovalEngine(
             _store,
             mockAdapterRegistry.Object,
-            compactor,
-            conversationStore.Object,
-            chatOptions,
-            schemaValidator.Object,
             new Mock<ILogger<ApprovalEngine>>().Object);
     }
 
@@ -135,17 +99,16 @@ public sealed class ApprovalEngineE2ETests
     }
 
     [Fact]
-    public async Task Execute_ShouldSucceed_WhenConfirmed()
+    public async Task Execute_ShouldFailClosed_WhenConfirmed()
     {
         var created = await _engine.CreateAsync(CreateAction(), CreateContext(), CancellationToken.None);
         await _engine.ApproveAsync(created.ActionId, CreateContext(ApproverUserId), CancellationToken.None);
 
-        var result = await _engine.ExecuteAsync(
+        var act = () => _engine.ExecuteAsync(
             created.ActionId, CreateContext(), CancellationToken.None);
 
-        result.Should().NotBeNull();
-        result.Action.Status.Should().Be("Executed");
-        result.RawResult.Should().Contain("R-001");
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Real write execution is disabled*");
     }
 
     [Fact]
@@ -174,21 +137,6 @@ public sealed class ApprovalEngineE2ETests
     }
 
     [Fact]
-    public async Task ReExecute_ShouldFail_WhenAlreadyExecuted()
-    {
-        var created = await _engine.CreateAsync(CreateAction(), CreateContext(), CancellationToken.None);
-        await _engine.ApproveAsync(created.ActionId, CreateContext(ApproverUserId), CancellationToken.None);
-        await _engine.ExecuteAsync(created.ActionId, CreateContext(), CancellationToken.None);
-
-        // Attempting to execute again: status is now "Executed", not "Confirmed".
-        var act = () => _engine.ExecuteAsync(
-            created.ActionId, CreateContext(), CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*must be approved*");
-    }
-
-    [Fact]
     public async Task Reject_ShouldReturnRejectedRecord()
     {
         var created = await _engine.CreateAsync(CreateAction(), CreateContext(), CancellationToken.None);
@@ -201,7 +149,7 @@ public sealed class ApprovalEngineE2ETests
     }
 
     [Fact]
-    public async Task FullLifecycle_Create_Approve_Execute()
+    public async Task FullLifecycle_Create_Approve_ExecuteBlocked()
     {
         // Step 1: Create
         var action = CreateAction();
@@ -214,14 +162,10 @@ public sealed class ApprovalEngineE2ETests
         var approved = await _engine.ApproveAsync(created.ActionId, approveContext, CancellationToken.None);
         approved.Status.Should().Be(ActionRequestStatus.Confirmed);
 
-        // Step 3: Execute
-        var result = await _engine.ExecuteAsync(created.ActionId, context, CancellationToken.None);
-        result.Action.Status.Should().Be("Executed");
-        result.RawResult.Should().NotBeNullOrEmpty();
-
-        // Step 4: Re-execute should fail
-        var reExec = () => _engine.ExecuteAsync(created.ActionId, context, CancellationToken.None);
-        await reExec.Should().ThrowAsync<InvalidOperationException>();
+        // Step 3: Execute is intentionally blocked until the official MAF write path exists.
+        var exec = () => _engine.ExecuteAsync(created.ActionId, context, CancellationToken.None);
+        await exec.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Real write execution is disabled*");
     }
 
     [Fact]

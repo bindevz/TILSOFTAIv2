@@ -27,7 +27,6 @@ public sealed class NoAuthHandler : AuthenticationHandler<AuthenticationSchemeOp
             new Claim(ClaimTypes.Name, "anonymous"),
             new Claim("sub", "anonymous"),
             new Claim("tid", "default"),
-            new Claim("roles", "analytics.read"),
             new Claim("gateway_trusted", "true")
         };
 

@@ -17,7 +17,6 @@ using TILSOFTAI.Api.Health;
 using TILSOFTAI.Api.Hubs;
 using TILSOFTAI.Api.Middlewares;
 using TILSOFTAI.Api.Streaming;
-using TILSOFTAI.Api.Tools;
 using TILSOFTAI.Domain.Caching;
 using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Errors;
@@ -38,15 +37,11 @@ using TILSOFTAI.Infrastructure.Errors;
 using TILSOFTAI.Infrastructure.Http;
 using TILSOFTAI.Infrastructure.Normalization;
 using TILSOFTAI.Infrastructure.Conversations;
-using TILSOFTAI.Infrastructure.Atomic;
-using TILSOFTAI.Infrastructure.Llm;
-using TILSOFTAI.Infrastructure.Metadata;
-using TILSOFTAI.Infrastructure.Prompting;
 using TILSOFTAI.Infrastructure.Localization;
+using TILSOFTAI.Infrastructure.Llm;
 using TILSOFTAI.Infrastructure.Sensitivity;
 using TILSOFTAI.Infrastructure.SemanticSql;
 using TILSOFTAI.Infrastructure.Sql;
-using TILSOFTAI.Infrastructure.Tools;
 using TILSOFTAI.Orchestration;
 using TILSOFTAI.Orchestration.AiRouting;
 using TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
@@ -55,18 +50,11 @@ using TILSOFTAI.Orchestration.Actions;
 using TILSOFTAI.Orchestration.Caching;
 using TILSOFTAI.Orchestration.Compaction;
 using TILSOFTAI.Orchestration.Conversations;
-using TILSOFTAI.Orchestration.Llm;
 using TILSOFTAI.Orchestration.Normalization;
 using TILSOFTAI.Orchestration.Policies;
-using TILSOFTAI.Orchestration.Prompting;
-using TILSOFTAI.Orchestration.Atomic;
 using TILSOFTAI.Orchestration.Capabilities;
-using TILSOFTAI.Orchestration.Planning;
 using TILSOFTAI.Orchestration.Sql;
 using TILSOFTAI.Orchestration.Semantic;
-using TILSOFTAI.Orchestration.Tools;
-using TILSOFTAI.Modules.Core.Tools;
-using TILSOFTAI.Orchestration.Analytics;
 using TILSOFTAI.Infrastructure.Observability;
 using TILSOFTAI.Orchestration.Observability;
 using TILSOFTAI.Domain.Telemetry;
@@ -191,24 +179,7 @@ public static class AddTilsoftAiExtensions
         services.AddHostedService<JwtSigningKeyRefreshHostedService>();
 
         services.AddSupervisorRuntime();
-        services.AddSingleton<ICapabilitySource, ConfigurationCapabilitySource>();
-        services.AddSingleton<ICapabilitySource, PlatformCatalogCapabilitySource>();
-        services.AddSingleton<IToolRegistry, ToolRegistry>();
-        services.AddSingleton<INamedToolHandlerRegistry>(sp =>
-        {
-            var registry = new NamedToolHandlerRegistry();
-            registry.Register("atomic_execute_plan", typeof(AtomicExecutePlanToolHandler));
-            return registry;
-        });
-        services.AddSingleton<ToolCatalogSyncService>();
-        services.AddSingleton<IToolCatalogResolver>(sp => sp.GetRequiredService<ToolCatalogSyncService>());
-        services.AddSingleton<IScopedToolCatalogResolver>(sp => sp.GetRequiredService<ToolCatalogSyncService>());
-        services.AddSingleton<IJsonSchemaValidator, RealJsonSchemaValidator>();
-        services.AddSingleton<ToolGovernance>();
         services.AddSingleton<ToolResultCompactor>();
-        services.AddSingleton<SqlToolHandler>();
-        services.AddSingleton<DiagnosticsToolHandler>();
-        services.AddSingleton<IToolHandler, ToolHandlerRouter>();
         services.AddSingleton<ISqlExecutor, SqlExecutor>();
         services.AddSingleton<IToolAdapter, SqlToolAdapter>();
         services.AddSingleton<IToolAdapter>(sp => sp.GetRequiredService<RestJsonToolAdapter>());
@@ -219,66 +190,17 @@ public static class AddTilsoftAiExtensions
         // write-action guard for adapter-level enforcement
         services.AddSingleton<IWriteActionGuard, ApprovalBackedWriteActionGuard>();
         services.AddSingleton<CacheStampedeGuard>();
-        services.AddSingleton<SemanticCache>();
-
-        // Analytics services
-        services.AddSingleton<IInsightAssemblyService, InsightAssemblyService>();
-
-        // Background cache write service
-        services.AddSingleton<CacheWriteBackgroundService>();
-        services.AddSingleton<ICacheWriteQueue>(sp =>
-            sp.GetRequiredService<CacheWriteBackgroundService>());
-        services.AddHostedService(sp =>
-            sp.GetRequiredService<CacheWriteBackgroundService>());
 
         services.AddHttpClient<OpenAiEmbeddingClient>();
         services.AddSingleton<IEmbeddingClient>(sp => sp.GetRequiredService<OpenAiEmbeddingClient>());
-        services.AddSingleton<SqlVectorSemanticCache>();
         services.AddSingleton<ISemanticKnowledgeRepository, SqlSemanticKnowledgeRepository>();
         services.AddSingleton<ICapabilityMetadataRepository, SqlCapabilityMetadataRepository>();
         services.AddSingleton<IEntityAliasRepository, SqlEntityAliasRepository>();
         services.AddSingleton<IToolRoutingTraceStore, SqlToolRoutingTraceStore>();
-        services.AddSingleton<ISemanticCache>(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<SemanticCacheOptions>>().Value;
-            if (string.Equals(options.Mode, "SqlVector", StringComparison.OrdinalIgnoreCase))
-            {
-                return sp.GetRequiredService<SqlVectorSemanticCache>();
-            }
-            return sp.GetRequiredService<SemanticCache>();
-        });
         services.AddSingleton<INormalizationRuleProvider, SqlNormalizationRuleProvider>();
         services.AddSingleton<INormalizationService, NormalizationService>();
-        // Context Pack Providers (Composite pattern)
-        services.AddSingleton<MetadataDictionaryContextPackProvider>();
-        services.AddSingleton<ToolCatalogContextPackProvider>();
-        services.AddSingleton<AtomicCatalogContextPackProvider>();
-        services.AddSingleton<IContextPackProvider>(sp => new CompositeContextPackProvider(new IContextPackProvider[]
-        {
-            sp.GetRequiredService<MetadataDictionaryContextPackProvider>(),
-            sp.GetRequiredService<ToolCatalogContextPackProvider>(),
-            sp.GetRequiredService<AtomicCatalogContextPackProvider>()
-        }));
-        services.AddSingleton<TokenBudgetPolicy>();
-        services.AddSingleton<ContextPackBudgeter>();
         services.AddSingleton<RecursionPolicy>();
-        services.AddSingleton<PromptBuilder>();
-        services.AddHttpClient<OpenAiCompatibleLlmClient>()
-            .AddHttpMessageHandler<CircuitBreakerDelegatingHandler>()
-            .AddHttpMessageHandler<RetryDelegatingHandler>();
         RegisterOfficialAgentChatClient(services, configuration);
-
-        services.AddSingleton<ILlmClient>(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<LlmOptions>>().Value;
-            return string.Equals(options.Provider, "OpenAiCompatible", StringComparison.OrdinalIgnoreCase)
-                ? sp.GetRequiredService<OpenAiCompatibleLlmClient>()
-                : sp.GetRequiredService<NullLlmClient>();
-        });
-        services.AddSingleton<NullLlmClient>();
-        services.AddSingleton<IAtomicCatalogProvider, SqlAtomicCatalogProvider>();
-        services.AddSingleton<PlanOptimizer>();
-        services.AddSingleton<AtomicDataEngine>();
 
         services.AddHostedService<ObservabilityPurgeHostedService>();
         services.AddHostedService<ErrorCatalogCoverageGuard>();
@@ -333,9 +255,7 @@ public static class AddTilsoftAiExtensions
 
         var healthChecksBuilder = services.AddHealthChecks()
             .AddCheck<SqlHealthCheck>("sql", tags: new[] { "ready", "db" })
-            .AddCheck<LlmHealthCheck>("llm", tags: new[] { "ready", "external" })
             .AddCheck<CircuitBreakerHealthCheck>("circuits", tags: new[] { "ready", "resilience" })
-            .AddCheck<ToolCatalogHealthCheck>("toolcatalog", tags: new[] { "ready", "runtime" })
             .AddCheck<PlatformCatalogHealthCheck>("platform-catalog", tags: new[] { "ready", "catalog" })
             .AddCheck<NativeRuntimeHealthCheck>("native-runtime", tags: new[] { "ready", "runtime", "native" })
             .AddCheck<OfficialAgentFrameworkHealthCheck>("official-agent-framework", tags: new[] { "ready", "runtime", "agent-framework" });
@@ -625,14 +545,6 @@ public static class AddTilsoftAiExtensions
             .Validate(options => options.MaxDetailLength > 0, "ErrorHandling:MaxDetailLength must be > 0.")
             .ValidateOnStart();
 
-        services.AddOptions<ToolCatalogContextPackOptions>()
-            .Bind(configuration.GetSection("ToolCatalogContextPack"))
-            .Validate(options => options.MaxTools > 0, "ToolCatalogContextPack:MaxTools must be > 0.")
-            .Validate(options => options.MaxTotalTokens > 0, "ToolCatalogContextPack:MaxTotalTokens must be > 0.")
-            .Validate(options => options.MaxInstructionTokensPerTool > 0, "ToolCatalogContextPack:MaxInstructionTokensPerTool must be > 0.")
-            .Validate(options => options.MaxDescriptionTokensPerTool > 0, "ToolCatalogContextPack:MaxDescriptionTokensPerTool must be > 0.")
-            .ValidateOnStart();
-
         services.AddOptions<RuntimePolicySystemOptions>()
             .Bind(configuration.GetSection("RuntimePolicy"));
 
@@ -751,18 +663,6 @@ public static class AddTilsoftAiExtensions
                     && !string.IsNullOrWhiteSpace(signer.KeyId)
                     && !string.IsNullOrWhiteSpace(signer.PublicKeyPem)),
                 "CatalogCertification:TrustedEvidenceSigners entries must include SignerId, KeyId, and PublicKeyPem.")
-            .ValidateOnStart();
-
-        // Analytics options
-        services.AddOptions<AnalyticsOptions>()
-            .Bind(configuration.GetSection(ConfigurationSectionNames.Analytics))
-            .Validate(options => options.MaxRows > 0, "Analytics:MaxRows must be > 0.")
-            .Validate(options => options.MaxGroupBy > 0, "Analytics:MaxGroupBy must be > 0.")
-            .Validate(options => options.MaxMetrics > 0, "Analytics:MaxMetrics must be > 0.")
-            .Validate(options => options.MaxJoins >= 0, "Analytics:MaxJoins must be >= 0.")
-            .Validate(options => options.MaxTimeWindowDays > 0, "Analytics:MaxTimeWindowDays must be > 0.")
-            .Validate(options => options.AllowedMetricOps != null && options.AllowedMetricOps.Length > 0,
-                "Analytics:AllowedMetricOps must have at least one allowed operation.")
             .ValidateOnStart();
     }
 

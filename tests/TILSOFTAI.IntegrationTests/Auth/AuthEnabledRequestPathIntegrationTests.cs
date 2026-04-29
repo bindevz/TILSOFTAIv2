@@ -1,155 +1,106 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
-using TILSOFTAI.Agents;
-using TILSOFTAI.Agents.Abstractions;
-using TILSOFTAI.Agents.Domain;
-using TILSOFTAI.Approvals;
+using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
-using TILSOFTAI.Orchestration.Capabilities;
+using TILSOFTAI.Orchestration.AiRouting;
+using TILSOFTAI.Orchestration.Answering;
 using TILSOFTAI.Supervisor;
-using TILSOFTAI.Supervisor.Classification;
-using TILSOFTAI.Tools.Abstractions;
 using Xunit;
 
 namespace TILSOFTAI.IntegrationTests.Auth;
 
 /// <summary>
-/// Sprint 5: Integration tests for auth-enabled request paths.
-/// Validates that TilsoftExecutionContext (tenant, user, roles, correlation)
-/// is properly threaded through the full supervisor → agent → adapter chain.
+/// Validates that authenticated request context is threaded into the official Agent Framework router.
 /// </summary>
 public sealed class AuthEnabledRequestPathIntegrationTests
 {
-    private static (SupervisorRuntime runtime, Mock<IToolAdapter> stubAdapter) BuildRuntime()
-    {
-        var stubAdapter = new Mock<IToolAdapter>();
-        stubAdapter.Setup(a => a.AdapterType).Returns("sql");
-        stubAdapter.Setup(a => a.ExecuteAsync(It.IsAny<ToolExecutionRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ToolExecutionResult.Ok("{\"data\": \"ok\"}"));
-
-        var adapterRegistry = new ToolAdapterRegistry(new[] { stubAdapter.Object });
-
-        var capabilityResolver = new StructuredCapabilityResolver(
-            new Mock<ILogger<StructuredCapabilityResolver>>().Object);
-
-        var capabilityRegistry = new InMemoryCapabilityRegistry(
-            WarehouseCapabilities.All.Concat(AccountingCapabilities.All));
-
-        var warehouseAgent = new WarehouseAgent(
-            capabilityRegistry,
-            capabilityResolver,
-            new Mock<ILogger<WarehouseAgent>>().Object);
-
-        var accountingAgent = new AccountingAgent(
-            capabilityRegistry,
-            capabilityResolver,
-            new Mock<ILogger<AccountingAgent>>().Object);
-
-        var agents = new IDomainAgent[] { warehouseAgent, accountingAgent };
-        var agentRegistry = new DomainAgentRegistry(
-            agents, new Mock<ILogger<DomainAgentRegistry>>().Object);
-
-        var classifier = new KeywordIntentClassifier(
-            new Mock<ILogger<KeywordIntentClassifier>>().Object);
-
-        var approvalEngine = new Mock<IApprovalEngine>().Object;
-
-        var runtime = new SupervisorRuntime(
-            classifier,
-            agentRegistry,
-            approvalEngine,
-            adapterRegistry,
-            new Mock<ILogger<SupervisorRuntime>>().Object);
-
-        return (runtime, stubAdapter);
-    }
-
     [Fact]
-    public async Task AuthenticatedRequest_ShouldThreadTenantId_ThroughEntireChain()
+    public async Task AuthenticatedRequest_ShouldThreadTenantAndCorrelationToOfficialRouter()
     {
-        var (runtime, stubAdapter) = BuildRuntime();
+        var router = new Mock<IAgentToolRouter>();
+        router.Setup(x => x.TryRouteAsync(It.IsAny<AgentToolRoutingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AgentToolRoutingResult
+            {
+                Handled = true,
+                Answer = Answer("ok")
+            });
+        var runtime = BuildRuntime(router.Object);
 
         var ctx = new TilsoftExecutionContext
         {
             TenantId = "tenant-auth-123",
             UserId = "user-auth-456",
-            Roles = new[] { "ai_user", "warehouse_read" },
+            Roles = new[] { "ai_user", "model_read" },
             CorrelationId = "corr-auth-789"
         };
 
-        var request = new SupervisorRequest
-        {
-            Input = "show me warehouse inventory summary"
-        };
-
-        var result = await runtime.RunAsync(request, ctx, CancellationToken.None);
+        var result = await runtime.RunAsync(
+            new SupervisorRequest { Input = "show model summary" },
+            ctx,
+            CancellationToken.None);
 
         result.Success.Should().BeTrue();
-
-        stubAdapter.Verify(a => a.ExecuteAsync(
-            It.Is<ToolExecutionRequest>(r =>
-                r.TenantId == "tenant-auth-123" &&
-                r.CorrelationId == "corr-auth-789"),
-            It.IsAny<CancellationToken>()), Times.Once);
+        router.Verify(
+            x => x.TryRouteAsync(
+                It.Is<AgentToolRoutingRequest>(r =>
+                    r.ExecutionContext.TenantId == "tenant-auth-123"
+                    && r.ExecutionContext.UserId == "user-auth-456"
+                    && r.ExecutionContext.CorrelationId == "corr-auth-789"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
-    public async Task AuthenticatedRequest_ShouldThreadContext_ForAccountingAgent()
+    public async Task AuthenticatedRequest_WithEmptyTenantId_ShouldStillReachOfficialRouter()
     {
-        var (runtime, stubAdapter) = BuildRuntime();
-
-        var ctx = new TilsoftExecutionContext
-        {
-            TenantId = "tenant-acct",
-            UserId = "user-acct",
-            Roles = new[] { "ai_user", "accounting_read" },
-            CorrelationId = "corr-acct"
-        };
-
-        var request = new SupervisorRequest
-        {
-            Input = "show me accounting receivables summary"
-        };
-
-        var result = await runtime.RunAsync(request, ctx, CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-        result.SelectedAgentId.Should().Be("accounting");
-
-        stubAdapter.Verify(a => a.ExecuteAsync(
-            It.Is<ToolExecutionRequest>(r =>
-                r.TenantId == "tenant-acct" &&
-                r.CorrelationId == "corr-acct" &&
-                r.AgentId == "accounting"),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task AuthenticatedRequest_WithEmptyTenantId_ShouldStillExecute()
-    {
-        var (runtime, stubAdapter) = BuildRuntime();
+        var router = new Mock<IAgentToolRouter>();
+        router.Setup(x => x.TryRouteAsync(It.IsAny<AgentToolRoutingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AgentToolRoutingResult
+            {
+                Handled = true,
+                Answer = Answer("ok")
+            });
+        var runtime = BuildRuntime(router.Object);
 
         var ctx = new TilsoftExecutionContext
         {
             TenantId = "",
             UserId = "user-empty",
             CorrelationId = "corr-empty",
-            Roles = new[] { "warehouse_read" }
+            Roles = new[] { "model_read" }
         };
 
-        var request = new SupervisorRequest
-        {
-            Input = "show me warehouse inventory summary"
-        };
+        var result = await runtime.RunAsync(
+            new SupervisorRequest { Input = "show model summary" },
+            ctx,
+            CancellationToken.None);
 
-        var result = await runtime.RunAsync(request, ctx, CancellationToken.None);
-
-        // Should still succeed — tenant isolation is the adapter's responsibility
         result.Success.Should().BeTrue();
-
-        stubAdapter.Verify(a => a.ExecuteAsync(
-            It.Is<ToolExecutionRequest>(r => r.TenantId == ""),
-            It.IsAny<CancellationToken>()), Times.Once);
+        router.Verify(
+            x => x.TryRouteAsync(
+                It.Is<AgentToolRoutingRequest>(r => r.ExecutionContext.TenantId == ""),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
+
+    private static SupervisorRuntime BuildRuntime(IAgentToolRouter router) =>
+        new(
+            Mock.Of<ILogger<SupervisorRuntime>>(),
+            router,
+            Options.Create(new AiRoutingOptions()));
+
+    private static AssistantAnswer Answer(string text) => new()
+    {
+        AnswerType = "structured",
+        Text = text,
+        Blocks = Array.Empty<AnswerBlock>(),
+        Provenance = new AnswerProvenance
+        {
+            CapabilityKey = "model.test",
+            RowCount = 1
+        },
+        SelectedAgentId = "microsoft-agent-router"
+    };
 }

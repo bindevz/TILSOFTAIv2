@@ -22,7 +22,6 @@ public static class ConfigurationSectionNames
     public const string StructuredLogging = "StructuredLogging";
     public const string Metrics = "Metrics";
     public const string Resilience = "Resilience";
-    public const string Analytics = "Analytics";
     public const string ExternalConnections = "ExternalConnections";
     public const string PlatformCatalog = "PlatformCatalog";
     public const string CatalogControlPlane = "CatalogControlPlane";

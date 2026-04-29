@@ -18,11 +18,6 @@ namespace TILSOFTAI.Domain.Properties
 
         // Validation Messages  
         public static string Val_ToolNameRequired => ResourceManager.GetString(nameof(Val_ToolNameRequired))!;
-        public static string Val_HandlerTypeMustImplementIToolHandler => ResourceManager.GetString(nameof(Val_HandlerTypeMustImplementIToolHandler))!;
-        public static string Val_ToolDefinitionNameRequired => ResourceManager.GetString(nameof(Val_ToolDefinitionNameRequired))!;
-        public static string Val_ToolDefinitionInstructionRequired => ResourceManager.GetString(nameof(Val_ToolDefinitionInstructionRequired))!;
-        public static string Val_ToolDefinitionJsonSchemaRequired => ResourceManager.GetString(nameof(Val_ToolDefinitionJsonSchemaRequired))!;
-        public static string Val_ToolDefinitionSpNameMustStartWithAi => ResourceManager.GetString(nameof(Val_ToolDefinitionSpNameMustStartWithAi))!;
         public static string Val_ArgumentsJsonRequired => ResourceManager.GetString(nameof(Val_ArgumentsJsonRequired))!;
         public static string Val_MissingRequiredProperty => ResourceManager.GetString(nameof(Val_MissingRequiredProperty))!;
         public static string Val_PropertyMustBeIntegerGreaterThanOne => ResourceManager.GetString(nameof(Val_PropertyMustBeIntegerGreaterThanOne))!;
@@ -36,7 +31,6 @@ namespace TILSOFTAI.Domain.Properties
         public static string Val_SchemaValidationFailedAtExecutionTime => ResourceManager.GetString(nameof(Val_SchemaValidationFailedAtExecutionTime))!;
         public static string Val_QueryRequiredForCatalogSearch => ResourceManager.GetString(nameof(Val_QueryRequiredForCatalogSearch))!;
         public static string Val_DatasetKeyRequiredForCatalogGetDataset => ResourceManager.GetString(nameof(Val_DatasetKeyRequiredForCatalogGetDataset))!;
-        public static string Val_PlanJsonRequiredForAnalyticsValidatePlan => ResourceManager.GetString(nameof(Val_PlanJsonRequiredForAnalyticsValidatePlan))!;
         public static string Val_IdRequired => ResourceManager.GetString(nameof(Val_IdRequired))!;
         public static string Val_EventNameRequired => ResourceManager.GetString(nameof(Val_EventNameRequired))!;
         public static string Val_JwksAddressRequired => ResourceManager.GetString(nameof(Val_JwksAddressRequired))!;
