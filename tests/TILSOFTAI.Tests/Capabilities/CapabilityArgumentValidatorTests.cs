@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using TILSOFTAI.Orchestration.Capabilities;
+using TILSOFTAI.Tests.Fixtures;
 using Xunit;
 
 namespace TILSOFTAI.Tests.Capabilities;
@@ -10,7 +11,7 @@ public sealed class CapabilityArgumentValidatorTests
     [Fact]
     public void Validate_ShouldRejectInvalidStringType()
     {
-        var capability = ModelCapabilities.All.Single(c => c.CapabilityKey == "model.overview.by-code");
+        var capability = ModelCapabilityFixtures.All.Single(c => c.CapabilityKey == "model.overview.by-code");
 
         var result = CapabilityArgumentValidator.Validate(capability, "{\"modelCode\":123}");
 
@@ -22,7 +23,7 @@ public sealed class CapabilityArgumentValidatorTests
     [Fact]
     public void Validate_ShouldRejectInvalidModelCodeFormat()
     {
-        var capability = ModelCapabilities.All.Single(c => c.CapabilityKey == "model.overview.by-code");
+        var capability = ModelCapabilityFixtures.All.Single(c => c.CapabilityKey == "model.overview.by-code");
 
         var result = CapabilityArgumentValidator.Validate(capability, "{\"modelCode\":\"bad code\"}");
 
@@ -34,7 +35,7 @@ public sealed class CapabilityArgumentValidatorTests
     [Fact]
     public void Validate_ShouldRejectUnexpectedArguments()
     {
-        var capability = ModelCapabilities.All.Single(c => c.CapabilityKey == "model.count");
+        var capability = ModelCapabilityFixtures.All.Single(c => c.CapabilityKey == "model.count");
 
         var result = CapabilityArgumentValidator.Validate(capability, "{\"modelCode\":\"CHAIR-001\"}");
 
@@ -45,8 +46,8 @@ public sealed class CapabilityArgumentValidatorTests
     [Fact]
     public void Validate_ShouldAcceptTypedRepresentativeArguments()
     {
-        var byCode = ModelCapabilities.All.Single(c => c.CapabilityKey == "model.overview.by-code");
-        var count = ModelCapabilities.All.Single(c => c.CapabilityKey == "model.count");
+        var byCode = ModelCapabilityFixtures.All.Single(c => c.CapabilityKey == "model.overview.by-code");
+        var count = ModelCapabilityFixtures.All.Single(c => c.CapabilityKey == "model.count");
 
         CapabilityArgumentValidator.Validate(byCode, "{\"modelCode\":\"CHAIR-001\"}")
             .IsValid.Should().BeTrue();
@@ -81,7 +82,7 @@ public sealed class CapabilityArgumentValidatorTests
     [Fact]
     public void Validate_ShouldApplyMinLengthToArrayArguments()
     {
-        var capability = ModelCapabilities.All.Single(c => c.CapabilityKey == "model.compare");
+        var capability = ModelCapabilityFixtures.All.Single(c => c.CapabilityKey == "model.compare");
 
         CapabilityArgumentValidator.Validate(capability, """{"modelCodes":["ABC","DEF"]}""")
             .IsValid.Should().BeTrue();

@@ -46,6 +46,7 @@ public sealed record CapabilitySemanticMetadata
     public int VersionNo { get; init; }
     public CapabilityTextMetadata? Text { get; init; }
     public IReadOnlyList<CapabilityArgumentMetadata> Arguments { get; init; } = Array.Empty<CapabilityArgumentMetadata>();
+    public IReadOnlyList<CapabilityExampleMetadata> Examples { get; init; } = Array.Empty<CapabilityExampleMetadata>();
 }
 
 public interface ICapabilityCandidateSelector
@@ -63,6 +64,7 @@ public sealed record CapabilityTextMetadata
     public required string Locale { get; init; }
     public string? ShortName { get; init; }
     public required string Description { get; init; }
+    public string? Aliases { get; init; }
     public string? UseWhen { get; init; }
     public string? DoNotUseWhen { get; init; }
     public string? BusinessNotes { get; init; }
@@ -87,6 +89,15 @@ public sealed record CapabilityArgumentTextMetadata
     public required string Description { get; init; }
     public string? Aliases { get; init; }
     public string? Examples { get; init; }
+    public string? ClarificationQuestion { get; init; }
+}
+
+public sealed record CapabilityExampleMetadata
+{
+    public required string Locale { get; init; }
+    public required string Utterance { get; init; }
+    public string? ArgumentsJson { get; init; }
+    public int SortOrder { get; init; }
 }
 
 public sealed record EntityAliasSearchRequest
@@ -118,6 +129,7 @@ public sealed record ToolRoutingTrace
     public Guid CorrelationId { get; init; }
     public required string TenantId { get; init; }
     public required string UserId { get; init; }
+    public string? ConversationId { get; init; }
     public string? Locale { get; init; }
     public byte[]? UserMessageHash { get; init; }
     public string? UserMessageRedacted { get; init; }
@@ -127,6 +139,8 @@ public sealed record ToolRoutingTrace
     public string? AdvertisedFunctionToolsJson { get; init; }
     public string? SelectedTool { get; init; }
     public string? SelectedFunction { get; init; }
+    public string? SelectedCapabilityKey { get; init; }
+    public string? StoredProcedure { get; init; }
     public int? CandidateDomainCount { get; init; }
     public int? CandidateCapabilityCount { get; init; }
     public int? AdvertisedToolCount { get; init; }
@@ -140,6 +154,9 @@ public sealed record ToolRoutingTrace
     public int? LatencyMs { get; init; }
     public string? LatencyByStageJson { get; init; }
     public string? ModelProvider { get; init; }
+    public string? ModelName { get; init; }
+    public string? AllowedDomainsJson { get; init; }
+    public bool FallbackUsed { get; init; }
     public bool Success { get; init; }
     public string? ErrorCode { get; init; }
 }

@@ -29,8 +29,6 @@ public static class OrchestrationServiceCollectionExtensions
 
     private static IServiceCollection AddModelOnlyCapabilities(this IServiceCollection services)
     {
-        services.AddSingleton<ICapabilityRegistry>(
-            new InMemoryCapabilityRegistry(ModelCapabilities.All));
         services.AddSingleton<CapabilityArgumentMapper>();
         services.AddSingleton<CapabilityExecutionPolicy>();
         return services;

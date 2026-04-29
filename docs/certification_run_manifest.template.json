@@ -1,105 +1,26 @@
 {
-  "schemaVersion": 1,
   "manifestType": "staging-prodlike-certification-run",
-  "releaseId": "",
-  "certificationRunId": "",
-  "environment": "",
-  "generatedAtUtc": "",
-  "generatedBy": "",
+  "certificationRunId": null,
   "executionContext": {
-    "changeTicketId": "",
-    "tenantScopeRef": "",
-    "executionWindowId": "",
-    "operatorId": "",
-    "approverId": "",
-    "incidentRefs": []
+    "changeTicketId": null,
+    "environment": null,
+    "operatorUserId": null
   },
-  "reviewState": "draft",
-  "freshnessWindowDays": 30,
   "fallbackPosture": {
-    "catalogSourceMode": "unknown",
-    "productionLike": false,
-    "fallbackUsed": false,
-    "fallbackAuthorized": false,
-    "fallbackAuthorizationUri": "",
-    "fallbackDecision": "unknown"
+    "fallbackDecision": null,
+    "fallbackAuthorizationUri": null
   },
   "reviewGate": {
-    "decision": "draft",
     "acceptedForReleaseReview": false,
-    "decidedAtUtc": "",
-    "blockers": [],
-    "decisionInputs": {
-      "requiredEvidenceComplete": false,
-      "exampleEvidencePresent": false,
-      "fallbackAccepted": false,
-      "operatorSignoffPresent": false
-    }
+    "reviewedBy": null
   },
   "requiredEvidence": [
-    {
-      "evidenceKind": "runbook_execution",
-      "required": true,
-      "status": "missing",
-      "evidenceUri": "",
-      "collectedAtUtc": "",
-      "freshnessWindowDays": 30
-    },
-    {
-      "evidenceKind": "preview_failure_drill",
-      "required": true,
-      "status": "missing",
-      "evidenceUri": "",
-      "collectedAtUtc": "",
-      "freshnessWindowDays": 30
-    },
-    {
-      "evidenceKind": "version_conflict_drill",
-      "required": true,
-      "status": "missing",
-      "evidenceUri": "",
-      "collectedAtUtc": "",
-      "freshnessWindowDays": 30
-    },
-    {
-      "evidenceKind": "duplicate_submit_drill",
-      "required": true,
-      "status": "missing",
-      "evidenceUri": "",
-      "collectedAtUtc": "",
-      "freshnessWindowDays": 30
-    },
-    {
-      "evidenceKind": "sql_apply_outage_drill",
-      "required": true,
-      "status": "missing",
-      "evidenceUri": "",
-      "collectedAtUtc": "",
-      "freshnessWindowDays": 30
-    },
-    {
-      "evidenceKind": "fallback_risk_drill",
-      "required": true,
-      "status": "missing",
-      "evidenceUri": "",
-      "collectedAtUtc": "",
-      "freshnessWindowDays": 30
-    },
-    {
-      "evidenceKind": "operator_signoff",
-      "required": true,
-      "status": "missing",
-      "evidenceUri": "",
-      "collectedAtUtc": "",
-      "freshnessWindowDays": 14
-    }
-  ],
-  "signoff": {
-    "required": true,
-    "operatorSignoffEvidenceKind": "operator_signoff",
-    "approvedBy": "",
-    "approvedAtUtc": "",
-    "signoffUri": ""
-  },
-  "reviewNotes": []
+    { "evidenceKind": "runbook_execution", "evidenceUri": null },
+    { "evidenceKind": "preview_failure_drill", "evidenceUri": null },
+    { "evidenceKind": "version_conflict_drill", "evidenceUri": null },
+    { "evidenceKind": "duplicate_submit_drill", "evidenceUri": null },
+    { "evidenceKind": "sql_apply_outage_drill", "evidenceUri": null },
+    { "evidenceKind": "fallback_risk_drill", "evidenceUri": null },
+    { "evidenceKind": "operator_signoff", "evidenceUri": null }
+  ]
 }

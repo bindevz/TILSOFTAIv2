@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text.Json;
 using System.Text.Encodings.Web;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
@@ -23,6 +24,8 @@ using TILSOFTAI.Infrastructure.Errors;
 using TILSOFTAI.Infrastructure.ExecutionContext;
 using TILSOFTAI.Infrastructure.Observability;
 using TILSOFTAI.Infrastructure.Sensitivity;
+using TILSOFTAI.Orchestration.Answering;
+using TILSOFTAI.Orchestration.Execution;
 using TILSOFTAI.Orchestration.Observability;
 using TILSOFTAI.Supervisor;
 using Xunit;
@@ -49,6 +52,106 @@ public sealed class ChatHttpPipelineIntegrationTests
         body!.Success.Should().BeTrue();
         body.Content.Should().Be("http-ok");
         body.CorrelationId.Should().Be("corr-http");
+    }
+
+    [Fact]
+    public async Task ChatController_RawJson_ReturnsDetailPayload()
+    {
+        await using var app = await CreateAppAsync();
+        using var client = CreateClient(app);
+        client.DefaultRequestHeaders.Authorization = new("Test");
+
+        var response = await client.PostAsJsonAsync("/api/chats", new ChatApiRequest
+        {
+            Input = "raw json model overview"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<ChatApiResponse>();
+
+        body.Should().NotBeNull();
+        body!.Success.Should().BeTrue();
+        body.Content.Should().BeEmpty();
+        body.AnswerType.Should().Be("raw_json");
+        body.Detail.Should().BeOfType<JsonElement>();
+        var detail = (JsonElement)body.Detail!;
+        detail.GetProperty("capabilityKey").GetString().Should().Be("model.overview.by-code");
+        detail.GetProperty("procedureName").GetString().Should().Be("dbo.ai_model_get_overview");
+        detail.GetProperty("arguments").GetProperty("modelCode").GetString().Should().Be("ABC");
+        detail.GetProperty("rowCount").GetInt32().Should().Be(1);
+        detail.GetProperty("resultSchema").ValueKind.Should().Be(JsonValueKind.Object);
+        detail.GetProperty("executionMetadata").GetProperty("correlationId").GetString().Should().Be("corr-http");
+        detail.GetProperty("provenance").GetProperty("correlationId").GetString().Should().Be("corr-http");
+    }
+
+    [Fact]
+    public async Task ChatController_RawJson_DoesNotDropRows()
+    {
+        await using var app = await CreateAppAsync();
+        using var client = CreateClient(app);
+        client.DefaultRequestHeaders.Authorization = new("Test");
+
+        var response = await client.PostAsJsonAsync("/api/chats", new ChatApiRequest
+        {
+            Input = "raw json model overview"
+        });
+
+        var body = await response.Content.ReadFromJsonAsync<ChatApiResponse>();
+        var detail = (JsonElement)body!.Detail!;
+        var rows = detail.GetProperty("rows");
+
+        rows.GetArrayLength().Should().Be(1);
+        rows[0].GetProperty("ModelCode").GetString().Should().Be("ABC");
+        rows[0].GetProperty("ModelName").GetString().Should().Be("Chair");
+    }
+
+    [Fact]
+    public async Task ChatController_RawJson_PreservesCorrelationId()
+    {
+        await using var app = await CreateAppAsync();
+        using var client = CreateClient(app);
+        client.DefaultRequestHeaders.Authorization = new("Test");
+
+        var response = await client.PostAsJsonAsync("/api/chats", new ChatApiRequest
+        {
+            Input = "raw json model overview"
+        });
+
+        var body = await response.Content.ReadFromJsonAsync<ChatApiResponse>();
+
+        body!.CorrelationId.Should().Be("corr-http");
+        body.Provenance.Should().NotBeNull();
+        body.Provenance!["correlationId"].Should().BeOfType<JsonElement>()
+            .Which.GetString().Should().Be("corr-http");
+    }
+
+    [Fact]
+    public async Task OpenAiCompatible_RawJson_HasSerializableContent()
+    {
+        await using var app = await CreateAppAsync();
+        using var client = CreateClient(app);
+
+        var response = await client.PostAsJsonAsync("/v1/chat/completions", new
+        {
+            model = "test-model",
+            messages = new[]
+            {
+                new { role = "user", content = "raw json model overview" }
+            }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var content = payload.RootElement
+            .GetProperty("choices")[0]
+            .GetProperty("message")
+            .GetProperty("content")
+            .GetString();
+
+        content.Should().NotBeNullOrWhiteSpace();
+        using var rawJson = JsonDocument.Parse(content!);
+        rawJson.RootElement.GetProperty("mode").GetString().Should().Be("raw_json");
+        rawJson.RootElement.GetProperty("rows").GetArrayLength().Should().Be(1);
     }
 
     [Fact]
@@ -139,7 +242,15 @@ public sealed class ChatHttpPipelineIntegrationTests
         public Task<SupervisorResult> RunAsync(
             SupervisorRequest request,
             TilsoftExecutionContext ctx,
-            CancellationToken ct) => Task.FromResult(SupervisorResult.Ok("http-ok", "warehouse"));
+            CancellationToken ct)
+        {
+            if (request.Input.Contains("raw json", StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult(SupervisorResult.FromAssistantAnswer(CreateRawJsonAnswer(ctx)));
+            }
+
+            return Task.FromResult(SupervisorResult.Ok("http-ok", "warehouse"));
+        }
 
         public async IAsyncEnumerable<SupervisorStreamEvent> RunStreamAsync(
             SupervisorRequest request,
@@ -148,6 +259,49 @@ public sealed class ChatHttpPipelineIntegrationTests
         {
             yield return SupervisorStreamEvent.Final("http-ok");
             await Task.CompletedTask;
+        }
+
+        private static AssistantAnswer CreateRawJsonAnswer(TilsoftExecutionContext ctx)
+        {
+            var composer = new RawJsonAnswerComposer();
+            var answer = composer.ComposeAsync(
+                new AnswerComposerRequest
+                {
+                    Mode = AnswerMode.RawJson,
+                    CapabilityKey = "model.overview.by-code",
+                    ProcedureName = "dbo.ai_model_get_overview",
+                    Arguments = new Dictionary<string, object?> { ["modelCode"] = "ABC" },
+                    ResultSchema = new ResultSchema
+                    {
+                        Columns =
+                        [
+                            new ResultColumn { Name = "ModelCode", Label = "Model Code", Type = "string" },
+                            new ResultColumn { Name = "ModelName", Label = "Model Name", Type = "string" }
+                        ]
+                    },
+                    Result = null,
+                    Rows =
+                    [
+                        new Dictionary<string, object?>
+                        {
+                            ["ModelCode"] = "ABC",
+                            ["ModelName"] = "Chair"
+                        }
+                    ],
+                    RowCount = 1,
+                    ExecutionMetadata = new ExecutionMetadata
+                    {
+                        AdapterType = "sql",
+                        Operation = "execute_query",
+                        CorrelationId = ctx.CorrelationId
+                    },
+                    SensitivityPolicy = SensitivityPolicy.Default,
+                    Locale = "en-US",
+                    AnswerPolicy = AnswerPolicy.Default
+                },
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            return answer;
         }
     }
 

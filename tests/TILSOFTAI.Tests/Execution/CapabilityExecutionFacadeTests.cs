@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 using TILSOFTAI.Approvals;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.Capabilities;
@@ -78,6 +79,68 @@ public sealed class CapabilityExecutionFacadeTests
         adapter.LastRequest.Metadata["storedProcedure"].Should().Be("dbo.ai_warehouse_inventory_by_item");
         adapter.LastRequest.ArgumentsJson.Should().Contain("@ItemNo");
         adapter.LastRequest.ArgumentsJson.Should().Contain("MADEIRA-BLK");
+    }
+
+    [Fact]
+    public async Task RuntimeResultParsing_EnvelopeObject_ReturnsRows()
+    {
+        var result = await ExecuteReadWithPayloadAsync(
+            """{"meta":{"source":"sql"},"columns":["ItemNo","Qty"],"rows":[{"ItemNo":"A","Qty":6}]}""");
+
+        result.Success.Should().BeTrue();
+        result.RowCount.Should().Be(1);
+        result.Rows[0]["ItemNo"].Should().BeOfType<JsonElement>().Which.GetString().Should().Be("A");
+    }
+
+    [Fact]
+    public async Task RuntimeResultParsing_DirectRowArray_ReturnsRows()
+    {
+        var result = await ExecuteReadWithPayloadAsync("""[{"ItemNo":"A","Qty":6},{"ItemNo":"B","Qty":4}]""");
+
+        result.Success.Should().BeTrue();
+        result.RowCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task RuntimeResultParsing_ScalarResult_ReturnsSingleRow()
+    {
+        var result = await ExecuteReadWithPayloadAsync("""{"count":6}""");
+
+        result.Success.Should().BeTrue();
+        result.RowCount.Should().Be(1);
+        result.Rows[0]["count"].Should().BeOfType<JsonElement>().Which.GetInt32().Should().Be(6);
+    }
+
+    [Fact]
+    public async Task RuntimeResultParsing_EmptyResult_ReturnsEmptyRows()
+    {
+        var result = await ExecuteReadWithPayloadAsync("""{"rows":[]}""");
+
+        result.Success.Should().BeTrue();
+        result.RowCount.Should().Be(0);
+        result.Rows.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RuntimeResultParsing_MalformedJson_ReturnsExplicitFailure()
+    {
+        var result = await ExecuteReadWithPayloadAsync("""{"rows":[""");
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("SQL_RESULT_PARSE_FAILED");
+        result.ErrorMessage.Should().Contain("Malformed SQL JSON");
+        result.ErrorMessage.Should().Contain("corr-exec");
+    }
+
+    [Fact]
+    public async Task RuntimeResultParsing_UnexpectedSqlShape_ReturnsExplicitFailureWithCorrelationId()
+    {
+        var result = await ExecuteReadWithPayloadAsync("""42""");
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("SQL_RESULT_PARSE_FAILED");
+        result.ErrorMessage.Should().Contain("Unexpected SQL result shape");
+        result.ErrorMessage.Should().Contain("corr-exec");
     }
 
     [Fact]
@@ -163,6 +226,21 @@ public sealed class CapabilityExecutionFacadeTests
             new CapabilityArgumentMapper(),
             new CapabilityExecutionPolicy(),
             NullLogger<CapabilityExecutionFacade>.Instance);
+
+    private static Task<CapabilityExecutionEnvelope> ExecuteReadWithPayloadAsync(string payloadJson)
+    {
+        var context = Context(roles: ["warehouse.read"]);
+        context.CorrelationId = "corr-exec";
+        var facade = CreateFacade(
+            Capability(requiredRoles: ["warehouse.read"]),
+            new RecordingAdapter(ToolExecutionResult.Ok(payloadJson)),
+            context);
+
+        return facade.ExecuteReadAsync(
+            "warehouse.inventory.by-item",
+            new Dictionary<string, object?> { ["item_no"] = "MADEIRA-BLK" },
+            CancellationToken.None);
+    }
 
     private static CapabilityDescriptor Capability(IReadOnlyList<string> requiredRoles) => new()
     {

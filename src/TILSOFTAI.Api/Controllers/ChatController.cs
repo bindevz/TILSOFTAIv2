@@ -8,6 +8,7 @@ using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.Errors;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Sensitivity;
+using TILSOFTAI.Orchestration.Answering;
 using TILSOFTAI.Supervisor;
 
 namespace TILSOFTAI.Api.Controllers;
@@ -91,6 +92,10 @@ public sealed class ChatController : ControllerBase
         {
             Success = true,
             Content = result.Output ?? string.Empty,
+            Detail = result.Detail,
+            Blocks = result.Blocks?.Cast<object>().ToArray(),
+            AnswerType = result.AnswerType,
+            Provenance = ToApiProvenance(result.Provenance),
             ConversationId = context.ConversationId,
             CorrelationId = context.CorrelationId,
             TraceId = context.TraceId,
@@ -234,6 +239,22 @@ public sealed class ChatController : ControllerBase
         }
 
         return values;
+    }
+
+    private static IReadOnlyDictionary<string, object?>? ToApiProvenance(AnswerProvenance? provenance)
+    {
+        if (provenance is null)
+        {
+            return null;
+        }
+
+        return new Dictionary<string, object?>
+        {
+            ["capabilityKey"] = provenance.CapabilityKey,
+            ["procedureName"] = provenance.ProcedureName,
+            ["rowCount"] = provenance.RowCount,
+            ["correlationId"] = provenance.CorrelationId
+        };
     }
 
 }

@@ -136,6 +136,8 @@ public sealed class PendingActionConfirmationResolver : IPendingActionConfirmati
                 new ConfirmationBlock("Pending action confirmed", "No write has been executed.", draftAction)
             },
             Provenance = CreateProvenance(context, action),
+            CorrelationId = string.IsNullOrWhiteSpace(action.CorrelationId) ? context.CorrelationId : action.CorrelationId,
+            Locale = "en-US",
             Detail = draftAction,
             SelectedAgentId = "pending-action-confirmation"
         };
@@ -160,6 +162,8 @@ public sealed class PendingActionConfirmationResolver : IPendingActionConfirmati
                 RowCount = 0,
                 CorrelationId = context.CorrelationId
             },
+            CorrelationId = context.CorrelationId,
+            Locale = "en-US",
             Detail = new Dictionary<string, object?>
             {
                 ["reason"] = "no_pending_action"

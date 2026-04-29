@@ -1,5 +1,6 @@
 using FluentAssertions;
 using TILSOFTAI.Orchestration.Capabilities;
+using TILSOFTAI.Tests.Fixtures;
 using Xunit;
 
 namespace TILSOFTAI.Tests.Capabilities;
@@ -7,7 +8,7 @@ namespace TILSOFTAI.Tests.Capabilities;
 public sealed class CapabilityRegistryTests
 {
     private static InMemoryCapabilityRegistry CreateRegistry() =>
-        new(ModelCapabilities.All);
+        new(ModelCapabilityFixtures.All);
 
     [Fact]
     public void GetByDomain_ShouldReturnModelCapabilities()

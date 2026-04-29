@@ -7,10 +7,15 @@ public sealed record TextBlock(string Content) : AnswerBlock("text");
 public sealed record SummaryBlock(string Content) : AnswerBlock("summary");
 
 public sealed record TableBlock(
+    string Title,
     IReadOnlyList<string> Columns,
     IReadOnlyList<IReadOnlyList<object?>> Rows,
-    int TotalRows,
-    bool Truncated) : AnswerBlock("table");
+    int RowCount,
+    int DisplayedRows,
+    bool Truncated) : AnswerBlock("table")
+{
+    public int TotalRows => RowCount;
+}
 
 public sealed record ChartBlock(
     string ChartType,

@@ -42,13 +42,17 @@ public sealed class AnswerComposerTests
         argumentsProperty.Should().BeAssignableTo<IReadOnlyDictionary<string, object?>>();
         var rowsProperty = block.Data.GetType().GetProperty("rows")!.GetValue(block.Data);
         rowsProperty.Should().BeAssignableTo<IReadOnlyList<IReadOnlyDictionary<string, object?>>>();
-        block.Data.GetType().GetProperty("sensitivityPolicy")!.GetValue(block.Data)
+        block.Data.GetType().GetProperty("sensitivityPolicyApplied")!.GetValue(block.Data)
             .Should().BeOfType<SensitivityPolicy>();
+        block.Data.GetType().GetProperty("functionName")!.GetValue(block.Data)
+            .Should().Be("warehouse.inventory.by-item");
         var rows = (IReadOnlyList<IReadOnlyDictionary<string, object?>>)rowsProperty!;
         rows[0]["Email"].Should().Be("***");
         rows[0].Should().NotContainKey("SecretNote");
         answer.Provenance.CapabilityKey.Should().Be("warehouse.inventory.by-item");
         answer.Provenance.CorrelationId.Should().Be("corr-1");
+        answer.CorrelationId.Should().Be("corr-1");
+        answer.Locale.Should().Be("en-US");
     }
 
     [Fact]
@@ -101,14 +105,52 @@ public sealed class AnswerComposerTests
         var answer = await composer.ComposeAsync(request, CancellationToken.None);
 
         answer.AnswerType.Should().Be("structured");
-        answer.Text.Should().Contain("Found 1 rows for model.overview.by-code");
+        answer.Text.Should().Be("Found model ABC. Overview data contains 1 row.");
         answer.Blocks.OfType<SummaryBlock>().Should().ContainSingle();
         var table = answer.Blocks.OfType<TableBlock>().Should().ContainSingle().Subject;
         table.Columns.Should().Equal("Model Code", "Model Name");
         table.Rows.Should().ContainSingle();
+        table.RowCount.Should().Be(1);
+        table.DisplayedRows.Should().Be(1);
         table.Truncated.Should().BeFalse();
         answer.Provenance.CapabilityKey.Should().Be("model.overview.by-code");
         answer.Provenance.ProcedureName.Should().Be("dbo.ai_model_get_overview");
+    }
+
+    [Fact]
+    public async Task Structured_ModelOverview_ReturnsBlocksAndProvenance()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            CapabilityKey = "model.overview.by-code",
+            ProcedureName = "dbo.ai_model_get_overview",
+            Arguments = new Dictionary<string, object?> { ["modelCode"] = "ABC" },
+            Rows =
+            [
+                new Dictionary<string, object?> { ["ModelCode"] = "ABC", ["ModelName"] = "Chair" }
+            ],
+            RowCount = 1,
+            ResultSchema = new ResultSchema
+            {
+                Columns =
+                [
+                    new ResultColumn { Name = "ModelCode", Label = "Model Code", Type = "string" },
+                    new ResultColumn { Name = "ModelName", Label = "Model Name", Type = "string" }
+                ]
+            }
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        answer.AnswerType.Should().Be("structured");
+        answer.Text.Should().NotBeNullOrWhiteSpace();
+        answer.Blocks.OfType<SummaryBlock>().Should().ContainSingle();
+        answer.Blocks.OfType<TableBlock>().Should().ContainSingle();
+        answer.Provenance.CapabilityKey.Should().Be("model.overview.by-code");
+        answer.Provenance.ProcedureName.Should().Be("dbo.ai_model_get_overview");
+        answer.Provenance.CorrelationId.Should().Be("corr-1");
+        answer.Detail.Should().NotBeNull();
     }
 
     [Fact]
@@ -146,7 +188,8 @@ public sealed class AnswerComposerTests
         var table = answer.Blocks.OfType<TableBlock>().Should().ContainSingle().Subject;
         table.Columns.Should().Equal("Warehouse", "Available Quantity");
         table.Rows.Should().HaveCount(2);
-        table.TotalRows.Should().Be(3);
+        table.RowCount.Should().Be(3);
+        table.DisplayedRows.Should().Be(2);
         table.Truncated.Should().BeTrue();
         var chart = answer.Blocks.OfType<ChartBlock>().Should().ContainSingle().Subject;
         chart.ChartType.Should().Be("bar");
@@ -187,8 +230,27 @@ public sealed class AnswerComposerTests
         var answer = await composer.ComposeAsync(request, CancellationToken.None);
 
         answer.AnswerType.Should().Be("follow_up");
-        answer.Text.Should().Contain("modelCode");
+        answer.Text.Should().Be("Which model do you want to view? Please provide the model code.");
         answer.Text.Should().NotContain("model_code");
+    }
+
+    [Fact]
+    public async Task Structured_MissingModelCode_ReturnsFollowUp()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            CapabilityKey = "model.overview.by-code",
+            ErrorCode = CapabilityExecutionFacade.ArgumentValidationFailedCode,
+            MissingArguments = ["model_code"]
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        answer.AnswerType.Should().Be("follow_up");
+        answer.FollowUpQuestions.Should().ContainSingle();
+        answer.Blocks.Should().ContainSingle().Which.Should().BeOfType<FollowUpBlock>();
+        answer.Text.Should().Be("Which model do you want to view? Please provide the model code.");
     }
 
     [Fact]
@@ -206,8 +268,70 @@ public sealed class AnswerComposerTests
 
         answer.AnswerType.Should().Be("no_data");
         answer.Text.Should().Contain("No data");
-        answer.Text.Should().Contain("@ItemNo=MISSING");
+        answer.Text.Should().Contain("Filters used:");
+        answer.Text.Should().Contain("- ItemNo: MISSING");
         answer.Blocks.Should().ContainSingle().Which.Should().BeOfType<TextBlock>();
+    }
+
+    [Fact]
+    public async Task Structured_EmptyRows_ReturnsNoData()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            Rows = [],
+            RowCount = 0,
+            Arguments = new Dictionary<string, object?> { ["modelCode"] = "MISSING" }
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        answer.AnswerType.Should().Be("no_data");
+        answer.Text.Should().Contain("No data");
+        answer.Blocks.Should().ContainSingle().Which.Should().BeOfType<TextBlock>();
+        answer.Provenance.RowCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Structured_DoesNotExposeMaskedColumns()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            Rows =
+            [
+                new Dictionary<string, object?>
+                {
+                    ["ModelCode"] = "ABC",
+                    ["Cost"] = 123.45m,
+                    ["InternalMargin"] = 42m
+                }
+            ],
+            RowCount = 1,
+            ResultSchema = new ResultSchema
+            {
+                Columns =
+                [
+                    new ResultColumn { Name = "ModelCode", Label = "Model Code", Type = "string" },
+                    new ResultColumn { Name = "Cost", Label = "Cost", Type = "decimal" },
+                    new ResultColumn { Name = "InternalMargin", Label = "Internal Margin", Type = "decimal" }
+                ]
+            },
+            SensitivityPolicy = new SensitivityPolicy
+            {
+                MaskColumns = ["Cost"],
+                HiddenColumns = ["InternalMargin"]
+            }
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        var table = answer.Blocks.OfType<TableBlock>().Should().ContainSingle().Subject;
+        table.Columns.Should().Equal("Model Code", "Cost");
+        table.Columns.Should().NotContain("Internal Margin");
+        table.Rows[0].Should().Contain("***");
+        table.Rows[0].Should().NotContain(42m);
+        answer.Detail!.ToString().Should().NotContain("InternalMargin");
     }
 
     [Fact]
@@ -301,7 +425,7 @@ public sealed class AnswerComposerTests
 
         var answer = await composer.ComposeAsync(request, CancellationToken.None);
 
-        answer.AnswerType.Should().Be("composite");
+        answer.AnswerType.Should().Be("structured");
         answer.Text.Should().Contain("Compiled 2 sections");
         answer.Blocks.OfType<SummaryBlock>().Should().ContainSingle();
         answer.Blocks.OfType<TextBlock>().Should().HaveCount(2);
@@ -346,7 +470,7 @@ public sealed class AnswerComposerTests
 
         var answer = await composer.ComposeAsync(request, CancellationToken.None);
 
-        answer.AnswerType.Should().Be("confirmation");
+        answer.AnswerType.Should().Be("write_preview");
         answer.Text.Should().Be("Kiểm tra trước thao tác sales.order.create-preview.");
         answer.Blocks.Should().ContainSingle().Which.Should().BeOfType<ConfirmationBlock>();
         var block = (ConfirmationBlock)answer.Blocks[0];
@@ -356,8 +480,418 @@ public sealed class AnswerComposerTests
         block.DraftAction.Should().NotContainKey("SecretNote");
     }
 
+    [Fact]
+    public async Task Structured_Table_UsesVietnameseLabels()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            Locale = "vi-VN",
+            CapabilityKey = "model.overview.by-code",
+            Arguments = new Dictionary<string, object?> { ["modelCode"] = "ABC" },
+            Rows =
+            [
+                new Dictionary<string, object?> { ["ModelCode"] = "ABC", ["ModelName"] = "Ghế" }
+            ],
+            RowCount = 1,
+            ResultSchema = new ResultSchema
+            {
+                Columns =
+                [
+                    new ResultColumn { Name = "ModelCode", Label = "Model Code", LabelVi = "Mã model", Type = "string", Role = "dimension" },
+                    new ResultColumn { Name = "ModelName", Label = "Model Name", LabelVi = "Tên model", Type = "string", Role = "dimension" }
+                ]
+            }
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        var table = answer.Blocks.OfType<TableBlock>().Should().ContainSingle().Subject;
+        table.Columns.Should().Equal("Mã model", "Tên model");
+        answer.Locale.Should().Be("vi-VN");
+    }
+
+    [Fact]
+    public async Task Structured_Table_UsesEnglishLabels()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            CapabilityKey = "model.overview.by-code",
+            Arguments = new Dictionary<string, object?> { ["modelCode"] = "ABC" },
+            Rows =
+            [
+                new Dictionary<string, object?> { ["ModelCode"] = "ABC", ["ModelName"] = "Chair" }
+            ],
+            RowCount = 1,
+            ResultSchema = new ResultSchema
+            {
+                Columns =
+                [
+                    new ResultColumn { Name = "ModelCode", Label = "Model Code", LabelVi = "Mã model", Type = "string", Role = "dimension" },
+                    new ResultColumn { Name = "ModelName", Label = "Model Name", LabelVi = "Tên model", Type = "string", Role = "dimension" }
+                ]
+            }
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        answer.Blocks.OfType<TableBlock>().Single().Columns.Should().Equal("Model Code", "Model Name");
+    }
+
+    [Fact]
+    public async Task AnswerComposer_UsesSqlResultSchemaLabels()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            CapabilityKey = "model.materials.by-code",
+            Rows =
+            [
+                new Dictionary<string, object?>
+                {
+                    ["ModelCode"] = "ABC",
+                    ["MaterialCode"] = "MAT-1",
+                    ["PrivateCost"] = 12.34m
+                }
+            ],
+            RowCount = 1,
+            ResultSchema = new ResultSchema
+            {
+                Columns =
+                [
+                    new ResultColumn { Name = "ModelCode", Label = "Model", Type = "string" },
+                    new ResultColumn { Name = "MaterialCode", Label = "Material", Type = "string" },
+                    new ResultColumn { Name = "PrivateCost", Label = "Private Cost", Type = "decimal", Visible = false }
+                ]
+            }
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        var table = answer.Blocks.OfType<TableBlock>().Single();
+        table.Columns.Should().Equal("Model", "Material");
+        table.Rows[0].Should().Equal("ABC", "MAT-1");
+    }
+
+    [Fact]
+    public async Task Structured_Table_HidesInvisibleColumns()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            Rows =
+            [
+                new Dictionary<string, object?> { ["ModelCode"] = "ABC", ["InternalNote"] = "hide me", ["UnknownColumn"] = "not rendered" }
+            ],
+            RowCount = 1,
+            ResultSchema = new ResultSchema
+            {
+                Columns =
+                [
+                    new ResultColumn { Name = "ModelCode", Label = "Model Code", Type = "string", Visible = true },
+                    new ResultColumn { Name = "InternalNote", Label = "Internal Note", Type = "string", Visible = false }
+                ]
+            }
+        };
+
+        var table = (await composer.ComposeAsync(request, CancellationToken.None))
+            .Blocks.OfType<TableBlock>().Single();
+
+        table.Columns.Should().Equal("Model Code");
+        table.Rows[0].Should().Equal("ABC");
+    }
+
+    [Theory]
+    [InlineData("model.count", "There are 6 models in the current data.")]
+    [InlineData("model.overview.by-code", "Found model ABC. Overview data contains 1 row.")]
+    [InlineData("model.pieces.by-code", "Model ABC has 4 pieces.")]
+    [InlineData("model.materials.by-code", "Model ABC has 8 materials.")]
+    [InlineData("model.packaging.by-code", "Model ABC has 2 packaging rows.")]
+    [InlineData("model.compare", "Compared 2 models: ABC and XYZ.")]
+    public async Task AnswerComposer_Structured_AllModelCapabilities(string capabilityKey, string expectedText)
+    {
+        var composer = CreateComposer();
+        var request = ModelCapabilityRequest(capabilityKey);
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        answer.AnswerType.Should().Be("structured");
+        answer.Text.Should().Be(expectedText);
+        answer.Blocks.OfType<TableBlock>().Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData("model.count")]
+    [InlineData("model.overview.by-code")]
+    [InlineData("model.pieces.by-code")]
+    [InlineData("model.materials.by-code")]
+    [InlineData("model.compare")]
+    [InlineData("model.packaging.by-code")]
+    public async Task AnswerComposer_RawJson_AllModelCapabilities(string capabilityKey)
+    {
+        var composer = CreateComposer();
+        var request = ModelCapabilityRequest(capabilityKey) with { Mode = AnswerMode.RawJson };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        answer.AnswerType.Should().Be("raw_json");
+        var detail = answer.Detail!;
+        detail.GetType().GetProperty("mode")!.GetValue(detail).Should().Be("raw_json");
+        detail.GetType().GetProperty("capabilityKey")!.GetValue(detail).Should().Be(capabilityKey);
+        detail.GetType().GetProperty("functionName")!.GetValue(detail).Should().Be(capabilityKey);
+        detail.GetType().GetProperty("resultSchema")!.GetValue(detail).Should().BeOfType<ResultSchema>();
+        detail.GetType().GetProperty("executionMetadata")!.GetValue(detail).Should().BeOfType<ExecutionMetadata>();
+        detail.GetType().GetProperty("sensitivityPolicyApplied")!.GetValue(detail).Should().BeOfType<SensitivityPolicy>();
+    }
+
+    [Fact]
+    public async Task AnswerComposer_Localization_ViAndEn()
+    {
+        var composer = CreateComposer();
+        var vi = await composer.ComposeAsync(
+            ModelCapabilityRequest("model.materials.by-code") with { Locale = "vi-VN" },
+            CancellationToken.None);
+        var en = await composer.ComposeAsync(
+            ModelCapabilityRequest("model.materials.by-code") with { Locale = "en-US" },
+            CancellationToken.None);
+
+        vi.Text.Should().Be("Model ABC có 8 material.");
+        en.Text.Should().Be("Model ABC has 8 materials.");
+    }
+
+    [Fact]
+    public async Task Structured_MissingModelCode_AsksSpecificQuestion()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            Locale = "vi-VN",
+            CapabilityKey = "model.materials.by-code",
+            ErrorCode = CapabilityExecutionFacade.ArgumentValidationFailedCode,
+            MissingArguments = ["model_code"]
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        answer.AnswerType.Should().Be("follow_up");
+        answer.Text.Should().Be("Bạn muốn xem thông tin cho model nào? Vui lòng cung cấp mã model.");
+    }
+
+    [Fact]
+    public async Task Structured_NoData_IncludesUsedFilter()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            Locale = "vi-VN",
+            CapabilityKey = "model.overview.by-code",
+            Arguments = new Dictionary<string, object?> { ["modelCode"] = "ABC" },
+            Rows = [],
+            RowCount = 0
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        answer.AnswerType.Should().Be("no_data");
+        answer.Text.Should().Contain("Không tìm thấy dữ liệu cho model ABC.");
+        answer.Text.Should().Contain("Điều kiện đã dùng:");
+        answer.Text.Should().Contain("- Mã model: ABC");
+    }
+
+    [Fact]
+    public async Task Structured_NoData_DoesNotInventAlternatives()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            CapabilityKey = "model.overview.by-code",
+            Arguments = new Dictionary<string, object?> { ["modelCode"] = "ABC" },
+            Rows = [],
+            RowCount = 0
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        answer.Text.Should().NotContain("similar", "no-data should not invent alternatives");
+        answer.Text.Should().NotContain("try", "no-data should not invent alternatives");
+        answer.FollowUpQuestions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AnswerComposer_NoData()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            CapabilityKey = "model.overview.by-code",
+            Arguments = new Dictionary<string, object?> { ["modelCode"] = "ABC" },
+            Rows = [],
+            RowCount = 0
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        answer.AnswerType.Should().Be("no_data");
+        answer.Text.Should().Contain("No data was found for model ABC.");
+        answer.Text.Should().Contain("Filters used:");
+        answer.Text.Should().Contain("- Model code: ABC");
+        answer.FollowUpQuestions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AnswerComposer_FollowUp()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            CapabilityKey = "model.overview.by-code",
+            ErrorCode = CapabilityExecutionFacade.ArgumentValidationFailedCode,
+            MissingArguments = ["model_code"]
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        answer.AnswerType.Should().Be("follow_up");
+        answer.Text.Should().Be("Which model do you want to view? Please provide the model code.");
+        answer.Blocks.Should().ContainSingle().Which.Should().BeOfType<FollowUpBlock>();
+    }
+
+    [Fact]
+    public async Task AnswerComposer_Truncation()
+    {
+        var composer = CreateComposer();
+        var rows = Enumerable.Range(1, 21)
+            .Select(i => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?> { ["ModelCode"] = $"M{i:00}" })
+            .ToArray();
+        var request = Request() with
+        {
+            Rows = rows,
+            RowCount = 21,
+            ResultSchema = new ResultSchema
+            {
+                Columns = [new ResultColumn { Name = "ModelCode", Label = "Model Code", Type = "string" }]
+            }
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        var table = answer.Blocks.OfType<TableBlock>().Single();
+        table.RowCount.Should().Be(21);
+        table.DisplayedRows.Should().Be(20);
+        table.Rows.Should().HaveCount(20);
+        table.Truncated.Should().BeTrue();
+        answer.FollowUpQuestions.Should().ContainSingle().Which.Should().Contain("Narrow the filters");
+    }
+
+    [Fact]
+    public async Task AnswerComposer_SensitiveFieldMasking()
+    {
+        var composer = CreateComposer();
+        var request = Request() with
+        {
+            Rows =
+            [
+                new Dictionary<string, object?>
+                {
+                    ["ModelCode"] = "ABC",
+                    ["Cost"] = 123.45m,
+                    ["InternalMargin"] = 42m
+                }
+            ],
+            RowCount = 1,
+            ResultSchema = new ResultSchema
+            {
+                Columns =
+                [
+                    new ResultColumn { Name = "ModelCode", Label = "Model Code", Type = "string" },
+                    new ResultColumn { Name = "Cost", Label = "Cost", Type = "decimal" },
+                    new ResultColumn { Name = "InternalMargin", Label = "Internal Margin", Type = "decimal" }
+                ]
+            },
+            SensitivityPolicy = new SensitivityPolicy
+            {
+                MaskColumns = ["Cost"],
+                HiddenColumns = ["InternalMargin"]
+            }
+        };
+
+        var answer = await composer.ComposeAsync(request, CancellationToken.None);
+
+        var table = answer.Blocks.OfType<TableBlock>().Single();
+        table.Columns.Should().Equal("Model Code", "Cost");
+        table.Rows[0].Should().Contain("***");
+        table.Columns.Should().NotContain("Internal Margin");
+        answer.Detail!.ToString().Should().NotContain("InternalMargin");
+    }
+
+    [Fact]
+    public async Task AnswerComposer_CanRunWithoutAiSummaryService()
+    {
+        var composer = new StructuredAnswerComposer(new RawJsonAnswerComposer());
+
+        var answer = await composer.ComposeAsync(ModelCapabilityRequest("model.overview.by-code"), CancellationToken.None);
+
+        answer.AnswerType.Should().Be("structured");
+        answer.Text.Should().Be("Found model ABC. Overview data contains 1 row.");
+    }
+
     private static StructuredAnswerComposer CreateComposer() =>
         new(new RawJsonAnswerComposer(), new AiSummaryService());
+
+    private static AnswerComposerRequest ModelCapabilityRequest(string capabilityKey)
+    {
+        var rowCount = capabilityKey switch
+        {
+            "model.count" => 1,
+            "model.pieces.by-code" => 4,
+            "model.materials.by-code" => 8,
+            "model.packaging.by-code" => 2,
+            "model.compare" => 2,
+            _ => 1
+        };
+
+        var rows = capabilityKey switch
+        {
+            "model.count" =>
+            [
+                new Dictionary<string, object?> { ["ModelCount"] = 6 }
+            ],
+            "model.compare" =>
+            [
+                new Dictionary<string, object?> { ["ModelCode"] = "ABC", ["ComparedValue"] = 1 },
+                new Dictionary<string, object?> { ["ModelCode"] = "XYZ", ["ComparedValue"] = 2 }
+            ],
+            _ => Enumerable.Range(1, rowCount)
+                .Select(i => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                {
+                    ["ModelCode"] = "ABC",
+                    ["LineNo"] = i
+                })
+                .ToArray()
+        };
+
+        return Request() with
+        {
+            CapabilityKey = capabilityKey,
+            ProcedureName = $"dbo.ai_{capabilityKey.Replace('.', '_').Replace('-', '_')}",
+            Arguments = capabilityKey == "model.compare"
+                ? new Dictionary<string, object?> { ["modelCodeA"] = "ABC", ["modelCodeB"] = "XYZ" }
+                : new Dictionary<string, object?> { ["modelCode"] = "ABC" },
+            Rows = rows,
+            RowCount = rowCount,
+            ResultSchema = new ResultSchema
+            {
+                Columns =
+                [
+                    new ResultColumn { Name = "ModelCode", Label = "Model Code", LabelVi = "Mã model", Type = "string", Role = "dimension" },
+                    new ResultColumn { Name = "LineNo", Label = "Line", LabelVi = "Dòng", Type = "integer", Role = "measure" },
+                    new ResultColumn { Name = "ModelCount", Label = "Model Count", LabelVi = "Số model", Type = "integer", Role = "measure" },
+                    new ResultColumn { Name = "ComparedValue", Label = "Compared Value", LabelVi = "Giá trị so sánh", Type = "integer", Role = "measure" }
+                ]
+            }
+        };
+    }
 
     private static AnswerComposerRequest Request() => new()
     {

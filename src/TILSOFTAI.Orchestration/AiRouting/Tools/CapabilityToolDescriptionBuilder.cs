@@ -24,6 +24,24 @@ public sealed class CapabilityToolDescriptionBuilder
             lines.Add($"Do not use when: {text.DoNotUseWhen}");
         }
 
+        var capabilityAliases = TopJsonValues(text?.Aliases, 6);
+        if (capabilityAliases.Length > 0)
+        {
+            lines.Add($"Aliases: {string.Join(", ", capabilityAliases)}");
+        }
+
+        var examples = capability.Examples
+            .OrderBy(example => example.SortOrder)
+            .Select(example => example.Utterance)
+            .Where(utterance => !string.IsNullOrWhiteSpace(utterance))
+            .Take(3)
+            .ToArray();
+        if (examples.Length > 0)
+        {
+            lines.Add("Examples:");
+            lines.AddRange(examples.Select(example => $"- {example}"));
+        }
+
         var argumentLines = capability.Arguments
             .OrderBy(argument => argument.DisplayOrder)
             .Select(BuildArgumentLine)
@@ -73,6 +91,11 @@ public sealed class CapabilityToolDescriptionBuilder
         if (examples.Length > 0)
         {
             suffixes.Add($"Examples: {string.Join("; ", examples)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(text?.ClarificationQuestion))
+        {
+            suffixes.Add($"Clarify with: {text.ClarificationQuestion}");
         }
 
         var requirement = argument.IsRequired ? "Required" : "Optional";

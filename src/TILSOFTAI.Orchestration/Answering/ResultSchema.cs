@@ -32,6 +32,7 @@ public sealed record ResultColumn
 {
     public required string Name { get; init; }
     public string? Label { get; init; }
+    public string? LabelVi { get; init; }
     public string? Type { get; init; }
     public string? Role { get; init; }
     public string? Format { get; init; }

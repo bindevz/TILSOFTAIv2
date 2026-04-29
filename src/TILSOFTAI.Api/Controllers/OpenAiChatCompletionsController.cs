@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 using TILSOFTAI.Api.Contracts.OpenAi;
 using TILSOFTAI.Api.Streaming;
 using TILSOFTAI.Domain.Configuration;
@@ -174,7 +175,7 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
                     Message = new OpenAiChatMessage
                     {
                         Role = "assistant",
-                        Content = resultNonStream.Output ?? string.Empty
+                        Content = ToOpenAiContent(resultNonStream)
                     },
                     FinishReason = "stop"
                 }
@@ -271,6 +272,18 @@ public sealed class OpenAiChatCompletionsController : ControllerBase
             IntentType = "chat",
             Stream = stream
         };
+    }
+
+    private static string ToOpenAiContent(SupervisorResult result)
+    {
+        if (!string.IsNullOrEmpty(result.Output))
+        {
+            return result.Output;
+        }
+
+        return result.Detail is null
+            ? string.Empty
+            : JsonSerializer.Serialize(result.Detail);
     }
 
 }

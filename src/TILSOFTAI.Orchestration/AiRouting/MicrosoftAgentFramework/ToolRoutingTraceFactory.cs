@@ -24,6 +24,7 @@ public static class ToolRoutingTraceFactory
             CorrelationId = ParseCorrelationId(request.ExecutionContext.CorrelationId),
             TenantId = SafeRequired(request.ExecutionContext.TenantId),
             UserId = SafeRequired(request.ExecutionContext.UserId),
+            ConversationId = request.ExecutionContext.ConversationId,
             Locale = request.Locale,
             UserMessageHash = Hash(request.Message),
             UserMessageRedacted = Redact(request.Message),
@@ -38,6 +39,8 @@ public static class ToolRoutingTraceFactory
             AdvertisedFunctionToolsJson = JsonSerializer.Serialize(tools.Select(ToAdvertisedToolTrace)),
             SelectedTool = agentResult.SelectedCapabilityKey,
             SelectedFunction = agentResult.SelectedToolName,
+            SelectedCapabilityKey = agentResult.SelectedCapabilityKey ?? answer.Provenance.CapabilityKey,
+            StoredProcedure = agentResult.ToolResult?.ProcedureName ?? answer.Provenance.ProcedureName,
             CandidateDomainCount = retrieval.Domains.Count,
             CandidateCapabilityCount = retrieval.Capabilities.Count,
             AdvertisedToolCount = tools.Count,
@@ -58,6 +61,9 @@ public static class ToolRoutingTraceFactory
             LatencyMs = ElapsedMs(startedAt),
             LatencyByStageJson = JsonSerializer.Serialize(stageLatencyMs),
             ModelProvider = "microsoft-agent-framework",
+            ModelName = ReadMetadata(request, "model"),
+            AllowedDomainsJson = JsonSerializer.Serialize(retrieval.Domains.Select(domain => domain.Domain)),
+            FallbackUsed = false,
             Success = true
         };
 
@@ -73,6 +79,7 @@ public static class ToolRoutingTraceFactory
             CorrelationId = ParseCorrelationId(request.ExecutionContext.CorrelationId),
             TenantId = SafeRequired(request.ExecutionContext.TenantId),
             UserId = SafeRequired(request.ExecutionContext.UserId),
+            ConversationId = request.ExecutionContext.ConversationId,
             Locale = request.Locale,
             UserMessageHash = Hash(request.Message),
             UserMessageRedacted = Redact(request.Message),
@@ -97,6 +104,9 @@ public static class ToolRoutingTraceFactory
             LatencyMs = ElapsedMs(startedAt),
             LatencyByStageJson = JsonSerializer.Serialize(stageLatencyMs),
             ModelProvider = "microsoft-agent-framework",
+            ModelName = ReadMetadata(request, "model"),
+            AllowedDomainsJson = retrieval is null ? null : JsonSerializer.Serialize(retrieval.Domains.Select(domain => domain.Domain)),
+            FallbackUsed = false,
             Success = false,
             ErrorCode = reason
         };
@@ -109,12 +119,15 @@ public static class ToolRoutingTraceFactory
             CorrelationId = ParseCorrelationId(request.ExecutionContext.CorrelationId),
             TenantId = SafeRequired(request.ExecutionContext.TenantId),
             UserId = SafeRequired(request.ExecutionContext.UserId),
+            ConversationId = request.ExecutionContext.ConversationId,
             Locale = request.Locale,
             UserMessageHash = Hash(request.Message),
             UserMessageRedacted = Redact(request.Message),
             AnswerMode = request.RequestedAnswerMode.ToString(),
             LatencyMs = ElapsedMs(startedAt),
             ModelProvider = "microsoft-agent-framework",
+            ModelName = ReadMetadata(request, "model"),
+            FallbackUsed = false,
             Success = false,
             ErrorCode = exception.GetType().Name
         };
@@ -136,6 +149,16 @@ public static class ToolRoutingTraceFactory
 
     private static string SerializeObjectOrEmpty(object? value) =>
         value is null ? "{}" : JsonSerializer.Serialize(value);
+
+    private static string? ReadMetadata(AgentToolRoutingRequest request, string key)
+    {
+        if (!request.Metadata.TryGetValue(key, out var value) || value is null)
+        {
+            return null;
+        }
+
+        return value.ToString();
+    }
 
     private static object ToAdvertisedToolTrace(AIFunction function)
     {

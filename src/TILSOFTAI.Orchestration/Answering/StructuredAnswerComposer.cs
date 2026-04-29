@@ -6,14 +6,14 @@ namespace TILSOFTAI.Orchestration.Answering;
 public sealed class StructuredAnswerComposer : IAnswerComposer
 {
     private readonly RawJsonAnswerComposer _rawJsonComposer;
-    private readonly AiSummaryService _summaryService;
+    private readonly AiSummaryService? _summaryService;
 
     public StructuredAnswerComposer(
         RawJsonAnswerComposer rawJsonComposer,
-        AiSummaryService summaryService)
+        AiSummaryService? summaryService = null)
     {
         _rawJsonComposer = rawJsonComposer ?? throw new ArgumentNullException(nameof(rawJsonComposer));
-        _summaryService = summaryService ?? throw new ArgumentNullException(nameof(summaryService));
+        _summaryService = summaryService;
     }
 
     public Task<AssistantAnswer> ComposeAsync(
@@ -75,7 +75,7 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
         var maxRows = Math.Max(1, request.AnswerPolicy.MaxRowsForChat);
         var visibleRows = safeRows.Take(maxRows).ToArray();
         var truncated = request.RowCount > visibleRows.Length;
-        var summary = await _summaryService.SummarizeAsync(request, visibleRows, cancellationToken)
+        var summary = await BuildSummaryAsync(request, visibleRows, cancellationToken)
             .ConfigureAwait(false);
 
         var blocks = new List<AnswerBlock>
@@ -101,6 +101,8 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
             Blocks = blocks,
             FollowUpQuestions = followUps,
             Provenance = CreateProvenance(request),
+            CorrelationId = request.ExecutionMetadata.CorrelationId,
+            Locale = request.Locale,
             SelectedAgentId = "microsoft-agent-router",
             Detail = CreateStructuredDetail(request, "structured", blocks, followUps, truncated)
         };
@@ -116,6 +118,8 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
             Blocks = [new FollowUpBlock(question, options)],
             FollowUpQuestions = [question],
             Provenance = CreateProvenance(request),
+            CorrelationId = request.ExecutionMetadata.CorrelationId,
+            Locale = request.Locale,
             SelectedAgentId = "microsoft-agent-router",
             Detail = CreateStructuredDetail(request, "follow_up", [new FollowUpBlock(question, options)], [question], text: question)
         };
@@ -129,6 +133,8 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
             Text = text,
             Blocks = [new TextBlock(text)],
             Provenance = CreateProvenance(request),
+            CorrelationId = request.ExecutionMetadata.CorrelationId,
+            Locale = request.Locale,
             SelectedAgentId = "microsoft-agent-router",
             Detail = CreateStructuredDetail(request, answerType, [new TextBlock(text)], text: text)
         };
@@ -145,7 +151,7 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
 
         return new AssistantAnswer
         {
-            AnswerType = "confirmation",
+            AnswerType = "write_preview",
             Text = summary,
             Blocks =
             [
@@ -155,10 +161,12 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
                     draftAction)
             ],
             Provenance = CreateProvenance(request),
+            CorrelationId = request.ExecutionMetadata.CorrelationId,
+            Locale = request.Locale,
             SelectedAgentId = "microsoft-agent-router",
             Detail = CreateStructuredDetail(
                 request,
-                "confirmation",
+                "write_preview",
                 [new ConfirmationBlock(title, summary, draftAction)],
                 draftAction: draftAction,
                 text: summary)
@@ -198,14 +206,16 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
 
         return new AssistantAnswer
         {
-            AnswerType = "composite",
+            AnswerType = "structured",
             Text = text,
             Blocks = blocks,
             Provenance = CreateProvenance(request),
+            CorrelationId = request.ExecutionMetadata.CorrelationId,
+            Locale = request.Locale,
             SelectedAgentId = "microsoft-agent-router",
             Detail = CreateStructuredDetail(
                 request,
-                "composite",
+                "structured",
                 blocks,
                 result: AnswerDataSanitizer.ApplySensitivity(bundle, request.SensitivityPolicy),
                 text: text)
@@ -224,7 +234,13 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
                 .ToArray())
             .ToArray();
 
-        return new TableBlock(columns.Select(column => column.Label).ToArray(), tableRows, request.RowCount, truncated);
+        return new TableBlock(
+            ResolveTableTitle(request),
+            columns.Select(column => column.Label).ToArray(),
+            tableRows,
+            request.RowCount,
+            tableRows.Length,
+            truncated);
     }
 
     private static ChartBlock? TryBuildChartBlock(
@@ -261,7 +277,7 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
         var hidden = request.SensitivityPolicy.HiddenColumns.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var schemaColumns = request.ResultSchema?.Columns
             .Where(column => column.Visible && !hidden.Contains(column.Name))
-            .Select(column => new TableColumnSpec(column.Name, string.IsNullOrWhiteSpace(column.Label) ? column.Name : column.Label!))
+            .Select(column => new TableColumnSpec(column.Name, ResolveColumnLabel(column, request.Locale)))
             .ToArray();
 
         if (schemaColumns is { Length: > 0 })
@@ -278,11 +294,19 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
 
     private static string BuildValidationQuestion(AnswerComposerRequest request)
     {
-        if (request.MissingArguments.Count > 0)
+        var missing = request.MissingArguments.Select(FormatArgumentName).ToArray();
+        if (missing.Any(argument => string.Equals(argument, "modelCode", StringComparison.OrdinalIgnoreCase)))
         {
             return IsVietnamese(request.Locale)
-                ? $"Vui lòng cung cấp: {string.Join(", ", request.MissingArguments.Select(FormatArgumentName))}."
-                : $"Please provide: {string.Join(", ", request.MissingArguments.Select(FormatArgumentName))}.";
+                ? "Bạn muốn xem thông tin cho model nào? Vui lòng cung cấp mã model."
+                : "Which model do you want to view? Please provide the model code.";
+        }
+
+        if (missing.Length > 0)
+        {
+            return IsVietnamese(request.Locale)
+                ? $"Vui lòng cung cấp: {string.Join(", ", missing)}."
+                : $"Please provide: {string.Join(", ", missing)}.";
         }
 
         return IsVietnamese(request.Locale)
@@ -292,15 +316,96 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
 
     private static string FormatNoDataText(AnswerComposerRequest request)
     {
-        var filters = request.Arguments.Count == 0
+        var safeArguments = AnswerDataSanitizer.ApplySensitivity(request.Arguments, request.SensitivityPolicy);
+        var modelCode = TryGetModelCode(safeArguments);
+        var filters = safeArguments.Count == 0
             ? string.Empty
-            : $" ({string.Join(", ", AnswerDataSanitizer
-                .ApplySensitivity(request.Arguments, request.SensitivityPolicy)
-                .Select(pair => $"{pair.Key}={FormatValue(pair.Value, request.Locale)}"))})";
+            : Environment.NewLine
+                + (IsVietnamese(request.Locale) ? "Điều kiện đã dùng:" : "Filters used:")
+                + Environment.NewLine
+                + string.Join(Environment.NewLine, safeArguments.Select(pair =>
+                    $"- {FormatArgumentLabel(pair.Key, request.Locale)}: {FormatValue(pair.Value, request.Locale)}"));
 
         return IsVietnamese(request.Locale)
-            ? $"Không tìm thấy dữ liệu cho {request.CapabilityKey}{filters}."
-            : $"No data was found for {request.CapabilityKey}{filters}.";
+            ? modelCode is null
+                ? $"Không tìm thấy dữ liệu cho {request.CapabilityKey}.{filters}"
+                : $"Không tìm thấy dữ liệu cho model {modelCode}.{filters}"
+            : modelCode is null
+                ? $"No data was found for {request.CapabilityKey}.{filters}"
+                : $"No data was found for model {modelCode}.{filters}";
+    }
+
+    private async Task<string> BuildSummaryAsync(
+        AnswerComposerRequest request,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> safeRows,
+        CancellationToken cancellationToken)
+    {
+        if (IsModelCapability(request.CapabilityKey)
+            && (!request.AnswerPolicy.AllowAiSummary || _summaryService is null))
+        {
+            return BuildDeterministicModelSummary(request, safeRows);
+        }
+
+        if (request.AnswerPolicy.AllowAiSummary && _summaryService is not null)
+        {
+            return await _summaryService.SummarizeAsync(request, safeRows, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return BuildGenericDeterministicSummary(request, safeRows);
+    }
+
+    private static string BuildDeterministicModelSummary(
+        AnswerComposerRequest request,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> safeRows)
+    {
+        var vi = IsVietnamese(request.Locale);
+        var modelCode = TryGetModelCode(AnswerDataSanitizer.ApplySensitivity(request.Arguments, request.SensitivityPolicy))
+            ?? TryGetModelCode(safeRows.FirstOrDefault());
+        var comparedCodes = ExtractComparedModelCodes(request, safeRows);
+
+        return request.CapabilityKey switch
+        {
+            "model.count" => vi
+                ? $"Có {ResolveModelCount(request, safeRows)} model trong dữ liệu hiện tại."
+                : $"There are {ResolveModelCount(request, safeRows)} models in the current data.",
+            "model.overview.by-code" => modelCode is null
+                ? InsufficientData(vi)
+                : vi
+                    ? $"Tìm thấy model {modelCode}. Dữ liệu tổng quan gồm {request.RowCount} dòng."
+                    : $"Found model {modelCode}. Overview data contains {request.RowCount} row{Plural(request.RowCount)}.",
+            "model.pieces.by-code" => modelCode is null
+                ? InsufficientData(vi)
+                : vi
+                    ? $"Model {modelCode} có {request.RowCount} piece."
+                    : $"Model {modelCode} has {request.RowCount} piece{Plural(request.RowCount)}.",
+            "model.materials.by-code" => modelCode is null
+                ? InsufficientData(vi)
+                : vi
+                    ? $"Model {modelCode} có {request.RowCount} material."
+                    : $"Model {modelCode} has {request.RowCount} material{Plural(request.RowCount)}.",
+            "model.packaging.by-code" => modelCode is null
+                ? InsufficientData(vi)
+                : vi
+                    ? $"Model {modelCode} có {request.RowCount} dòng packaging."
+                    : $"Model {modelCode} has {request.RowCount} packaging row{Plural(request.RowCount)}.",
+            "model.compare" => comparedCodes.Count < 2
+                ? InsufficientData(vi)
+                : vi
+                    ? $"Đã so sánh {comparedCodes.Count} model: {string.Join(" và ", comparedCodes)}."
+                    : $"Compared {comparedCodes.Count} models: {string.Join(" and ", comparedCodes)}.",
+            _ => BuildGenericDeterministicSummary(request, safeRows)
+        };
+    }
+
+    private static string BuildGenericDeterministicSummary(
+        AnswerComposerRequest request,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> safeRows)
+    {
+        var displayed = Math.Min(safeRows.Count, request.RowCount);
+        return IsVietnamese(request.Locale)
+            ? $"Tìm thấy {request.RowCount} dòng cho {request.CapabilityKey}; hiển thị {displayed} dòng đầu tiên."
+            : $"Found {request.RowCount} rows for {request.CapabilityKey}; showing the first {displayed}.";
     }
 
     private static object? FormatValue(object? value, string locale)
@@ -355,12 +460,132 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
     private static bool IsVietnamese(string locale) =>
         locale.StartsWith("vi", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsModelCapability(string capabilityKey) =>
+        capabilityKey.StartsWith("model.", StringComparison.OrdinalIgnoreCase);
+
+    private static string ResolveColumnLabel(ResultColumn column, string locale)
+    {
+        if (IsVietnamese(locale) && !string.IsNullOrWhiteSpace(column.LabelVi))
+        {
+            return column.LabelVi!;
+        }
+
+        return string.IsNullOrWhiteSpace(column.Label)
+            ? column.Name
+            : column.Label!;
+    }
+
+    private static string ResolveTableTitle(AnswerComposerRequest request)
+    {
+        var suffix = request.CapabilityKey.Split('.', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+        if (string.IsNullOrWhiteSpace(suffix))
+        {
+            return IsVietnamese(request.Locale) ? "Dữ liệu" : "Results";
+        }
+
+        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(suffix.Replace('-', ' '));
+    }
+
     private static string FormatArgumentName(string argumentName)
     {
         var trimmed = argumentName.TrimStart('@');
         return string.Equals(trimmed, "model_code", StringComparison.OrdinalIgnoreCase)
             ? "modelCode"
             : trimmed;
+    }
+
+    private static string FormatArgumentLabel(string argumentName, string locale)
+    {
+        var formatted = FormatArgumentName(argumentName);
+        if (string.Equals(formatted, "modelCode", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsVietnamese(locale) ? "Mã model" : "Model code";
+        }
+
+        return formatted;
+    }
+
+    private static string? TryGetModelCode(IReadOnlyDictionary<string, object?>? values)
+    {
+        if (values is null)
+        {
+            return null;
+        }
+
+        foreach (var key in new[] { "modelCode", "model_code", "@model_code", "ModelCode", "Code" })
+        {
+            if (values.TryGetValue(key, out var value) && value is not null)
+            {
+                var text = Convert.ToString(value, CultureInfo.InvariantCulture);
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    return text;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<string> ExtractComparedModelCodes(
+        AnswerComposerRequest request,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> safeRows)
+    {
+        var codes = new List<string>();
+        AddCode(TryGetModelCode(AnswerDataSanitizer.ApplySensitivity(request.Arguments, request.SensitivityPolicy)));
+
+        foreach (var key in new[] { "modelCodeA", "modelCodeB", "model_code_a", "model_code_b", "@model_code_a", "@model_code_b", "otherModelCode", "compareModelCode", "modelCode2", "model_code_2", "@model_code_2" })
+        {
+            if (request.Arguments.TryGetValue(key, out var value))
+            {
+                AddCode(Convert.ToString(value, CultureInfo.InvariantCulture));
+            }
+        }
+
+        foreach (var row in safeRows)
+        {
+            AddCode(TryGetModelCode(row));
+        }
+
+        return codes;
+
+        void AddCode(string? code)
+        {
+            if (!string.IsNullOrWhiteSpace(code)
+                && !codes.Contains(code, StringComparer.OrdinalIgnoreCase))
+            {
+                codes.Add(code);
+            }
+        }
+    }
+
+    private static string InsufficientData(bool vietnamese) =>
+        vietnamese
+            ? "Dữ liệu chưa đủ để tạo tóm tắt chắc chắn."
+            : "The data is insufficient for a reliable summary.";
+
+    private static string Plural(int count) => count == 1 ? string.Empty : "s";
+
+    private static int ResolveModelCount(
+        AnswerComposerRequest request,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> safeRows)
+    {
+        var row = safeRows.FirstOrDefault();
+        if (row is null)
+        {
+            return request.RowCount;
+        }
+
+        foreach (var key in new[] { "ModelCount", "modelCount", "Count", "count", "TotalCount", "totalCount", "Total", "total" })
+        {
+            if (row.TryGetValue(key, out var value)
+                && int.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out var count))
+            {
+                return count;
+            }
+        }
+
+        return request.RowCount;
     }
 
     private static AnswerProvenance CreateProvenance(AnswerComposerRequest request) => new()
@@ -393,6 +618,8 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
             blocks,
             followUpQuestions = followUpQuestions ?? Array.Empty<string>(),
             provenance,
+            correlationId = request.ExecutionMetadata.CorrelationId,
+            locale = request.Locale,
             capabilityKey = request.CapabilityKey,
             procedureName = request.ProcedureName,
             arguments = AnswerDataSanitizer.ApplySensitivity(request.Arguments, request.SensitivityPolicy),

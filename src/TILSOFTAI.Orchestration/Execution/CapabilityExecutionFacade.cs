@@ -20,6 +20,7 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
     private const string UnsupportedExecutionModeCode = "UNSUPPORTED_EXECUTION_MODE";
     private const string WriteApprovalRequiredCode = "WRITE_APPROVAL_REQUIRED";
     private const string AdapterExecutionFailedCode = "ADAPTER_EXECUTION_FAILED";
+    private const string SqlResultParseFailedCode = "SQL_RESULT_PARSE_FAILED";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -632,7 +633,24 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
         TilsoftExecutionContext context,
         ToolExecutionResult result)
     {
-        var rows = ReadRows(result);
+        var parsed = ParseRows(result, context);
+        if (!parsed.Success)
+        {
+            return BaseEnvelope(capability, arguments, context, metadata) with
+            {
+                Success = false,
+                Status = "failed",
+                ErrorCode = parsed.ErrorCode,
+                ErrorMessage = parsed.ErrorMessage,
+                ExecutionMetadata = BaseMetadata(capability, context) with
+                {
+                    PayloadJson = result.PayloadJson,
+                    Detail = result.Detail
+                }
+            };
+        }
+
+        var rows = parsed.Rows;
         return BaseEnvelope(capability, arguments, context, metadata) with
         {
             Success = true,
@@ -761,57 +779,73 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
         CorrelationId = context.CorrelationId
     };
 
-    private static IReadOnlyList<IReadOnlyDictionary<string, object?>> ReadRows(ToolExecutionResult result)
+    private static ParsedRows ParseRows(ToolExecutionResult result, TilsoftExecutionContext context)
     {
         if (result.Payload is IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
         {
-            return rows;
+            return ParsedRows.Ok(rows);
         }
 
         if (result.Payload is IEnumerable<IReadOnlyDictionary<string, object?>> enumerableRows)
         {
-            return enumerableRows.ToArray();
+            return ParsedRows.Ok(enumerableRows.ToArray());
         }
 
         if (result.Payload is string payloadText)
         {
-            var payloadRows = ReadRowsFromJson(payloadText);
-            if (payloadRows.Count > 0)
+            var payloadRows = ReadRowsFromJson(payloadText, context);
+            if (!payloadRows.Success || payloadRows.Rows.Count > 0)
             {
                 return payloadRows;
             }
         }
 
-        return ReadRowsFromJson(result.PayloadJson);
+        if (!string.IsNullOrWhiteSpace(result.PayloadJson))
+        {
+            return ReadRowsFromJson(result.PayloadJson, context);
+        }
+
+        return ParsedRows.Ok(Array.Empty<IReadOnlyDictionary<string, object?>>());
     }
 
-    private static IReadOnlyList<IReadOnlyDictionary<string, object?>> ReadRowsFromJson(string? json)
+    private static ParsedRows ReadRowsFromJson(string? json, TilsoftExecutionContext context)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
-            return Array.Empty<IReadOnlyDictionary<string, object?>>();
+            return ParsedRows.Ok(Array.Empty<IReadOnlyDictionary<string, object?>>());
         }
 
         try
         {
             using var document = JsonDocument.Parse(json);
-            var rowsElement = document.RootElement.ValueKind == JsonValueKind.Object
-                && document.RootElement.TryGetProperty("rows", out var envelopeRows)
-                ? envelopeRows
-                : document.RootElement;
+            var root = document.RootElement;
+            var rowsElement = root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("rows", out var envelopeRows)
+                    ? envelopeRows
+                    : root;
+
+            if (rowsElement.ValueKind == JsonValueKind.Object)
+            {
+                return ParsedRows.Ok([JsonSerializer.Deserialize<Dictionary<string, object?>>(rowsElement.GetRawText(), JsonOptions)
+                    ?? new Dictionary<string, object?>()]);
+            }
 
             if (rowsElement.ValueKind != JsonValueKind.Array)
             {
-                return Array.Empty<IReadOnlyDictionary<string, object?>>();
+                return ParsedRows.Fail(
+                    SqlResultParseFailedCode,
+                    $"Unexpected SQL result shape for correlationId '{context.CorrelationId}': expected object or row array.");
             }
 
             var parsedRows = JsonSerializer.Deserialize<IReadOnlyList<Dictionary<string, object?>>>(rowsElement.GetRawText(), JsonOptions);
-            return parsedRows?.Select(row => (IReadOnlyDictionary<string, object?>)row).ToArray()
-                ?? Array.Empty<IReadOnlyDictionary<string, object?>>();
+            return ParsedRows.Ok(parsedRows?.Select(row => (IReadOnlyDictionary<string, object?>)row).ToArray()
+                ?? Array.Empty<IReadOnlyDictionary<string, object?>>());
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return Array.Empty<IReadOnlyDictionary<string, object?>>();
+            return ParsedRows.Fail(
+                SqlResultParseFailedCode,
+                $"Malformed SQL JSON for correlationId '{context.CorrelationId}': {ex.Message}");
         }
     }
 
@@ -861,4 +895,16 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
     private sealed record LoadedCapability(CapabilityDescriptor? Capability, CapabilitySemanticMetadata? Metadata);
 
     private sealed record ValidationDetail(IReadOnlyList<string> Missing, IReadOnlyList<string> Invalid);
+
+    private sealed record ParsedRows(
+        bool Success,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows,
+        string? ErrorCode = null,
+        string? ErrorMessage = null)
+    {
+        public static ParsedRows Ok(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows) => new(true, rows);
+
+        public static ParsedRows Fail(string errorCode, string errorMessage) =>
+            new(false, Array.Empty<IReadOnlyDictionary<string, object?>>(), errorCode, errorMessage);
+    }
 }

@@ -325,6 +325,7 @@ public sealed class ArchitectureResidueGuardTests
         contents.Should().Contain("IOfficialAgentProviderFactory", "runtime must get real AIAgent instances from the official provider factory");
         functionProvider.Should().Contain(": AIFunction", "candidate capabilities must be converted to official Microsoft.Extensions.AI function types before model selection");
         functionProvider.Should().Contain("JsonSchema", "official functions should expose SQL-backed parameter schemas to the model");
+        functionProvider.Should().Contain("readonly", "SQL-seeded read capabilities must remain model-callable");
         contents.Should().Contain(".RunAsync(", "production routing must invoke the official agent before any tool result can be selected");
     }
 
@@ -511,7 +512,8 @@ public sealed class ArchitectureResidueGuardTests
         registrations.Should().Contain("AddCapabilityExecutionBoundary");
         registrations.Should().Contain("AddAnswerComposer");
         registrations.Should().Contain("AddPendingActionState");
-        registrations.Should().Contain("new InMemoryCapabilityRegistry(ModelCapabilities.All)");
+        registrations.Should().NotContain("ModelCapabilities.All");
+        registrations.Should().NotContain("new InMemoryCapabilityRegistry");
         registrations.Should().Contain("IOfficialMicrosoftAgentRuntime, OfficialMicrosoftAgentRuntime");
         registrations.Should().NotContain("AddLegacyFallbackOnlyServices");
         registrations.Should().NotContain(string.Concat("Keyword", "IntentClassifier"));
@@ -571,22 +573,25 @@ public sealed class ArchitectureResidueGuardTests
     }
 
     [Fact]
-    public void Architecture_ModelOnlyCapabilities()
+    public void Architecture_NoModelCapabilitiesInProduction()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var capabilitySource = File.ReadAllText(
-            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "Capabilities", "ModelCapabilities.cs"),
-            Encoding.UTF8);
-        var registrations = File.ReadAllText(
-            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Orchestration", "OrchestrationServiceCollectionExtensions.cs"),
-            Encoding.UTF8);
+        var productionOffenders = Directory
+            .EnumerateFiles(Path.Combine(repositoryRoot, "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(ShouldScan)
+            .Where(path => File.ReadAllText(path, Encoding.UTF8).Contains("ModelCapabilities", StringComparison.Ordinal))
+            .Select(path => Path.GetRelativePath(repositoryRoot, path))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
-        capabilitySource.Should().Contain("public static class ModelCapabilities");
-        capabilitySource.Should().Contain("model.count");
-        capabilitySource.Should().NotContain("accounting", "the active capability set must stay model-only");
-        capabilitySource.Should().NotContain("warehouse", "the active capability set must stay model-only");
-        registrations.Should().Contain("new InMemoryCapabilityRegistry(ModelCapabilities.All)");
-        registrations.Should().NotContain(string.Concat("ICapability", "Source"));
+        productionOffenders.Should().BeEmpty("SQL catalog metadata is now the production source of truth");
+
+        var registrations = File.ReadAllText(
+            Path.Combine(repositoryRoot, "src", "TILSOFTAI.Api", "Extensions", "AddTilsoftAiSqlExtensions.cs"),
+            Encoding.UTF8);
+        registrations.Should().Contain("SqlCapabilityCatalogRepository");
+        registrations.Should().Contain("ICapabilityRegistry");
+        registrations.Should().Contain("ICapabilityMetadataRepository");
     }
 
     [Fact]

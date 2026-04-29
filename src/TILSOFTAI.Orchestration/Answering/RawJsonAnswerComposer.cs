@@ -19,6 +19,7 @@ public sealed class RawJsonAnswerComposer
         {
             mode = "raw_json",
             capabilityKey = request.CapabilityKey,
+            functionName = request.CapabilityKey,
             procedureName = request.ProcedureName,
             arguments,
             rowCount = request.RowCount,
@@ -26,7 +27,7 @@ public sealed class RawJsonAnswerComposer
             result,
             resultSchema = request.ResultSchema,
             executionMetadata = request.ExecutionMetadata,
-            sensitivityPolicy = request.SensitivityPolicy,
+            sensitivityPolicyApplied = request.SensitivityPolicy,
             provenance = CreateProvenance(request)
         };
 
@@ -36,6 +37,8 @@ public sealed class RawJsonAnswerComposer
             Text = string.Empty,
             Blocks = [new RawJsonBlock(data)],
             Provenance = CreateProvenance(request),
+            CorrelationId = request.ExecutionMetadata.CorrelationId,
+            Locale = request.Locale,
             SelectedAgentId = "microsoft-agent-router",
             Detail = data
         };

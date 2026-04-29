@@ -9,6 +9,10 @@ public sealed class SupervisorResult
     public string? Error { get; private init; }
     public string? Code { get; private init; }
     public object? Detail { get; private init; }
+    public IReadOnlyList<AnswerBlock>? Blocks { get; private init; }
+    public string? AnswerType { get; private init; }
+    public IReadOnlyList<string>? FollowUpQuestions { get; private init; }
+    public AnswerProvenance? Provenance { get; private init; }
     public string? SelectedAgentId { get; private init; }
 
     public static SupervisorResult Ok(string output, string? selectedAgentId = null) => new()
@@ -36,6 +40,10 @@ public sealed class SupervisorResult
         Success = true,
         Output = answer.Content,
         Detail = answer.Detail,
+        Blocks = answer.Blocks,
+        AnswerType = answer.AnswerType,
+        FollowUpQuestions = answer.FollowUpQuestions,
+        Provenance = answer.Provenance,
         SelectedAgentId = answer.SelectedAgentId
     };
 }

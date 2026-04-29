@@ -1,11 +1,9 @@
+using TILSOFTAI.Orchestration.Capabilities;
 using TILSOFTAI.Tools.Abstractions;
 
-namespace TILSOFTAI.Orchestration.Capabilities;
+namespace TILSOFTAI.Tests.Fixtures;
 
-/// <summary>
-/// Model-only read capability definitions for the official agent runtime.
-/// </summary>
-public static class ModelCapabilities
+public static class ModelCapabilityFixtures
 {
     public static IReadOnlyList<CapabilityDescriptor> All { get; } =
     [

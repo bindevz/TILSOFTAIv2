@@ -133,7 +133,8 @@ public sealed class DynamicFunctionToolFactory : IOfficialAgentFunctionProvider
 
     private static bool IsReadMode(string executionMode) =>
         executionMode.Equals("read", StringComparison.OrdinalIgnoreCase)
-        || executionMode.Equals("read_only", StringComparison.OrdinalIgnoreCase);
+        || executionMode.Equals("read_only", StringComparison.OrdinalIgnoreCase)
+        || executionMode.Equals("readonly", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsWritePreviewMode(string executionMode) =>
         executionMode.Equals("write_preview", StringComparison.OrdinalIgnoreCase);

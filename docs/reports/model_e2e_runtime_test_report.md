@@ -32,11 +32,32 @@ The current migration runner completed successfully against local SQL Server.
 
 - Runner: `tools/sql/migrate-local-tilsoftai.ps1`
 - Scripts: `sql/current/*.sql`
-- Validation script: `sql/current/999_validate_model_runtime.sql`
+- Runtime validation script: `sql/current/999_validate_model_runtime.sql`
+- Catalog validation script: `sql/current/997_validate_capability_catalog.sql`
 - Validation result: `passed`
 - Model row count at validation time: `6`
 
-The migration creates and validates the current model runtime objects, model read-only stored procedures, optional local seed data, diagnostics, and model-only semantic capability/trace tables.
+The migration creates and validates the current model runtime objects, model read-only stored procedures, optional local seed data, diagnostics, and SQL-backed model capability catalog tables.
+
+## Sprint 43 SQL-Backed Catalog Verification
+
+The active runtime no longer registers `ModelCapabilities.All`. Production DI maps `ICapabilityRegistry`, `ICapabilityMetadataRepository`, `ISqlBackedCapabilityCatalog`, and `ICapabilityCatalogReloader` to `SqlCapabilityCatalogRepository`.
+
+Catalog source-of-truth files:
+
+- `sql/current/002_core_tables.sql`
+- `sql/current/008_seed_model_capability_catalog.sql`
+- `sql/current/997_validate_capability_catalog.sql`
+
+Catalog guarantees:
+
+- Exactly six enabled capabilities in the `model` domain.
+- No enabled non-model capabilities.
+- Function names are SQL-seeded and exposed to the official Agent Framework.
+- Model-facing arguments use `modelCode`, `modelCodes`, and optional `season`; `modelId` and `model_id` are not exposed.
+- Tool descriptions are assembled from SQL-localized text, aliases, examples, argument text, result schema, answer policy, and sensitivity policy.
+- Structured and RawJson answers consume SQL result schema, answer policy, and sensitivity policy through the execution facade.
+- Catalog reload is manual and opt-in through `POST /api/platform-catalog/capabilities/reload`, gated by `CatalogReload:Enabled` and local/development environment checks.
 
 ## Prompt Matrix
 
@@ -90,8 +111,47 @@ Observed row-count evidence from logs:
 
 - The OpenAI-compatible `/v1/chat/completions` endpoint was used for Structured smoke because it returns assistant text directly.
 - The `/api/chats` endpoint was used for RawJson smoke because it accepts `metadata.answerMode=rawJson`.
-- RawJson data prompts routed and composed successfully according to logs, but `/api/chats` currently returns an empty top-level `content` field in its response envelope. The routing/composer evidence is present in logs and should be considered a response-contract tuning item.
-- The missing-model Structured response asked for the model code: `Bạn muốn xem thông tin của model nào ạ? Vui lòng cung cấp mã model (model code) cụ thể để tôi có thể hỗ trợ bạn.`
+- RawJson data prompts route and compose through a deterministic enterprise envelope. The envelope includes mode, capability key, function name, procedure name, sanitized arguments, row count, sanitized rows, result schema, execution metadata, applied sensitivity policy, and provenance.
+- Structured model responses now use deterministic conservative summaries for `model.count`, `model.overview.by-code`, `model.pieces.by-code`, `model.materials.by-code`, `model.compare`, and `model.packaging.by-code`.
+- Structured table blocks are schema-driven. They use Vietnamese labels from `labelVi` for `vi-VN`, English labels from `label` for `en-US`, omit invisible columns, and include `rowCount`, `displayedRows`, and `truncated`.
+- The missing-model Structured response is now specific and does not execute SQL when the required model code is missing: `Bạn muốn xem thông tin cho model nào? Vui lòng cung cấp mã model.`
+- No-data responses include the filters used and do not invent alternative model codes or follow-up suggestions when the requested filter was already provided.
+- AI summary service usage is guarded. RawJson does not call it, and deterministic model Structured responses can run without it.
+
+## Sprint 42 AnswerComposer Quality Verification
+
+Phase 8 unit coverage added or updated:
+
+- `AnswerComposer_RawJson_AllModelCapabilities`
+- `AnswerComposer_Structured_AllModelCapabilities`
+- `AnswerComposer_Localization_ViAndEn`
+- `AnswerComposer_NoData`
+- `AnswerComposer_FollowUp`
+- `AnswerComposer_Truncation`
+- `AnswerComposer_SensitiveFieldMasking`
+
+Focused AnswerComposer verification passed locally:
+
+- `dotnet test tests/TILSOFTAI.Tests/TILSOFTAI.Tests.csproj --filter AnswerComposerTests`
+- Result: 39 passed, 0 failed, 0 skipped
+
+Full local verification after the Sprint 42 AnswerComposer upgrade:
+
+- `dotnet build`
+- Result: passed with existing NU1902 OpenTelemetry warnings
+- `dotnet test`
+- Result: 330 unit tests passed and 19 integration tests passed
+
+Full local verification after the Sprint 43 SQL-backed catalog migration:
+
+- Baseline `dotnet build`: passed with existing NU1902 OpenTelemetry warnings.
+- Baseline `dotnet test`: 330 unit tests passed and 19 integration tests passed.
+- Final `dotnet test` during Phase 10: 337 unit tests passed and 19 integration tests passed.
+
+Residual notes:
+
+- OpenTelemetry dependency vulnerability warnings remain outside the AnswerComposer scope.
+- Local SQL migration and live model E2E smoke require a running SQL Server and local AI endpoint.
 
 ## Issues Fixed During Runtime Verification
 
@@ -100,4 +160,7 @@ Observed row-count evidence from logs:
 - SQL trace insert now escapes `[RowCount]`.
 - Active model stored procedure bindings use bare `ai_model_*` names to satisfy the existing SQL adapter validation.
 - Optional local seed now includes tenant `default`, matching local no-auth execution context.
-
+- Active model capability metadata now comes from SQL catalog tables instead of production code fixtures.
+- AnswerComposer now emits stable answer types: `raw_json`, `structured`, `follow_up`, `no_data`, `error`, and `write_preview`.
+- Result schema metadata now drives table labels, visibility, and frontend-friendly table metadata.
+- Sensitive fields are masked or hidden before display, summary, and RawJson detail exposure.

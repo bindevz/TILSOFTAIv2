@@ -22,7 +22,7 @@ Generated: 2026-04-29
 ## P1
 
 1. Align RawJson HTTP response contracts.
-   - Current state: routing and composer logs show RawJson answers succeed with row counts, but `/api/chats` returns an empty top-level `content` field.
+   - Current state: AnswerComposer now produces a complete RawJson enterprise envelope with mode, capability key, function name, procedure name, sanitized arguments, row count, rows, result schema, execution metadata, applied sensitivity policy, and provenance.
    - Target: expose raw JSON payload or a documented typed response field consistently from `/api/chats`.
    - Acceptance: RawJson smoke files should contain the composed capability payload without requiring log inspection.
 
@@ -34,15 +34,17 @@ Generated: 2026-04-29
    - Current state: SQL contract validation is skipped in Development startup.
    - Target: provide an explicit local switch to run the same validation during smoke, without forcing production startup semantics.
 
-4. Reduce model-only semantic metadata duplication.
-   - Current state: model capabilities are represented in code, catalog JSON, and SQL semantic tables.
-   - Target: establish one generated/source-of-truth flow for active model capabilities, stored procedures, argument contracts, and result schemas.
+4. Add disposable SQL catalog integration coverage in CI.
+   - Current state: unit and architecture tests guard the SQL catalog files and runtime DI, while local SQL migration remains environment-dependent.
+   - Target: run `tools/sql/migrate-local-tilsoftai.ps1` and `sql/current/997_validate_capability_catalog.sql` against disposable SQL Server in CI.
+   - Acceptance: catalog drift fails CI when enabled model count, model-facing arguments, result schema JSON, answer policy JSON, or stored procedure references drift.
 
 ## P2
 
-1. Improve answer text richness for Structured mode.
-   - Current state: Structured mode confirms row count and first rows, but the text remains generic.
-   - Target: use result schema metadata for more helpful field labels and compact summaries while keeping no hallucination/no guessing guarantees.
+1. Extend deterministic summaries beyond model capabilities.
+   - Current state: Sprint 42 added deterministic conservative summaries for the six model capabilities and guarded AI summary usage.
+   - Target: when new read-only domains are introduced, add domain-specific deterministic summary rules at the AnswerComposer boundary.
+   - Acceptance: summaries use only row count, arguments, result schema, and known returned columns; no LLM output controls tables, follow-ups, provenance, or safety.
 
 2. Make route evidence easier to query.
    - Current state: route evidence exists in JSON logs and `ai.ToolRoutingTrace`.
@@ -56,6 +58,45 @@ Generated: 2026-04-29
    - Current state: build and test complete, but `OpenTelemetry.Api` and `OpenTelemetry.Exporter.OpenTelemetryProtocol` produce NU1902 warnings.
    - Target: upgrade packages or centrally suppress with an accepted risk note.
 
+## Completed in Sprint 42
+
+1. Normalize AnswerComposer answer shape and answer types.
+   - Completed: answers now carry stable `answerType`, `text`, `blocks`, `detail`, `followUpQuestions`, `provenance`, `correlationId`, and `locale`.
+   - Completed: model write previews use `write_preview`; composite model output is emitted through the stable `structured` answer type.
+
+2. Use result schema metadata for Structured tables.
+   - Completed: table labels use `labelVi` for `vi-VN` and `label` for English.
+   - Completed: invisible schema columns are omitted, sensitive hidden columns are removed, and masked columns display the mask value.
+   - Completed: table blocks include title, `rowCount`, `displayedRows`, and `truncated`.
+
+3. Improve no-data and follow-up quality.
+   - Completed: missing model code produces a specific follow-up and does not execute SQL.
+   - Completed: no-data responses include used filters and do not invent alternatives.
+
+4. Guard optional AI summaries.
+   - Completed: RawJson does not call AI summary.
+   - Completed: deterministic model Structured responses run without `AiSummaryService`.
+   - Completed: AI summary cannot override table, follow-up, safety, or provenance decisions.
+
+## Completed in Sprint 43
+
+1. Promote SQL to the model capability source of truth.
+   - Completed: production `ModelCapabilities` was removed.
+   - Completed: `SqlCapabilityCatalogRepository` supplies `ICapabilityRegistry`, `ICapabilityMetadataRepository`, and SQL-backed catalog reload services.
+   - Completed: `sql/current/008_seed_model_capability_catalog.sql` seeds the six active model capabilities.
+
+2. Validate catalog drift.
+   - Completed: `sql/current/997_validate_capability_catalog.sql` rejects wrong enabled capability counts, enabled non-model capabilities, duplicate function names, forbidden `modelId`/`model_id` model-facing arguments, invalid JSON metadata, and missing stored procedures.
+   - Completed: unit architecture tests guard the same contract when SQL Server is not available.
+
+3. Drive model-facing tools and answers from SQL metadata.
+   - Completed: tool descriptions include SQL text, aliases, examples, argument clarification text, result schema, answer policy, and sensitivity policy.
+   - Completed: AnswerComposer uses SQL-shaped result schemas and policies for tables, labels, visibility, row limits, and sensitivity masking.
+
+4. Add guarded reload path.
+   - Completed: catalog reload is exposed only when explicitly enabled in local/development configuration.
+   - Completed: repository reload fails closed on initial load and preserves the last-known-good catalog on reload failure.
+
 ## Evidence Links
 
 - Runtime test report: `docs/reports/model_e2e_runtime_test_report.md`
@@ -63,4 +104,4 @@ Generated: 2026-04-29
 - API route logs: `artifacts/api-phase5.out.log`
 - Migration scripts: `sql/current`
 - Migration runner: `tools/sql/migrate-local-tilsoftai.ps1`
-
+- SQL-backed catalog architecture note: `docs/architecture/sql_backed_capability_catalog.md`

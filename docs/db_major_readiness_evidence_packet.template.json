@@ -1,58 +1,26 @@
 {
   "schemaVersion": 1,
   "packetType": "db-major-compatibility-retirement-readiness",
-  "releaseId": "",
-  "environment": "",
-  "generatedAtUtc": "",
-  "generatedBy": "",
   "compatibilityInventory": {
-    "inventoryPath": "docs/compatibility_inventory.json",
-    "inventoryVersion": "sprint-23",
-    "inventorySha256": "",
-    "unexpectedLegacySurfaceCount": 0
+    "inventoryPath": "docs/compatibility_inventory.json"
   },
   "telemetryWindow": {
-    "windowStartUtc": "",
-    "windowEndUtc": "",
-    "representativeTrafficStatement": "",
-    "legacyProcedureUsageCount": 0,
-    "capabilityScopeWrapperUsageCount": 0,
-    "legacyProcedureLastObservedAtUtc": null,
-    "capabilityScopeWrapperLastObservedAtUtc": "",
-    "rawRetentionDays": 90,
-    "rollupIncluded": true
+    "startUtc": null,
+    "endUtc": null,
+    "legacyProcedureUsageCount": null,
+    "capabilityScopeWrapperUsageCount": null
   },
   "readinessDecision": {
     "isDbMajorRenameCandidate": false,
-    "decision": "go-or-no-go",
-    "decisionReason": "",
-    "approvedBy": "",
-    "approvedAtUtc": ""
+    "decisionNotes": null
   },
   "releaseAttachments": {
-    "usageSummaryQueryOutputUri": "",
-    "retirementReadinessQueryOutputUri": "",
-    "staticInventoryUri": "",
-    "fallbackPostureUri": "",
-    "rollbackPlanUri": "",
-    "operatorCommunicationUri": ""
+    "staticInventoryUri": "docs/compatibility_inventory.json",
+    "rollbackPlanUri": null,
+    "fallbackPostureUri": null
   },
   "fallbackPosture": {
-    "catalogSourceMode": "unknown",
-    "productionLike": false,
-    "fallbackUsed": false,
-    "fallbackAuthorized": false,
-    "fallbackAuthorizationUri": ""
-  },
-  "rollbackPosture": {
-    "rollbackTested": false,
-    "rollbackMethod": "",
-    "rollbackOwner": ""
-  },
-  "validation": {
-    "unitTestsPassed": false,
-    "integrationTestsPassed": false,
-    "sqlDeploymentSmokePassed": false,
-    "postCutoverChecksDefined": false
+    "catalogSourceMode": null,
+    "fallbackDecision": null
   }
 }

@@ -20,7 +20,10 @@ public sealed class PlatformCatalogController : ControllerBase
     private readonly IPlatformCatalogPromotionManifestStore _manifestStore;
     private readonly IPlatformCatalogPromotionManifestService _manifestService;
     private readonly IPlatformCatalogSignerTrustStore _signerTrustStore;
+    private readonly ICapabilityCatalogReloader _catalogReloader;
     private readonly IExecutionContextAccessor _contextAccessor;
+    private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _environment;
     private readonly CatalogControlPlaneOptions _options;
     private readonly IMetricsService _metrics;
 
@@ -32,7 +35,10 @@ public sealed class PlatformCatalogController : ControllerBase
         IPlatformCatalogPromotionManifestStore manifestStore,
         IPlatformCatalogPromotionManifestService manifestService,
         IPlatformCatalogSignerTrustStore signerTrustStore,
+        ICapabilityCatalogReloader catalogReloader,
         IExecutionContextAccessor contextAccessor,
+        IConfiguration configuration,
+        IWebHostEnvironment environment,
         IOptions<CatalogControlPlaneOptions> options,
         IMetricsService metrics)
     {
@@ -43,7 +49,10 @@ public sealed class PlatformCatalogController : ControllerBase
         _manifestStore = manifestStore ?? throw new ArgumentNullException(nameof(manifestStore));
         _manifestService = manifestService ?? throw new ArgumentNullException(nameof(manifestService));
         _signerTrustStore = signerTrustStore ?? throw new ArgumentNullException(nameof(signerTrustStore));
+        _catalogReloader = catalogReloader ?? throw new ArgumentNullException(nameof(catalogReloader));
         _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(contextAccessor));
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _environment = environment ?? throw new ArgumentNullException(nameof(environment));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
     }
@@ -53,6 +62,18 @@ public sealed class PlatformCatalogController : ControllerBase
     {
         var records = await _controlPlane.ListCapabilitiesAsync(ToCatalogContext(), ct);
         return Ok(records);
+    }
+
+    [HttpPost("capabilities/reload")]
+    public async Task<ActionResult<object>> ReloadCapabilities(CancellationToken ct)
+    {
+        if (!IsCatalogReloadEnabled())
+        {
+            return NotFound();
+        }
+
+        await _catalogReloader.ReloadAsync(ct);
+        return Ok(new { reloaded = true, source = "sql" });
     }
 
     [HttpGet("external-connections")]
@@ -439,6 +460,17 @@ public sealed class PlatformCatalogController : ControllerBase
         }
 
         throw new UnauthorizedAccessException("User does not have a catalog control-plane role.");
+    }
+
+    private bool IsCatalogReloadEnabled()
+    {
+        if (!_configuration.GetValue<bool>("CatalogReload:Enabled"))
+        {
+            return false;
+        }
+
+        return _environment.IsDevelopment()
+            || _environment.EnvironmentName.Equals("Local", StringComparison.OrdinalIgnoreCase);
     }
 
     private ActionResult? ValidateCertificationEvidenceRequest(CatalogCertificationEvidenceApiRequest? request)

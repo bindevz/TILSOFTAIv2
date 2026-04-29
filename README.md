@@ -20,8 +20,10 @@ Runtime boundaries:
 
 - `CapabilityExecutionFacade` is the execution boundary for capability calls.
 - `AnswerComposer` is the response boundary for RawJson and Structured answers.
-- Active capabilities are read-only model capabilities.
+- Active capabilities are loaded from SQL catalog tables in `sql/current/002_core_tables.sql` and seeded by `sql/current/008_seed_model_capability_catalog.sql`.
+- The SQL catalog is the source of truth for active function names, argument contracts, localized descriptions, examples, result schemas, answer policies, and sensitivity policies.
 - Active model-facing arguments are `modelCode` and `modelCodes`.
+- Model-facing `modelId` and `model_id` arguments are forbidden.
 - PendingActionState is future infrastructure only.
 - Legacy domain-agent routing was removed.
 - Real write execution is disabled.
@@ -72,6 +74,14 @@ or:
 ```
 
 The migration creates the local database if it is missing, installs TILSOFTAI-owned framework objects, installs the read-only `ai_model_*` stored procedures, and runs `999_validate_model_runtime.sql`. Cleanup scripts are scoped to project-owned framework objects and must not drop unrelated ERP source tables.
+
+The SQL-backed catalog validator is:
+
+```text
+sql/current/997_validate_capability_catalog.sql
+```
+
+It verifies the active runtime catalog has exactly six enabled `model` capabilities, no enabled non-model capabilities, unique function names, no model-facing `modelId` or `model_id` arguments, valid JSON metadata, result schemas, answer policies, and resolvable stored procedures.
 
 Required model procedures:
 
@@ -132,6 +142,7 @@ Expected behavior:
 ## Known Limitations Before More Domains
 
 - Only the `model` domain is active.
+- Catalog reload is opt-in and local/development-only by default. `CatalogReload:Enabled` is `false` in base settings and `true` in Development.
 - Tool-calling quality depends on the selected local model supporting reliable function calls.
 - Real ERP model data should be used when available; seeded model data must be labeled as test-only data.
 - Write approval state exists for future confirmation flows, but real write execution remains disabled.
@@ -142,6 +153,7 @@ Expected behavior:
 
 - `docs/reports/model_e2e_runtime_test_report.md`
 - `docs/reports/model_e2e_framework_tuning_backlog.md`
+- `docs/architecture/sql_backed_capability_catalog.md`
 - `docs/architecture_v3.md`
 - `docs/operational_runtime_observability.md`
 - `docs/runtime_readiness.md`

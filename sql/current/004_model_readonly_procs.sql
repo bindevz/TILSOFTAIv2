@@ -9,25 +9,30 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    DECLARE @CapabilityKey nvarchar(200) = N'model.count';
     DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();
+    DECLARE @NormalizedArgsJson nvarchar(max) = COALESCE(NULLIF(@ArgsJson, N''), N'{}');
+
+    IF ISJSON(@NormalizedArgsJson) <> 1
+    BEGIN
+        SELECT (
+            SELECT
+                JSON_QUERY((SELECT @CapabilityKey AS capabilityKey, @TenantId AS tenantId, 0 AS [rowCount], N'validation_error' AS [status], N'@ArgsJson must be valid JSON.' AS [message], @GeneratedAtUtc AS generatedAtUtc FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES)) AS meta,
+                JSON_QUERY((SELECT N'Count' AS [name], N'Count' AS [label], N'int' AS [type] FOR JSON PATH, INCLUDE_NULL_VALUES)) AS columns,
+                JSON_QUERY(N'[]') AS [rows]
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
+        ) AS ResultJson;
+        RETURN;
+    END;
+
     DECLARE @RowCount int = (SELECT COUNT(1) FROM dbo.Model WHERE TenantId = @TenantId OR TenantId IS NULL);
 
     SELECT (
         SELECT
-            meta = (
-                SELECT @TenantId AS tenantId, @GeneratedAtUtc AS generatedAtUtc, 1 AS [rowCount]
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
-            ),
-            columns = (
-                SELECT [name], [type], [descriptionKey]
-                FROM (VALUES ('Count', 'int', 'model.count')) AS cols([name], [type], [descriptionKey])
-                FOR JSON PATH, INCLUDE_NULL_VALUES
-            ),
-            rows = (
-                SELECT @RowCount AS [Count]
-                FOR JSON PATH, INCLUDE_NULL_VALUES
-            )
-        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            JSON_QUERY((SELECT @CapabilityKey AS capabilityKey, @TenantId AS tenantId, @RowCount AS [rowCount], N'ok' AS [status], @GeneratedAtUtc AS generatedAtUtc FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES)) AS meta,
+            JSON_QUERY((SELECT N'Count' AS [name], N'Count' AS [label], N'int' AS [type] FOR JSON PATH, INCLUDE_NULL_VALUES)) AS columns,
+            JSON_QUERY((SELECT @RowCount AS [Count] FOR JSON PATH, INCLUDE_NULL_VALUES)) AS [rows]
+        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
     ) AS ResultJson;
 END;
 GO
@@ -39,74 +44,76 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF ISJSON(@ArgsJson) <> 1
-    BEGIN
-        RAISERROR('@ArgsJson must be valid JSON.', 16, 1);
-        RETURN;
-    END;
-
-    DECLARE @modelCode nvarchar(50) = NULLIF(LTRIM(RTRIM(JSON_VALUE(@ArgsJson, '$.modelCode'))), N'');
-    IF @modelCode IS NULL
-    BEGIN
-        RAISERROR('modelCode is required.', 16, 1);
-        RETURN;
-    END;
-
-    IF (
-        SELECT COUNT(DISTINCT ModelId)
-        FROM dbo.vw_ModelSemantic
-        WHERE ModelCode = @modelCode
-          AND (TenantId = @TenantId OR TenantId IS NULL)
-    ) > 1
-    BEGIN
-        RAISERROR('modelCode is ambiguous.', 16, 1);
-        RETURN;
-    END;
-
-    DECLARE @modelId int = (
-        SELECT MAX(ModelId)
-        FROM dbo.vw_ModelSemantic
-        WHERE ModelCode = @modelCode
-          AND (TenantId = @TenantId OR TenantId IS NULL)
-    );
+    DECLARE @CapabilityKey nvarchar(200) = N'model.overview.by-code';
     DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();
-    DECLARE @RowCount int = (SELECT COUNT(1) FROM dbo.vw_ModelSemantic WHERE ModelId = @modelId);
+    DECLARE @NormalizedArgsJson nvarchar(max) = COALESCE(NULLIF(@ArgsJson, N''), N'{}');
+    DECLARE @Status nvarchar(30) = N'ok';
+    DECLARE @Message nvarchar(400) = NULL;
+    DECLARE @RowCount int = 0;
+    DECLARE @modelCode nvarchar(50) = NULL;
+    DECLARE @modelId int = NULL;
+
+    IF ISJSON(@NormalizedArgsJson) <> 1
+    BEGIN
+        SET @Status = N'validation_error';
+        SET @Message = N'@ArgsJson must be valid JSON.';
+    END
+    ELSE
+    BEGIN
+        SET @modelCode = NULLIF(LTRIM(RTRIM(JSON_VALUE(@NormalizedArgsJson, N'$.modelCode'))), N'');
+        IF @modelCode IS NULL
+        BEGIN
+            SET @Status = N'validation_error';
+            SET @Message = N'modelCode is required.';
+        END
+        ELSE IF (
+            SELECT COUNT(DISTINCT ModelId)
+            FROM dbo.vw_ModelSemantic
+            WHERE ModelCode = @modelCode
+              AND (TenantId = @TenantId OR TenantId IS NULL)
+        ) > 1
+        BEGIN
+            SET @Status = N'validation_error';
+            SET @Message = N'modelCode is ambiguous.';
+        END
+        ELSE
+        BEGIN
+            SET @modelId = (
+                SELECT MAX(ModelId)
+                FROM dbo.vw_ModelSemantic
+                WHERE ModelCode = @modelCode
+                  AND (TenantId = @TenantId OR TenantId IS NULL)
+            );
+            SET @RowCount = (SELECT COUNT(1) FROM dbo.vw_ModelSemantic WHERE ModelId = @modelId AND (TenantId = @TenantId OR TenantId IS NULL));
+            IF @RowCount = 0
+            BEGIN
+                SET @Status = N'no_data';
+                SET @Message = N'Model was not found.';
+            END;
+        END;
+    END;
 
     SELECT (
         SELECT
-            meta = (
-                SELECT @TenantId AS tenantId, @GeneratedAtUtc AS generatedAtUtc, @RowCount AS [rowCount]
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
-            ),
-            columns = (
-                SELECT [name], [type], [descriptionKey]
-                FROM (VALUES
-                    ('TenantId', 'nvarchar(50)', NULL),
-                    ('ModelId', 'int', 'model.id'),
-                    ('ModelCode', 'nvarchar(50)', 'model.code'),
-                    ('Name', 'nvarchar(200)', 'model.name'),
-                    ('Description', 'nvarchar(max)', 'model.description'),
-                    ('TotalCbm', 'decimal(18,6)', 'model.cbm'),
-                    ('TotalWeightKg', 'decimal(18,6)', 'model.weight'),
-                    ('LoadabilityIndex', 'decimal(10,4)', 'model.loadability'),
-                    ('Qnt40HC', 'int', 'model.qnt40hc'),
-                    ('PieceCount', 'int', 'model.pieceCount'),
-                    ('BoxInSet', 'int', 'model.boxInSet'),
-                    ('PackagingName', 'nvarchar(100)', 'model.packaging'),
-                    ('CartonCbm', 'decimal(18,6)', 'model.cartonCbm'),
-                    ('CartonWeightKg', 'decimal(18,6)', 'model.cartonWeight')
-                ) AS cols([name], [type], [descriptionKey])
-                FOR JSON PATH, INCLUDE_NULL_VALUES
-            ),
-            rows = (
-                SELECT TenantId, ModelId, ModelCode, Name, Description, TotalCbm, TotalWeightKg,
-                       LoadabilityIndex, Qnt40HC, PieceCount, BoxInSet, PackagingName, CartonCbm, CartonWeightKg
-                FROM dbo.vw_ModelSemantic
-                WHERE ModelId = @modelId
-                  AND (TenantId = @TenantId OR TenantId IS NULL)
-                FOR JSON PATH, INCLUDE_NULL_VALUES
-            )
-        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            JSON_QUERY((SELECT @CapabilityKey AS capabilityKey, @TenantId AS tenantId, @modelCode AS modelCode, @RowCount AS [rowCount], @Status AS [status], @Message AS [message], @GeneratedAtUtc AS generatedAtUtc FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES)) AS meta,
+            JSON_QUERY((SELECT [name], [label], [type] FROM (VALUES
+                (N'TenantId', N'Tenant', N'string'),
+                (N'ModelId', N'Model ID', N'int'),
+                (N'ModelCode', N'Model Code', N'string'),
+                (N'Name', N'Name', N'string'),
+                (N'Description', N'Description', N'string'),
+                (N'TotalCbm', N'Total CBM', N'decimal'),
+                (N'TotalWeightKg', N'Total Weight KG', N'decimal'),
+                (N'LoadabilityIndex', N'Loadability Index', N'decimal'),
+                (N'Qnt40HC', N'40HC Quantity', N'int'),
+                (N'PieceCount', N'Piece Count', N'int'),
+                (N'BoxInSet', N'Box In Set', N'int'),
+                (N'PackagingName', N'Packaging Name', N'string'),
+                (N'CartonCbm', N'Carton CBM', N'decimal'),
+                (N'CartonWeightKg', N'Carton Weight KG', N'decimal')
+            ) AS cols([name], [label], [type]) FOR JSON PATH, INCLUDE_NULL_VALUES)) AS columns,
+            JSON_QUERY(COALESCE((SELECT TenantId, ModelId, ModelCode, Name, Description, TotalCbm, TotalWeightKg, LoadabilityIndex, Qnt40HC, PieceCount, BoxInSet, PackagingName, CartonCbm, CartonWeightKg FROM dbo.vw_ModelSemantic WHERE ModelId = @modelId AND (TenantId = @TenantId OR TenantId IS NULL) FOR JSON PATH, INCLUDE_NULL_VALUES), N'[]')) AS [rows]
+        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
     ) AS ResultJson;
 END;
 GO
@@ -118,57 +125,56 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF ISJSON(@ArgsJson) <> 1
-    BEGIN
-        RAISERROR('@ArgsJson must be valid JSON.', 16, 1);
-        RETURN;
-    END;
-
-    DECLARE @modelCode nvarchar(50) = NULLIF(LTRIM(RTRIM(JSON_VALUE(@ArgsJson, '$.modelCode'))), N'');
-    IF @modelCode IS NULL
-    BEGIN
-        RAISERROR('modelCode is required.', 16, 1);
-        RETURN;
-    END;
-
-    DECLARE @modelId int = (
-        SELECT MAX(ModelId)
-        FROM dbo.vw_ModelSemantic
-        WHERE ModelCode = @modelCode
-          AND (TenantId = @TenantId OR TenantId IS NULL)
-    );
+    DECLARE @CapabilityKey nvarchar(200) = N'model.pieces.by-code';
     DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();
-    DECLARE @RowCount int = (
-        SELECT COUNT(1) FROM dbo.ModelPiece WHERE ModelId = @modelId AND (TenantId = @TenantId OR TenantId IS NULL)
-    );
+    DECLARE @NormalizedArgsJson nvarchar(max) = COALESCE(NULLIF(@ArgsJson, N''), N'{}');
+    DECLARE @Status nvarchar(30) = N'ok';
+    DECLARE @Message nvarchar(400) = NULL;
+    DECLARE @RowCount int = 0;
+    DECLARE @modelCode nvarchar(50) = NULL;
+    DECLARE @modelId int = NULL;
+
+    IF ISJSON(@NormalizedArgsJson) <> 1
+    BEGIN
+        SET @Status = N'validation_error';
+        SET @Message = N'@ArgsJson must be valid JSON.';
+    END
+    ELSE
+    BEGIN
+        SET @modelCode = NULLIF(LTRIM(RTRIM(JSON_VALUE(@NormalizedArgsJson, N'$.modelCode'))), N'');
+        IF @modelCode IS NULL
+        BEGIN
+            SET @Status = N'validation_error';
+            SET @Message = N'modelCode is required.';
+        END
+        ELSE
+        BEGIN
+            SET @modelId = (SELECT MAX(ModelId) FROM dbo.vw_ModelSemantic WHERE ModelCode = @modelCode AND (TenantId = @TenantId OR TenantId IS NULL));
+            IF @modelId IS NULL
+            BEGIN
+                SET @Status = N'no_data';
+                SET @Message = N'Model was not found.';
+            END
+            ELSE
+            BEGIN
+                SET @RowCount = (SELECT COUNT(1) FROM dbo.ModelPiece WHERE ModelId = @modelId AND (TenantId = @TenantId OR TenantId IS NULL));
+            END;
+        END;
+    END;
 
     SELECT (
         SELECT
-            meta = (
-                SELECT @TenantId AS tenantId, @GeneratedAtUtc AS generatedAtUtc, @RowCount AS [rowCount]
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
-            ),
-            columns = (
-                SELECT [name], [type], [descriptionKey]
-                FROM (VALUES
-                    ('ModelPieceId', 'int', NULL),
-                    ('ModelId', 'int', 'model.id'),
-                    ('PieceName', 'nvarchar(200)', 'piece.name'),
-                    ('Quantity', 'int', 'piece.quantity'),
-                    ('ChildModelId', 'int', 'piece.childModel'),
-                    ('Sequence', 'int', 'piece.sequence')
-                ) AS cols([name], [type], [descriptionKey])
-                FOR JSON PATH, INCLUDE_NULL_VALUES
-            ),
-            rows = (
-                SELECT ModelPieceId, ModelId, PieceName, Quantity, ChildModelId, Sequence
-                FROM dbo.ModelPiece
-                WHERE ModelId = @modelId
-                  AND (TenantId = @TenantId OR TenantId IS NULL)
-                ORDER BY Sequence
-                FOR JSON PATH, INCLUDE_NULL_VALUES
-            )
-        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            JSON_QUERY((SELECT @CapabilityKey AS capabilityKey, @TenantId AS tenantId, @modelCode AS modelCode, @RowCount AS [rowCount], @Status AS [status], @Message AS [message], @GeneratedAtUtc AS generatedAtUtc FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES)) AS meta,
+            JSON_QUERY((SELECT [name], [label], [type] FROM (VALUES
+                (N'ModelPieceId', N'Model Piece ID', N'int'),
+                (N'ModelId', N'Model ID', N'int'),
+                (N'PieceName', N'Piece Name', N'string'),
+                (N'Quantity', N'Quantity', N'int'),
+                (N'ChildModelId', N'Child Model ID', N'int'),
+                (N'Sequence', N'Sequence', N'int')
+            ) AS cols([name], [label], [type]) FOR JSON PATH, INCLUDE_NULL_VALUES)) AS columns,
+            JSON_QUERY(COALESCE((SELECT ModelPieceId, ModelId, PieceName, Quantity, ChildModelId, Sequence FROM dbo.ModelPiece WHERE ModelId = @modelId AND (TenantId = @TenantId OR TenantId IS NULL) ORDER BY Sequence FOR JSON PATH, INCLUDE_NULL_VALUES), N'[]')) AS [rows]
+        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
     ) AS ResultJson;
 END;
 GO
@@ -180,60 +186,58 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF ISJSON(@ArgsJson) <> 1
-    BEGIN
-        RAISERROR('@ArgsJson must be valid JSON.', 16, 1);
-        RETURN;
-    END;
-
-    DECLARE @modelCode nvarchar(50) = NULLIF(LTRIM(RTRIM(JSON_VALUE(@ArgsJson, '$.modelCode'))), N'');
-    IF @modelCode IS NULL
-    BEGIN
-        RAISERROR('modelCode is required.', 16, 1);
-        RETURN;
-    END;
-
-    DECLARE @modelId int = (
-        SELECT MAX(ModelId)
-        FROM dbo.vw_ModelSemantic
-        WHERE ModelCode = @modelCode
-          AND (TenantId = @TenantId OR TenantId IS NULL)
-    );
+    DECLARE @CapabilityKey nvarchar(200) = N'model.materials.by-code';
     DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();
-    DECLARE @RowCount int = (
-        SELECT COUNT(1) FROM dbo.ModelMaterial WHERE ModelId = @modelId AND (TenantId = @TenantId OR TenantId IS NULL)
-    );
+    DECLARE @NormalizedArgsJson nvarchar(max) = COALESCE(NULLIF(@ArgsJson, N''), N'{}');
+    DECLARE @Status nvarchar(30) = N'ok';
+    DECLARE @Message nvarchar(400) = NULL;
+    DECLARE @RowCount int = 0;
+    DECLARE @modelCode nvarchar(50) = NULL;
+    DECLARE @modelId int = NULL;
+
+    IF ISJSON(@NormalizedArgsJson) <> 1
+    BEGIN
+        SET @Status = N'validation_error';
+        SET @Message = N'@ArgsJson must be valid JSON.';
+    END
+    ELSE
+    BEGIN
+        SET @modelCode = NULLIF(LTRIM(RTRIM(JSON_VALUE(@NormalizedArgsJson, N'$.modelCode'))), N'');
+        IF @modelCode IS NULL
+        BEGIN
+            SET @Status = N'validation_error';
+            SET @Message = N'modelCode is required.';
+        END
+        ELSE
+        BEGIN
+            SET @modelId = (SELECT MAX(ModelId) FROM dbo.vw_ModelSemantic WHERE ModelCode = @modelCode AND (TenantId = @TenantId OR TenantId IS NULL));
+            IF @modelId IS NULL
+            BEGIN
+                SET @Status = N'no_data';
+                SET @Message = N'Model was not found.';
+            END
+            ELSE
+            BEGIN
+                SET @RowCount = (SELECT COUNT(1) FROM dbo.ModelMaterial WHERE ModelId = @modelId AND (TenantId = @TenantId OR TenantId IS NULL));
+            END;
+        END;
+    END;
 
     SELECT (
         SELECT
-            meta = (
-                SELECT @TenantId AS tenantId, @GeneratedAtUtc AS generatedAtUtc, @RowCount AS [rowCount]
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
-            ),
-            columns = (
-                SELECT [name], [type], [descriptionKey]
-                FROM (VALUES
-                    ('ModelMaterialId', 'int', NULL),
-                    ('Section', 'nvarchar(100)', 'material.section'),
-                    ('Quantity', 'decimal(18,4)', 'material.quantity'),
-                    ('Unit', 'nvarchar(50)', 'material.unit'),
-                    ('WeightKg', 'decimal(18,6)', 'material.weight'),
-                    ('MaterialCode', 'nvarchar(50)', 'material.code'),
-                    ('MaterialName', 'nvarchar(200)', 'material.name'),
-                    ('Category', 'nvarchar(100)', 'material.category')
-                ) AS cols([name], [type], [descriptionKey])
-                FOR JSON PATH, INCLUDE_NULL_VALUES
-            ),
-            rows = (
-                SELECT mm.ModelMaterialId, mm.Section, mm.Quantity, mm.Unit, mm.WeightKg,
-                       mat.MaterialCode, mat.Name AS MaterialName, mat.Category
-                FROM dbo.ModelMaterial mm
-                JOIN dbo.Material mat ON mat.MaterialId = mm.MaterialId
-                WHERE mm.ModelId = @modelId
-                  AND (mm.TenantId = @TenantId OR mm.TenantId IS NULL)
-                FOR JSON PATH, INCLUDE_NULL_VALUES
-            )
-        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            JSON_QUERY((SELECT @CapabilityKey AS capabilityKey, @TenantId AS tenantId, @modelCode AS modelCode, @RowCount AS [rowCount], @Status AS [status], @Message AS [message], @GeneratedAtUtc AS generatedAtUtc FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES)) AS meta,
+            JSON_QUERY((SELECT [name], [label], [type] FROM (VALUES
+                (N'ModelMaterialId', N'Model Material ID', N'int'),
+                (N'Section', N'Section', N'string'),
+                (N'Quantity', N'Quantity', N'decimal'),
+                (N'Unit', N'Unit', N'string'),
+                (N'WeightKg', N'Weight KG', N'decimal'),
+                (N'MaterialCode', N'Material Code', N'string'),
+                (N'MaterialName', N'Material Name', N'string'),
+                (N'Category', N'Category', N'string')
+            ) AS cols([name], [label], [type]) FOR JSON PATH, INCLUDE_NULL_VALUES)) AS columns,
+            JSON_QUERY(COALESCE((SELECT mm.ModelMaterialId, mm.Section, mm.Quantity, mm.Unit, mm.WeightKg, mat.MaterialCode, mat.Name AS MaterialName, mat.Category FROM dbo.ModelMaterial mm JOIN dbo.Material mat ON mat.MaterialId = mm.MaterialId WHERE mm.ModelId = @modelId AND (mm.TenantId = @TenantId OR mm.TenantId IS NULL) FOR JSON PATH, INCLUDE_NULL_VALUES), N'[]')) AS [rows]
+        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
     ) AS ResultJson;
 END;
 GO
@@ -245,59 +249,58 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF ISJSON(@ArgsJson) <> 1
-    BEGIN
-        RAISERROR('@ArgsJson must be valid JSON.', 16, 1);
-        RETURN;
-    END;
-
-    DECLARE @modelCode nvarchar(50) = NULLIF(LTRIM(RTRIM(JSON_VALUE(@ArgsJson, '$.modelCode'))), N'');
-    IF @modelCode IS NULL
-    BEGIN
-        RAISERROR('modelCode is required.', 16, 1);
-        RETURN;
-    END;
-
-    DECLARE @modelId int = (
-        SELECT MAX(ModelId)
-        FROM dbo.vw_ModelSemantic
-        WHERE ModelCode = @modelCode
-          AND (TenantId = @TenantId OR TenantId IS NULL)
-    );
+    DECLARE @CapabilityKey nvarchar(200) = N'model.packaging.by-code';
     DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();
-    DECLARE @RowCount int = (
-        SELECT COUNT(1) FROM dbo.ModelPackagingOption WHERE ModelId = @modelId AND (TenantId = @TenantId OR TenantId IS NULL)
-    );
+    DECLARE @NormalizedArgsJson nvarchar(max) = COALESCE(NULLIF(@ArgsJson, N''), N'{}');
+    DECLARE @Status nvarchar(30) = N'ok';
+    DECLARE @Message nvarchar(400) = NULL;
+    DECLARE @RowCount int = 0;
+    DECLARE @modelCode nvarchar(50) = NULL;
+    DECLARE @modelId int = NULL;
+
+    IF ISJSON(@NormalizedArgsJson) <> 1
+    BEGIN
+        SET @Status = N'validation_error';
+        SET @Message = N'@ArgsJson must be valid JSON.';
+    END
+    ELSE
+    BEGIN
+        SET @modelCode = NULLIF(LTRIM(RTRIM(JSON_VALUE(@NormalizedArgsJson, N'$.modelCode'))), N'');
+        IF @modelCode IS NULL
+        BEGIN
+            SET @Status = N'validation_error';
+            SET @Message = N'modelCode is required.';
+        END
+        ELSE
+        BEGIN
+            SET @modelId = (SELECT MAX(ModelId) FROM dbo.vw_ModelSemantic WHERE ModelCode = @modelCode AND (TenantId = @TenantId OR TenantId IS NULL));
+            IF @modelId IS NULL
+            BEGIN
+                SET @Status = N'no_data';
+                SET @Message = N'Model was not found.';
+            END
+            ELSE
+            BEGIN
+                SET @RowCount = (SELECT COUNT(1) FROM dbo.ModelPackagingOption WHERE ModelId = @modelId AND (TenantId = @TenantId OR TenantId IS NULL));
+            END;
+        END;
+    END;
 
     SELECT (
         SELECT
-            meta = (
-                SELECT @TenantId AS tenantId, @GeneratedAtUtc AS generatedAtUtc, @RowCount AS [rowCount]
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
-            ),
-            columns = (
-                SELECT [name], [type], [descriptionKey]
-                FROM (VALUES
-                    ('PackagingOptionId', 'int', NULL),
-                    ('OptionName', 'nvarchar(100)', 'packaging.optionName'),
-                    ('PackagingType', 'nvarchar(50)', 'packaging.type'),
-                    ('UnitsPerCarton', 'int', 'packaging.unitsPerCarton'),
-                    ('CartonCbm', 'decimal(18,6)', 'packaging.cartonCbm'),
-                    ('CartonWeightKg', 'decimal(18,6)', 'packaging.cartonWeight'),
-                    ('LoadabilityIndex', 'decimal(10,4)', 'packaging.loadability'),
-                    ('Qnt40HC', 'int', 'packaging.qnt40hc')
-                ) AS cols([name], [type], [descriptionKey])
-                FOR JSON PATH, INCLUDE_NULL_VALUES
-            ),
-            rows = (
-                SELECT PackagingOptionId, OptionName, PackagingType, UnitsPerCarton,
-                       CartonCbm, CartonWeightKg, LoadabilityIndex, Qnt40HC
-                FROM dbo.ModelPackagingOption
-                WHERE ModelId = @modelId
-                  AND (TenantId = @TenantId OR TenantId IS NULL)
-                FOR JSON PATH, INCLUDE_NULL_VALUES
-            )
-        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            JSON_QUERY((SELECT @CapabilityKey AS capabilityKey, @TenantId AS tenantId, @modelCode AS modelCode, @RowCount AS [rowCount], @Status AS [status], @Message AS [message], @GeneratedAtUtc AS generatedAtUtc FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES)) AS meta,
+            JSON_QUERY((SELECT [name], [label], [type] FROM (VALUES
+                (N'PackagingOptionId', N'Packaging Option ID', N'int'),
+                (N'OptionName', N'Option Name', N'string'),
+                (N'PackagingType', N'Packaging Type', N'string'),
+                (N'UnitsPerCarton', N'Units Per Carton', N'int'),
+                (N'CartonCbm', N'Carton CBM', N'decimal'),
+                (N'CartonWeightKg', N'Carton Weight KG', N'decimal'),
+                (N'LoadabilityIndex', N'Loadability Index', N'decimal'),
+                (N'Qnt40HC', N'40HC Quantity', N'int')
+            ) AS cols([name], [label], [type]) FOR JSON PATH, INCLUDE_NULL_VALUES)) AS columns,
+            JSON_QUERY(COALESCE((SELECT PackagingOptionId, OptionName, PackagingType, UnitsPerCarton, CartonCbm, CartonWeightKg, LoadabilityIndex, Qnt40HC FROM dbo.ModelPackagingOption WHERE ModelId = @modelId AND (TenantId = @TenantId OR TenantId IS NULL) FOR JSON PATH, INCLUDE_NULL_VALUES), N'[]')) AS [rows]
+        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
     ) AS ResultJson;
 END;
 GO
@@ -309,71 +312,71 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF ISJSON(@ArgsJson) <> 1
-    BEGIN
-        RAISERROR('@ArgsJson must be valid JSON.', 16, 1);
-        RETURN;
-    END;
-
-    DECLARE @modelCodesJson nvarchar(max) = JSON_QUERY(@ArgsJson, '$.modelCodes');
-    IF @modelCodesJson IS NULL OR ISJSON(@modelCodesJson) <> 1
-    BEGIN
-        RAISERROR('modelCodes must be a valid JSON array.', 16, 1);
-        RETURN;
-    END;
+    DECLARE @CapabilityKey nvarchar(200) = N'model.compare';
+    DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();
+    DECLARE @NormalizedArgsJson nvarchar(max) = COALESCE(NULLIF(@ArgsJson, N''), N'{}');
+    DECLARE @Status nvarchar(30) = N'ok';
+    DECLARE @Message nvarchar(400) = NULL;
+    DECLARE @RowCount int = 0;
 
     DECLARE @RequestedCodes TABLE (ModelCode nvarchar(50) NOT NULL PRIMARY KEY);
-    INSERT INTO @RequestedCodes (ModelCode)
-    SELECT DISTINCT NULLIF(LTRIM(RTRIM([value])), N'')
-    FROM OPENJSON(@modelCodesJson)
-    WHERE NULLIF(LTRIM(RTRIM([value])), N'') IS NOT NULL;
 
-    IF (SELECT COUNT(1) FROM @RequestedCodes) < 2
+    IF ISJSON(@NormalizedArgsJson) <> 1
     BEGIN
-        RAISERROR('modelCodes must contain at least two model codes.', 16, 1);
-        RETURN;
-    END;
+        SET @Status = N'validation_error';
+        SET @Message = N'@ArgsJson must be valid JSON.';
+    END
+    ELSE IF JSON_QUERY(@NormalizedArgsJson, N'$.modelCodes') IS NULL OR ISJSON(JSON_QUERY(@NormalizedArgsJson, N'$.modelCodes')) <> 1
+    BEGIN
+        SET @Status = N'validation_error';
+        SET @Message = N'modelCodes must be a valid JSON array.';
+    END
+    ELSE
+    BEGIN
+        INSERT INTO @RequestedCodes (ModelCode)
+        SELECT DISTINCT NULLIF(LTRIM(RTRIM([value])), N'')
+        FROM OPENJSON(JSON_QUERY(@NormalizedArgsJson, N'$.modelCodes'))
+        WHERE [type] IN (1, 2)
+          AND NULLIF(LTRIM(RTRIM([value])), N'') IS NOT NULL;
 
-    DECLARE @GeneratedAtUtc datetime2(3) = sysutcdatetime();
-    DECLARE @RowCount int = (
-        SELECT COUNT(1)
-        FROM dbo.vw_ModelSemantic v
-        JOIN @RequestedCodes requested ON requested.ModelCode = v.ModelCode
-        WHERE v.TenantId = @TenantId OR v.TenantId IS NULL
-    );
-
-    SELECT (
-        SELECT
-            meta = (
-                SELECT @TenantId AS tenantId, @GeneratedAtUtc AS generatedAtUtc, @RowCount AS [rowCount]
-                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
-            ),
-            columns = (
-                SELECT [name], [type], [descriptionKey]
-                FROM (VALUES
-                    ('ModelId', 'int', 'model.id'),
-                    ('ModelCode', 'nvarchar(50)', 'model.code'),
-                    ('Name', 'nvarchar(200)', 'model.name'),
-                    ('TotalCbm', 'decimal(18,6)', 'model.cbm'),
-                    ('TotalWeightKg', 'decimal(18,6)', 'model.weight'),
-                    ('LoadabilityIndex', 'decimal(10,4)', 'model.loadability'),
-                    ('Qnt40HC', 'int', 'model.qnt40hc'),
-                    ('PieceCount', 'int', 'model.pieceCount'),
-                    ('BoxInSet', 'int', 'model.boxInSet'),
-                    ('PackagingName', 'nvarchar(100)', 'model.packaging')
-                ) AS cols([name], [type], [descriptionKey])
-                FOR JSON PATH, INCLUDE_NULL_VALUES
-            ),
-            rows = (
-                SELECT v.ModelId, v.ModelCode, v.Name, v.TotalCbm, v.TotalWeightKg,
-                       v.LoadabilityIndex, v.Qnt40HC, v.PieceCount, v.BoxInSet, v.PackagingName
+        IF (SELECT COUNT(1) FROM @RequestedCodes) < 2
+        BEGIN
+            SET @Status = N'validation_error';
+            SET @Message = N'modelCodes must contain at least two model codes.';
+        END
+        ELSE
+        BEGIN
+            SET @RowCount = (
+                SELECT COUNT(1)
                 FROM dbo.vw_ModelSemantic v
                 JOIN @RequestedCodes requested ON requested.ModelCode = v.ModelCode
                 WHERE v.TenantId = @TenantId OR v.TenantId IS NULL
-                ORDER BY v.ModelCode
-                FOR JSON PATH, INCLUDE_NULL_VALUES
-            )
-        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            );
+            IF @RowCount = 0
+            BEGIN
+                SET @Status = N'no_data';
+                SET @Message = N'No requested models were found.';
+            END;
+        END;
+    END;
+
+    SELECT (
+        SELECT
+            JSON_QUERY((SELECT @CapabilityKey AS capabilityKey, @TenantId AS tenantId, @RowCount AS [rowCount], @Status AS [status], @Message AS [message], @GeneratedAtUtc AS generatedAtUtc FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES)) AS meta,
+            JSON_QUERY((SELECT [name], [label], [type] FROM (VALUES
+                (N'ModelId', N'Model ID', N'int'),
+                (N'ModelCode', N'Model Code', N'string'),
+                (N'Name', N'Name', N'string'),
+                (N'TotalCbm', N'Total CBM', N'decimal'),
+                (N'TotalWeightKg', N'Total Weight KG', N'decimal'),
+                (N'LoadabilityIndex', N'Loadability Index', N'decimal'),
+                (N'Qnt40HC', N'40HC Quantity', N'int'),
+                (N'PieceCount', N'Piece Count', N'int'),
+                (N'BoxInSet', N'Box In Set', N'int'),
+                (N'PackagingName', N'Packaging Name', N'string')
+            ) AS cols([name], [label], [type]) FOR JSON PATH, INCLUDE_NULL_VALUES)) AS columns,
+            JSON_QUERY(COALESCE((SELECT v.ModelId, v.ModelCode, v.Name, v.TotalCbm, v.TotalWeightKg, v.LoadabilityIndex, v.Qnt40HC, v.PieceCount, v.BoxInSet, v.PackagingName FROM dbo.vw_ModelSemantic v JOIN @RequestedCodes requested ON requested.ModelCode = v.ModelCode WHERE v.TenantId = @TenantId OR v.TenantId IS NULL ORDER BY v.ModelCode FOR JSON PATH, INCLUDE_NULL_VALUES), N'[]')) AS [rows]
+        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
     ) AS ResultJson;
 END;
 GO
@@ -388,5 +391,5 @@ BEGIN
 END;
 GO
 
-PRINT N'Read-only model ai_model_* procedures are present.';
+PRINT N'Read-only model ai_model_* procedures are present with consistent JSON envelopes.';
 GO
