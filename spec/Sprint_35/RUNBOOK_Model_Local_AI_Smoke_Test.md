@@ -1,12 +1,6 @@
-# Sprint 35 Runbook - Model Local AI Smoke Test
+# Model Local AI Smoke Test
 
-This runbook proves the Sprint 35 model-only route:
-
-```text
-API request -> SupervisorRuntime -> Official Microsoft Agent Framework -> local AI provider -> model tools -> CapabilityExecutionFacade -> AnswerComposer
-```
-
-## 1. Configure appsettings.Local.json
+## 1. Local Settings
 
 Create or update `src/TILSOFTAI.Api/appsettings.Local.json`.
 
@@ -36,67 +30,44 @@ Create or update `src/TILSOFTAI.Api/appsettings.Local.json`.
 }
 ```
 
-Replace `YOUR_TOOL_CALLING_MODEL` with a real local model that supports OpenAI-compatible tool/function calling. Do not leave `CHANGE_ME_TOOL_CALLING_MODEL`.
+Use a real OpenAI-compatible tool-calling model. Do not leave `CHANGE_ME_TOOL_CALLING_MODEL` or another placeholder value.
 
-`LocalAi:BaseUrl` must be the OpenAI-compatible base URL used by the SDK client, usually ending in `/v1`. `LocalAi:ChatCompletionsPath` is not appended by the current SDK registration.
-
-## 2. Set Local AI API Key
-
-PowerShell:
+## 2. Environment Variable
 
 ```powershell
 $env:TILSOFTAI_LOCAL_AI_API_KEY = "local-ai"
 ```
 
-Use the real key if your local gateway requires one. For local gateways that ignore keys, any non-empty value is acceptable.
+Use the real key if your local gateway requires one.
 
-## 3. Start the API
+## 3. Start API
 
 ```powershell
 dotnet run --project src\TILSOFTAI.Api\TILSOFTAI.Api.csproj --urls http://localhost:5000
 ```
 
-## 4. Check Health and Readiness
+## 4. Health Check
 
 ```powershell
 Invoke-RestMethod http://localhost:5000/health/live
 Invoke-RestMethod http://localhost:5000/health/ready
 ```
 
-Expected readiness:
+Readiness should be healthy when `AiRouting:Provider` is `OpenAiCompatibleLocal`, `LocalAi:Model` is a real non-placeholder model, `IChatClient` is registered, `AllowedDomains` is only `model`, and `FallbackToLegacyPipeline` is `false`.
 
-```text
-Healthy when:
-- AiRouting:Provider = OpenAiCompatibleLocal
-- LocalAi:Model is a real non-placeholder tool-calling model
-- IChatClient is registered
-- AiRouting:AllowedDomains contains only model
-- AiRouting:FallbackToLegacyPipeline = false
-```
+## 5. 5 Smoke Prompts
 
-If `/health/ready` is unhealthy, inspect `official-agent-framework` in logs or `/health/detailed` with an authenticated request.
+Send each prompt to `POST http://localhost:5000/api/chats` with `preferredLanguage` and `metadata.answerMode`.
 
-## 5. Send a Chat Request
+| Prompt | Language | Answer mode | Expected behavior |
+| --- | --- | --- | --- |
+| `Có bao nhiêu model?` | `vi-VN` | `structured` | Selects `model_count`; no legacy fallback. |
+| `How many models are active?` | `en-US` | `structured` | Selects `model_count`; no legacy fallback. |
+| `Cho tôi xem thông tin model ABC` | `vi-VN` | `rawJson` | Selects overview by code with `modelCode = "ABC"`; raw envelope only. |
+| `Show materials for model ABC` | `en-US` | `structured` | Selects materials by code with `modelCode = "ABC"`; blocks and provenance returned. |
+| `Cho tôi xem thông tin model` | `vi-VN` | `structured` | Returns a follow-up for missing `modelCode`; no SQL execution. |
 
-Base request:
-
-```powershell
-$body = @{
-  input = "Có bao nhiêu model?"
-  preferredLanguage = "vi-VN"
-  metadata = @{
-    answerMode = "structured"
-  }
-} | ConvertTo-Json -Depth 5
-
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:5000/api/chats `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-## 6. Request raw_json Mode
+Example body:
 
 ```powershell
 $body = @{
@@ -107,96 +78,29 @@ $body = @{
   }
 } | ConvertTo-Json -Depth 5
 
-Invoke-RestMethod -Method Post -Uri http://localhost:5000/api/chats -ContentType "application/json" -Body $body
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://localhost:5000/api/chats `
+  -ContentType "application/json" `
+  -Body $body
 ```
 
-Expected behavior:
+## 6. Expected Logs
 
-```text
-model_get_overview is selected.
-Arguments include modelCode/model_code = ABC.
-The response is composed by AnswerComposer in raw_json mode.
-No legacy fallback is used.
-```
-
-## 7. Request structured Mode
-
-```powershell
-$body = @{
-  input = "Show materials for model ABC"
-  preferredLanguage = "en-US"
-  metadata = @{
-    answerMode = "structured"
-  }
-} | ConvertTo-Json -Depth 5
-
-Invoke-RestMethod -Method Post -Uri http://localhost:5000/api/chats -ContentType "application/json" -Body $body
-```
-
-Expected behavior:
-
-```text
-model_get_materials is selected.
-Arguments include modelCode/model_code = ABC.
-The response is composed by AnswerComposer in structured mode.
-No legacy fallback is used.
-```
-
-## 8. Required Smoke Prompts
-
-Run this minimum set:
-
-| Prompt | Expected behavior |
-| --- | --- |
-| `Có bao nhiêu model?` | `model_count` |
-| `How many models are active?` | `model_count` |
-| `Cho tôi xem thông tin model ABC` | `model_get_overview` with `modelCode`/`model_code` = `ABC` |
-| `Show materials for model ABC` | `model_get_materials` with `modelCode`/`model_code` = `ABC` |
-| `Model ABC gồm những piece nào?` | `model_get_pieces` with `modelCode`/`model_code` = `ABC` |
-| `Cho tôi xem thông tin model` | Follow-up question; no SQL execution |
-
-## 9. Repeatable API Smoke File
-
-Run the documented HTTP smoke cases in:
-
-```text
-spec/Sprint_35/smoke/model_api_smoke.http
-```
-
-The file covers:
-
-```text
-1. Model count, structured, vi-VN.
-2. Model overview, raw_json, vi-VN.
-3. Missing model parameter, structured, vi-VN.
-4. Materials by model code, structured, en-US.
-```
-
-The companion checklist is:
-
-```text
-spec/Sprint_35/smoke/README.md
-```
-
-## 10. Logs to Inspect
-
-For each call, inspect structured logs and tool routing traces for:
+For each request, logs and routing traces should include:
 
 ```text
 correlationId
+tenantId
+userId
+conversationId
 provider
 model
-allowedDomains
-candidateCapabilities
-advertisedFunctionNames
-selectedFunctionName
-selectedArguments
-capabilityKey
-procedureName
-rowCount
-durationMs
-answerMode
-fallbackUsed=false
+candidate capability keys
+advertised tool names
+selected function
+capability key
+row count
+answer mode
+fallback used = false
 ```
-
-The smoke is successful only when one API request reaches `OfficialAgentToolRouter`, creates an official `AIAgent`, advertises model-only function tools, invokes an `AIFunction`, calls `CapabilityExecutionFacade`, avoids direct SQL in the function callback, passes through `AnswerComposer`, and does not use legacy fallback.

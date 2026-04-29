@@ -1,7 +1,7 @@
 namespace TILSOFTAI.Orchestration.Capabilities;
 
 /// <summary>
-/// Sprint 5: Structured capability request hint.
+/// Structured capability request hint.
 /// Populated by SupervisorRuntime from classification results and/or explicit request metadata.
 /// Used by ICapabilityResolver to select the correct capability without naive string matching.
 /// </summary>

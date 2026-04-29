@@ -41,7 +41,7 @@ public sealed class SqlRuntimePolicyProvider : IRuntimePolicyProvider
         CancellationToken ct = default)
     {
         var env = environment ?? _options.Environment;
-        // PATCH 36.05: Canonical cache key - sort capability scopes for determinism
+        // Canonical cache key - sort capability scopes for determinism
         var sortedCapabilityScopes = capabilityScopes.OrderBy(scope => scope, StringComparer.OrdinalIgnoreCase).ToList();
         var cacheKey = $"policy:{tenantId}:{string.Join(",", sortedCapabilityScopes)}:{appKey}:{env}:{language}";
 

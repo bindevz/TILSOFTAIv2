@@ -72,7 +72,7 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
         RecordRequest(request);
         _logger.LogInformation(
             "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | allowedDomains: {AllowedDomains} | answerMode: {AnswerMode} | fallbackUsed: false",
-            Sprint35TraceEvents.AgentRouteStarted,
+            AgentRoutingTraceEvents.RouteStarted,
             request.ExecutionContext.CorrelationId,
             request.ExecutionContext.TenantId,
             request.ExecutionContext.UserId,
@@ -112,7 +112,7 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
             _metrics?.RecordGauge(MetricNames.AgentRoutingCandidateCount, retrieval.Capabilities.Count, BaseLabels(request));
             _logger.LogInformation(
                 "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | candidate_count: {CandidateCount} | candidateCapabilityKeys: {CandidateCapabilityKeys} | durationMs: {DurationMs}",
-                Sprint35TraceEvents.CandidateSelectionCompleted,
+                AgentRoutingTraceEvents.CandidateSelectionCompleted,
                 request.ExecutionContext.CorrelationId,
                 request.ExecutionContext.TenantId,
                 request.ExecutionContext.UserId,
@@ -151,7 +151,7 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
             _metrics?.RecordGauge(MetricNames.AgentRoutingAdvertisedToolCount, tools.Count, BaseLabels(request));
             _logger.LogInformation(
                 "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | advertised_tool_count: {AdvertisedToolCount} | advertisedFunctionNames: {AdvertisedFunctionNames} | durationMs: {DurationMs}",
-                Sprint35TraceEvents.ToolsAdvertised,
+                AgentRoutingTraceEvents.ToolsAdvertised,
                 request.ExecutionContext.CorrelationId,
                 request.ExecutionContext.TenantId,
                 request.ExecutionContext.UserId,
@@ -188,7 +188,7 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
 
             _logger.LogInformation(
                 "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | advertisedFunctionNames: {AdvertisedFunctionNames}",
-                Sprint35TraceEvents.AgentRunStarted,
+                AgentRoutingTraceEvents.AgentRunStarted,
                 request.ExecutionContext.CorrelationId,
                 request.ExecutionContext.TenantId,
                 request.ExecutionContext.UserId,
@@ -208,7 +208,7 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
             _metrics?.RecordHistogram(MetricNames.AgentRoutingAgentDurationMs, StageDuration(stageLatencyMs, "agent_tool_selection"), BaseLabels(request));
             _logger.LogInformation(
                 "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | selectedFunctionName: {SelectedFunctionName} | capabilityKey: {CapabilityKey} | argumentsMasked: {ArgumentsMasked} | rowCount: {RowCount} | durationMs: {DurationMs}",
-                Sprint35TraceEvents.AgentToolInvoked,
+                AgentRoutingTraceEvents.AgentToolInvoked,
                 request.ExecutionContext.CorrelationId,
                 request.ExecutionContext.TenantId,
                 request.ExecutionContext.UserId,
@@ -226,7 +226,7 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
 
             _logger.LogInformation(
                 "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | answerMode: {AnswerMode} | capabilityKey: {CapabilityKey} | rowCount: {RowCount}",
-                Sprint35TraceEvents.AnswerComposerStarted,
+                AgentRoutingTraceEvents.AnswerComposerStarted,
                 request.ExecutionContext.CorrelationId,
                 request.ExecutionContext.TenantId,
                 request.ExecutionContext.UserId,
@@ -248,7 +248,7 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
             }
             _logger.LogInformation(
                 "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | answerMode: {AnswerMode} | answerType: {AnswerType} | capabilityKey: {CapabilityKey} | rowCount: {RowCount} | durationMs: {DurationMs}",
-                Sprint35TraceEvents.AnswerComposerCompleted,
+                AgentRoutingTraceEvents.AnswerComposerCompleted,
                 request.ExecutionContext.CorrelationId,
                 request.ExecutionContext.TenantId,
                 request.ExecutionContext.UserId,
@@ -280,7 +280,7 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
             _logger.LogWarning(
                 ex,
                 "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | errorCode: {ErrorCode} | durationMs: {DurationMs} | fallbackUsed: false",
-                Sprint35TraceEvents.AgentRouteFailedClosed,
+                AgentRoutingTraceEvents.RouteFailedClosed,
                 request.ExecutionContext.CorrelationId,
                 request.ExecutionContext.TenantId,
                 request.ExecutionContext.UserId,
@@ -313,7 +313,7 @@ public sealed class OfficialAgentToolRouter : IOfficialAgentToolRouter
     {
         _logger.LogWarning(
             "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | errorCode: {ErrorCode} | durationMs: {DurationMs} | fallbackUsed: false",
-            Sprint35TraceEvents.AgentRouteFailedClosed,
+            AgentRoutingTraceEvents.RouteFailedClosed,
             request.ExecutionContext.CorrelationId,
             request.ExecutionContext.TenantId,
             request.ExecutionContext.UserId,

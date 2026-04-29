@@ -48,7 +48,7 @@ public abstract class DomainAgentBase : IDomainAgent
             "AgentExecution | AgentId: {AgentId} | IntentType: {IntentType} | DomainHint: {DomainHint}",
             AgentId, task.IntentType, task.DomainHint ?? "none");
 
-        // Sprint 3: enforce write governance before delegation
+        // enforce write governance before delegation
         AgentWritePolicy.EnforceWriteGovernance(task, AgentId, _logger);
 
         await Task.CompletedTask;

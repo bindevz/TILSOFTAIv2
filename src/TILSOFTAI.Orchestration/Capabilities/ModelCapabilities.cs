@@ -3,7 +3,7 @@ using TILSOFTAI.Tools.Abstractions;
 namespace TILSOFTAI.Orchestration.Capabilities;
 
 /// <summary>
-/// Sprint 35: model-only read capability definitions for the official agent runtime.
+/// Model-only read capability definitions for the official agent runtime.
 /// </summary>
 public static class ModelCapabilities
 {

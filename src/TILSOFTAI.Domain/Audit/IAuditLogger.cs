@@ -31,6 +31,6 @@ public interface IAuditLogger
     /// </summary>
     void Log(AuditEvent auditEvent);
 
-    /// <summary>PATCH 31.06: Log governance decision (allow/deny).</summary>
+    /// <summary>Logs a governance decision (allow/deny).</summary>
     void LogGovernanceEvent(GovernanceAuditEvent @event);
 }

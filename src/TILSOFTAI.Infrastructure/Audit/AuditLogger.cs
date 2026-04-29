@@ -73,7 +73,7 @@ public sealed class AuditLogger : IAuditLogger
         EnqueueEvent(auditEvent);
     }
 
-    /// <summary>PATCH 31.06: Log governance decision (allow/deny).</summary>
+    /// <summary>Logs a governance decision (allow/deny).</summary>
     public void LogGovernanceEvent(GovernanceAuditEvent @event)
     {
         // Map string EventType to enum

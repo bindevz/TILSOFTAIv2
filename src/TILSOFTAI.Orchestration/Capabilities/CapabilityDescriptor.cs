@@ -1,7 +1,7 @@
 namespace TILSOFTAI.Orchestration.Capabilities;
 
 /// <summary>
-/// Sprint 4: First-class runtime capability metadata.
+/// First-class runtime capability metadata.
 /// Describes a single executable capability that an agent can invoke through an adapter.
 /// </summary>
 public sealed class CapabilityDescriptor

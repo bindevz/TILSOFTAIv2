@@ -94,6 +94,32 @@ public sealed class PlatformCatalogTests
     }
 
     [Fact]
+    public void ActivePlatformCatalog_ShouldContainOnlySixModelRuntimeCapabilities()
+    {
+        var path = Path.Combine(FindRepositoryRoot(), "catalog", "platform-catalog.json");
+        var provider = new FilePlatformCatalogProvider(
+            Options.Create(new PlatformCatalogOptions { CatalogPath = path }),
+            new Mock<ILogger<FilePlatformCatalogProvider>>().Object);
+
+        var snapshot = provider.Load();
+
+        snapshot.IsValid.Should().BeTrue();
+        snapshot.Capabilities.Should().HaveCount(6);
+        snapshot.Capabilities.Should().OnlyContain(capability => capability.Domain == "model");
+        snapshot.Capabilities.Select(capability => capability.CapabilityKey)
+            .Should()
+            .BeEquivalentTo(new[]
+            {
+                "model.count",
+                "model.overview.by-code",
+                "model.pieces.by-code",
+                "model.materials.by-code",
+                "model.compare",
+                "model.packaging.by-code"
+            });
+    }
+
+    [Fact]
     public void CompositeCapabilityRegistry_ShouldLetPlatformCatalogOverrideBootstrapConfiguration()
     {
         var staticCapability = new CapabilityDescriptor

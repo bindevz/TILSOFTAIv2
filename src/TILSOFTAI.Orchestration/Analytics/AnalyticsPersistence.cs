@@ -7,7 +7,7 @@ using TILSOFTAI.Domain.Configuration;
 namespace TILSOFTAI.Orchestration.Analytics;
 
 /// <summary>
-/// PATCH 29.06: Persists analytics task frames and validation errors for audit trail.
+/// Persists analytics task frames and validation errors for audit trail.
 /// </summary>
 public sealed class AnalyticsPersistence
 {

@@ -12,7 +12,7 @@ public sealed class SeasonNormalizer
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
-    /// PATCH 33 FIX: Direct season expansion without markers.
+    /// Direct season expansion without markers.
     /// Matches patterns like "24/25", "25/26" and expands to "2024/2025", "2025/2026".
     /// Only expands when both sides are exactly 2 digits and second = first+1 (mod 100).
     /// </summary>

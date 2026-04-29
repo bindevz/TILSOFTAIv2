@@ -24,22 +24,22 @@ namespace TILSOFTAI.Domain.Metrics
         public const string SqlPoolActiveConnections = "tilsoftai_sql_pool_active_connections";
         public const string SqlPoolIdleConnections = "tilsoftai_sql_pool_idle_connections";
         
-        // PATCH 31.05: Cache write background queue metrics
+        // Cache write background queue metrics
         public const string CacheWriteSuccessTotal = "tilsoftai_cache_write_success_total";
         public const string CacheWriteFailuresTotal = "tilsoftai_cache_write_failures_total";
         public const string CacheWriteDroppedTotal = "tilsoftai_cache_write_dropped_total";
         
-        // PATCH 31.06: Governance pipeline metrics
+        // Governance pipeline metrics
         public const string GovernanceAllowTotal = "tilsoftai_governance_allow_total";
         public const string GovernanceDenyTotal = "tilsoftai_governance_deny_total";
         
-        // PATCH 33.01: Streaming delta coalescing metrics
+        // Streaming delta coalescing metrics
         public const string ChatStreamDeltasInTotal = "tilsoftai_chat_stream_deltas_in_total";
         public const string ChatStreamDeltasOutTotal = "tilsoftai_chat_stream_deltas_out_total";
         public const string ChatStreamDeltaFlushTotal = "tilsoftai_chat_stream_delta_flush_total";
         public const string ChatStreamDropTotal = "tilsoftai_chat_stream_drop_total";
 
-        // Sprint 6: supervisor-driven runtime observability
+        // supervisor-driven runtime observability
         public const string RuntimeSupervisorExecutionsTotal = "tilsoftai_runtime_supervisor_executions_total";
         public const string RuntimeNativeExecutionsTotal = "tilsoftai_runtime_native_executions_total";
         public const string RuntimeBridgeFallbackTotal = "tilsoftai_runtime_bridge_fallback_total";
@@ -48,7 +48,7 @@ namespace TILSOFTAI.Domain.Metrics
         public const string RuntimeAdapterFailuresTotal = "tilsoftai_runtime_adapter_failures_total";
         public const string RuntimeExecutionDurationSeconds = "tilsoftai_runtime_execution_duration_seconds";
 
-        // Sprint 31 phase 8: Agent Framework routing rollout and evaluation observability
+        // Agent Framework routing rollout and evaluation observability
         public const string AgentRoutingRequestsTotal = "tilsoftai_agent_routing_requests_total";
         public const string AgentRoutingHandledTotal = "tilsoftai_agent_routing_handled_total";
         public const string AgentRoutingFailuresTotal = "tilsoftai_agent_routing_failures_total";
@@ -65,15 +65,7 @@ namespace TILSOFTAI.Domain.Metrics
         public const string AgentRoutingFollowUpTotal = "tilsoftai_agent_routing_follow_up_total";
         public const string AgentRoutingValidationFailureTotal = "tilsoftai_agent_routing_validation_failure_total";
         public const string CapabilityFacadeDurationMs = "tilsoftai_capability_facade_duration_ms";
-        public const string AgentRoutingFunctionSelectionAccuracy = "tilsoftai_agent_routing_function_selection_accuracy";
-        public const string AgentRoutingArgumentExtractionAccuracy = "tilsoftai_agent_routing_argument_extraction_accuracy";
-        public const string AgentRoutingMissingRequiredArgumentDetection = "tilsoftai_agent_routing_missing_required_argument_detection";
-        public const string AgentRoutingFalseWriteExecutionTotal = "tilsoftai_agent_routing_false_write_execution_total";
-        public const string AgentRoutingUnauthorizedExecutionTotal = "tilsoftai_agent_routing_unauthorized_execution_total";
-        public const string AgentRoutingOverExposedToolsTotal = "tilsoftai_agent_routing_over_exposed_tools_total";
-        public const string AgentRoutingEvalGateFailuresTotal = "tilsoftai_agent_routing_eval_gate_failures_total";
-
-        // Sprint 10: platform catalog control-plane observability
+        // platform catalog control-plane observability
         public const string PlatformCatalogSourceModeTotal = "tilsoftai_platform_catalog_source_mode_total";
         public const string PlatformCatalogMutationTotal = "tilsoftai_platform_catalog_mutations_total";
         public const string PlatformCatalogPromotionGateTotal = "tilsoftai_platform_catalog_promotion_gate_total";

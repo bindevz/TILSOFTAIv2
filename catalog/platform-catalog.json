@@ -1,7 +1,7 @@
 {
-  "Version": "2026.04-sprint-35",
+  "Version": "2026.04-agent-framework-core",
   "Owner": "TILSOFTAI Platform",
-  "ChangeControl": "Sprint 35 active runtime is model-only. Non-model capabilities are intentionally absent from this active catalog. Single-model tools accept business model codes, not internal model IDs.",
+  "ChangeControl": "Active runtime is model-only. Non-model capabilities are intentionally absent from this active catalog. Single-model tools accept business model codes, not internal model IDs.",
   "ExternalConnections": {
     "Connections": {}
   },

@@ -142,7 +142,7 @@ public static class AddTilsoftAiExtensions
             builder.Services.AddSingleton<ILoggerProvider>(sp => sp.GetRequiredService<StructuredLoggerProvider>());
         });
 
-        // PATCH 36: IMemoryCache required by SqlRuntimePolicyProvider / SqlReActFollowUpRuleProvider
+        // IMemoryCache required by SqlRuntimePolicyProvider / SqlReActFollowUpRuleProvider
         services.AddMemoryCache();
 
         services.AddSingleton<ISensitivityClassifier, BasicSensitivityClassifier>();
@@ -216,15 +216,15 @@ public static class AddTilsoftAiExtensions
         services.AddHostedService<SqlContractValidatorHostedService>();
         services.AddSingleton<IConversationStore, SqlConversationStore>();
         services.AddSingleton<IActionRequestStore, SqlActionRequestStore>();
-        // Sprint 3: write-action guard for adapter-level enforcement
+        // write-action guard for adapter-level enforcement
         services.AddSingleton<IWriteActionGuard, ApprovalBackedWriteActionGuard>();
         services.AddSingleton<CacheStampedeGuard>();
         services.AddSingleton<SemanticCache>();
         
-        // Analytics services (PATCH 28)
+        // Analytics services
         services.AddSingleton<IInsightAssemblyService, InsightAssemblyService>();
         
-        // PATCH 31.05: Background cache write service
+        // Background cache write service
         services.AddSingleton<CacheWriteBackgroundService>();
         services.AddSingleton<ICacheWriteQueue>(sp => 
             sp.GetRequiredService<CacheWriteBackgroundService>());
@@ -238,8 +238,6 @@ public static class AddTilsoftAiExtensions
         services.AddSingleton<ICapabilityMetadataRepository, SqlCapabilityMetadataRepository>();
         services.AddSingleton<IEntityAliasRepository, SqlEntityAliasRepository>();
         services.AddSingleton<IToolRoutingTraceStore, SqlToolRoutingTraceStore>();
-        services.AddSingleton<IOfficialAgentToolRouter, OfficialAgentToolRouter>();
-        services.AddSingleton<IAgentToolRouter>(sp => sp.GetRequiredService<IOfficialAgentToolRouter>());
         services.AddSingleton<ISemanticCache>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<SemanticCacheOptions>>().Value;
@@ -549,7 +547,7 @@ public static class AddTilsoftAiExtensions
                 "AiRouting:MaxTotalCandidateTools must be >= AiRouting:MaxCandidateToolsPerDomain.")
             .Validate(options => options.AllowedDomains.Length > 0
                     && options.AllowedDomains.All(domain => string.Equals(domain, "model", StringComparison.OrdinalIgnoreCase)),
-                "AiRouting:AllowedDomains must be [\"model\"] for Sprint 35.")
+                "AiRouting:AllowedDomains must be [\"model\"] for the model-only agent runtime.")
             .Validate(options => !(options.UseOfficialMicrosoftAgentFramework || options.MicrosoftAgentFrameworkRoutingEnabled)
                     || OfficialAgentProviderFactory.IsAllowedProvider(options.Provider),
                 "AiRouting:Provider must be AzureOpenAI, OpenAI, OpenAiCompatibleLocal, or OllamaOfficialProviderForDevOnly when official Agent Framework routing is enabled.")
@@ -755,7 +753,7 @@ public static class AddTilsoftAiExtensions
                 "CatalogCertification:TrustedEvidenceSigners entries must include SignerId, KeyId, and PublicKeyPem.")
             .ValidateOnStart();
         
-        // Analytics options (PATCH 28)
+        // Analytics options
         services.AddOptions<AnalyticsOptions>()
             .Bind(configuration.GetSection(ConfigurationSectionNames.Analytics))
             .Validate(options => options.MaxRows > 0, "Analytics:MaxRows must be > 0.")

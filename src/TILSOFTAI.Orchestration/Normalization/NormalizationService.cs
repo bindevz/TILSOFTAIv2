@@ -16,7 +16,7 @@ public sealed class NormalizationService : INormalizationService
         PropertyNameCaseInsensitive = true
     };
 
-    // PATCH 33.02: Patterns that indicate a rule strips whitespace
+    // Patterns that indicate a rule strips whitespace
     private static readonly string[] UnsafeWhitespacePatterns = new[]
     {
         @"\s", @"\p{Z", @"[\s", @"\t", @"\r", @"\n"
@@ -58,7 +58,7 @@ public sealed class NormalizationService : INormalizationService
             throw new ArgumentNullException(nameof(context));
         }
 
-        // PATCH 29.05: Pre-canonicalize whitespace for deterministic processing
+        // Pre-canonicalize whitespace for deterministic processing
         var output = PromptTextCanonicalizer.Canonicalize(input);
         if (string.IsNullOrWhiteSpace(output))
         {
@@ -68,12 +68,12 @@ public sealed class NormalizationService : INormalizationService
         var tenantId = string.IsNullOrWhiteSpace(context.TenantId) ? "unknown" : context.TenantId;
         var rules = await GetRulesAsync(tenantId, ct);
 
-        // PATCH 33.02: Count whitespace-separated tokens before normalization
+        // Count whitespace-separated tokens before normalization
         var inputTokenCount = TokenCount(output);
 
         foreach (var rule in rules.OrderBy(rule => rule.Priority).ThenBy(rule => rule.RuleKey, StringComparer.OrdinalIgnoreCase))
         {
-            // PATCH 33.02: Skip unsafe whitespace-stripping rules
+            // Skip unsafe whitespace-stripping rules
             if (IsUnsafeWhitespaceRule(rule))
             {
                 _logger.LogWarning(
@@ -88,7 +88,7 @@ public sealed class NormalizationService : INormalizationService
 
         output = _seasonNormalizer.ExpandMarkedSeasons(output);
         
-        // PATCH 29.05: Post-canonicalize and guard against empty result
+        // Post-canonicalize and guard against empty result
         output = PromptTextCanonicalizer.Canonicalize(output);
         if (string.IsNullOrWhiteSpace(output))
         {
@@ -96,7 +96,7 @@ public sealed class NormalizationService : INormalizationService
             return input.Trim();
         }
 
-        // PATCH 33.02: Post-guard — if normalization collapsed tokens, revert
+        // Post-guard — if normalization collapsed tokens, revert
         var outputTokenCount = TokenCount(output);
         if (inputTokenCount >= 2 && outputTokenCount <= 1)
         {
@@ -111,7 +111,7 @@ public sealed class NormalizationService : INormalizationService
     }
 
     /// <summary>
-    /// PATCH 33.02: Detect rules that strip whitespace globally.
+    /// Detect rules that strip whitespace globally.
     /// Unsafe if: Replacement is null/empty AND Pattern contains any whitespace-matching regex tokens.
     /// </summary>
     public static bool IsUnsafeWhitespaceRule(NormalizationRuleRecord rule)

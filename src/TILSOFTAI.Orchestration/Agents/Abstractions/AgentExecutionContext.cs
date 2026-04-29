@@ -10,7 +10,7 @@ public sealed class AgentExecutionContext
     public IApprovalEngine ApprovalEngine { get; init; } = default!;
 
     /// <summary>
-    /// Sprint 2: provides access to tool adapters for agents that need direct adapter execution.
+    /// provides access to tool adapters for agents that need direct adapter execution.
     /// Currently unused by skeleton agents (Option 4); available for future domain-native execution.
     /// </summary>
     public IToolAdapterRegistry? ToolAdapterRegistry { get; init; }

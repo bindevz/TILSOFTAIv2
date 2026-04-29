@@ -6,7 +6,7 @@ namespace TILSOFTAI.Orchestration.Analytics;
 
 /// <summary>
 /// Renders InsightOutput to stable markdown format.
-/// PATCH 29.02: Deterministic stable rendering with headline + tables + notes.
+/// Deterministic stable rendering with headline + tables + notes.
 /// </summary>
 public sealed class InsightRenderer
 {

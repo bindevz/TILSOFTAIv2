@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 namespace TILSOFTAI.Supervisor.Classification;
 
 /// <summary>
-/// Sprint 2 keyword-based intent classifier.
+/// keyword-based intent classifier.
 /// Maps known domain keywords to domain hints without LLM overhead.
 /// Falls back to unclassified when no strong keyword match is found.
 /// </summary>
@@ -35,7 +35,7 @@ public sealed class KeywordIntentClassifier : IIntentClassifier
     };
 
     /// <summary>
-    /// Sprint 3: write-intent keywords (mutation language).
+    /// write-intent keywords (mutation language).
     /// When detected, IntentType is set to "write" regardless of domain.
     /// </summary>
     private static readonly IReadOnlyList<string> WriteKeywords = new[]
@@ -111,7 +111,7 @@ public sealed class KeywordIntentClassifier : IIntentClassifier
                 $"Domain '{bestDomain}' matched but confidence {confidence:F2} < threshold {ConfidenceThreshold:F2}"));
         }
 
-        // Sprint 3: detect write intent
+        // detect write intent
         var intentType = "query";
         var matchedWriteKeywords = new List<string>();
         foreach (var wk in WriteKeywords)

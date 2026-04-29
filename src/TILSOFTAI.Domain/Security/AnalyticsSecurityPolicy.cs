@@ -1,7 +1,7 @@
 namespace TILSOFTAI.Domain.Security;
 
 /// <summary>
-/// PATCH 29.07: Role-aware security policy for analytics field access.
+/// Role-aware security policy for analytics field access.
 /// Maps roles to allowed security tags (PII, SENSITIVE, RESTRICTED).
 /// </summary>
 public static class AnalyticsSecurityPolicy

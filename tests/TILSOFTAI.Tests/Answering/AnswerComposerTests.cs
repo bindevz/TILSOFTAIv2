@@ -42,6 +42,8 @@ public sealed class AnswerComposerTests
         argumentsProperty.Should().BeAssignableTo<IReadOnlyDictionary<string, object?>>();
         var rowsProperty = block.Data.GetType().GetProperty("rows")!.GetValue(block.Data);
         rowsProperty.Should().BeAssignableTo<IReadOnlyList<IReadOnlyDictionary<string, object?>>>();
+        block.Data.GetType().GetProperty("sensitivityPolicy")!.GetValue(block.Data)
+            .Should().BeOfType<SensitivityPolicy>();
         var rows = (IReadOnlyList<IReadOnlyDictionary<string, object?>>)rowsProperty!;
         rows[0]["Email"].Should().Be("***");
         rows[0].Should().NotContainKey("SecretNote");

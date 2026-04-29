@@ -10,8 +10,8 @@ namespace TILSOFTAI.Orchestration.Analytics;
 
 /// <summary>
 /// Assembles query results into structured insight output.
-/// PATCH 28: Complete output contract with warnings/freshness in notes.
-/// PATCH 30.05: Build notes from validatedPlan for fidelity.
+/// Complete output contract with warnings/freshness in notes.
+/// Build notes from validatedPlan for fidelity.
 /// </summary>
 public sealed class InsightAssemblyService : IInsightAssemblyService
 {
@@ -40,7 +40,7 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
         var warnings = CollectWarnings(queryResults);
         var freshness = GetFreshness(queryResults);
 
-        // PATCH 30.05: Parse validated plan for accurate notes
+        // Parse validated plan for accurate notes
         var planSummary = ParsePlanSummary(validatedPlanJson);
 
         var insight = new InsightOutput
@@ -60,7 +60,7 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
     }
 
     /// <summary>
-    /// PATCH 30.05: Parse validated plan JSON to extract filters, limits, and groupBy.
+    /// Parse validated plan JSON to extract filters, limits, and groupBy.
     /// </summary>
     private static ExecutedPlanSummary ParsePlanSummary(string? planJson)
     {
@@ -143,7 +143,7 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
     }
 
     /// <summary>
-    /// PATCH 30.05: Normalize filter values (e.g., season "mùa 25/26" -> "2025/2026").
+    /// Normalize filter values (e.g., season "mùa 25/26" -> "2025/2026").
     /// </summary>
     private static string? NormalizeFilterValue(string field, string? value)
     {
@@ -170,7 +170,7 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
     }
 
     /// <summary>
-    /// PATCH 30.05: Build notes from executed plan for fidelity.
+    /// Build notes from executed plan for fidelity.
     /// </summary>
     private static List<string> BuildNotesFromPlan(
         ExecutedPlanSummary planSummary,
@@ -366,7 +366,7 @@ public sealed class InsightAssemblyService : IInsightAssemblyService
 }
 
 /// <summary>
-/// PATCH 30.05: Summary of executed plan for accurate notes.
+/// Summary of executed plan for accurate notes.
 /// </summary>
 public sealed class ExecutedPlanSummary
 {
@@ -377,7 +377,7 @@ public sealed class ExecutedPlanSummary
 }
 
 /// <summary>
-/// PATCH 30.05: Filter from validated plan.
+/// Filter from validated plan.
 /// </summary>
 public sealed class PlanFilter
 {

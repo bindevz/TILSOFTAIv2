@@ -31,7 +31,7 @@ namespace TILSOFTAI.Infrastructure.Logging
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull
         {
-            // Simple scope support using AsyncLocal is implicit in LogContext handling for this patch,
+            // Simple scope support using AsyncLocal is implicit in LogContext handling for this implementation,
             // or could support IExternalScopeProvider if needed. 
             // For now, returning null as per minimum viable structured logger that relies on LogContext.
             return null;

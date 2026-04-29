@@ -3,7 +3,7 @@ using TILSOFTAI.Domain.ExecutionContext;
 namespace TILSOFTAI.Orchestration.Prompting;
 
 /// <summary>
-/// PATCH 36.02: CompositeContextPackProvider now supports IScopedContextPackProvider.
+/// CompositeContextPackProvider now supports IScopedContextPackProvider.
 /// When PromptBuildContext is available, providers that implement IScopedContextPackProvider
 /// receive it for scoped data. Others fall back to the legacy interface.
 /// </summary>
@@ -27,7 +27,7 @@ public sealed class CompositeContextPackProvider : IScopedContextPackProvider
     }
 
     /// <summary>
-    /// PATCH 36.02: With PromptBuildContext — scoped providers receive it.
+    /// With PromptBuildContext — scoped providers receive it.
     /// </summary>
     public async Task<IReadOnlyDictionary<string, string>> GetContextPacksAsync(
         TilsoftExecutionContext context,

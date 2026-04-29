@@ -52,7 +52,7 @@ public sealed class SqlToolAdapter : IToolAdapter
     }
 
     /// <summary>
-    /// Sprint 3: write operations require prior approval verification.
+    /// write operations require prior approval verification.
     /// The caller must provide approvedActionId in request metadata.
     /// </summary>
     private async Task<ToolExecutionResult> ExecuteGuardedWriteAsync(

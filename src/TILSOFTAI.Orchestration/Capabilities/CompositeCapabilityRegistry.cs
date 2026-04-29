@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 namespace TILSOFTAI.Orchestration.Capabilities;
 
 /// <summary>
-/// Sprint 5: Composite capability registry that loads from multiple ICapabilitySource instances.
+/// Composite capability registry that loads from multiple ICapabilitySource instances.
 /// Replaces direct InMemoryCapabilityRegistry usage in production.
 /// InMemoryCapabilityRegistry remains available as test fixture / fallback.
 ///

@@ -67,7 +67,7 @@ public sealed class OfficialAgentProviderFactory : IOfficialAgentProviderFactory
 
         _logger.LogInformation(
             "{EventName} | correlationId: {CorrelationId} | provider: {Provider} | model: {Model} | advertised_tool_count: {ToolCount} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | advertisedFunctionNames: {AdvertisedFunctionNames}",
-            Sprint35TraceEvents.AgentCreated,
+            AgentRoutingTraceEvents.AgentRunStarted,
             executionContext.CorrelationId,
             provider,
             string.IsNullOrWhiteSpace(model) ? "unspecified" : model,

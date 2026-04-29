@@ -3,7 +3,6 @@ namespace TILSOFTAI.Orchestration.Actions;
 public interface IActionRequestStore
 {
     Task<ActionRequestRecord> CreateAsync(ActionRequestCreateRequest request, CancellationToken cancellationToken);
-    Task<ActionRequestRecord> CreateAsync(ActionRequestRecord request, CancellationToken cancellationToken);
     Task<ActionRequestRecord?> GetAsync(string tenantId, string actionId, CancellationToken cancellationToken);
     Task<ActionRequestRecord?> GetActiveForConversationAsync(
         string tenantId,
@@ -21,9 +20,8 @@ public interface IActionRequestStore
         string tenantId,
         string actionId,
         string executedByUserId,
+        string? resultCompactJson,
+        bool success,
         CancellationToken cancellationToken);
     Task<int> ExpireOldAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken);
-
-    Task<ActionRequestRecord> ApproveAsync(string tenantId, string actionId, string approvedByUserId, CancellationToken cancellationToken);
-    Task<ActionRequestRecord> MarkExecutedAsync(string tenantId, string actionId, string resultCompactJson, bool success, CancellationToken cancellationToken);
 }

@@ -9,8 +9,8 @@ namespace TILSOFTAI.Orchestration.Analytics;
 
 /// <summary>
 /// Detects analytics intent from user queries.
-/// PATCH 29.02: Rules-first intent detection for Vietnamese and English.
-/// PATCH 30.04: LLM-first classification with heuristic fallback.
+/// Rules-first intent detection for Vietnamese and English.
+/// LLM-first classification with heuristic fallback.
 /// </summary>
 public sealed class AnalyticsIntentDetector
 {
@@ -109,7 +109,7 @@ public sealed class AnalyticsIntentDetector
     }
 
     /// <summary>
-    /// PATCH 30.04: Async detection with LLM classification.
+    /// Async detection with LLM classification.
     /// Falls back to heuristic if LLM unavailable.
     /// </summary>
     public async Task<AnalyticsIntentResult> DetectAsync(string input, CancellationToken ct = default)
@@ -182,7 +182,7 @@ public sealed class AnalyticsIntentDetector
     }
 
     /// <summary>
-    /// PATCH 30.04: LLM-based intent classification.
+    /// LLM-based intent classification.
     /// Uses JSON-only output with temperature=0.
     /// </summary>
     private async Task<AnalyticsIntentResult?> ClassifyWithLlmAsync(string userText, CancellationToken ct)
@@ -279,7 +279,7 @@ Rules:
 
     /// <summary>
     /// Heuristic-based detection (soft scoring, no hard gates).
-    /// PATCH 30.04: Triggers are hints, not gates.
+    /// Triggers are hints, not gates.
     /// </summary>
     private AnalyticsIntentResult DetectHeuristic(string normalized)
     {
@@ -325,7 +325,7 @@ Rules:
             hints.Add($"date:{dateMatch.Value}");
         }
 
-        // PATCH 30.04: No hard gate, but adjust confidence
+        // No hard gate, but adjust confidence
         // Entity + Season/Date without trigger can still route at lower confidence
         if (!hasMetricTrigger && matchedEntities.Count > 0 && (seasonMatch.Success || dateMatch.Success))
         {
@@ -414,7 +414,7 @@ Rules:
 
 /// <summary>
 /// Result of analytics intent detection.
-/// PATCH 30.04: Added IsBorderline and EntityHint. Changed to record for with-expression.
+/// Added IsBorderline and EntityHint. Changed to record for with-expression.
 /// </summary>
 public sealed record AnalyticsIntentResult
 {
@@ -425,7 +425,7 @@ public sealed record AnalyticsIntentResult
     public string DetectedLanguage { get; set; } = "en";
     public string? EntityHint { get; set; }
 
-    /// <summary>PATCH 31.07: Factory for neutralized intent (after RBAC denial).</summary>
+    /// <summary>Factory for neutralized intent (after RBAC denial).</summary>
     public static AnalyticsIntentResult None() => new()
     {
         IsAnalytics = false,

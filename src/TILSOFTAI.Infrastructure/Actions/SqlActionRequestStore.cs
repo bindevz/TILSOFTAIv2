@@ -19,11 +19,6 @@ public sealed class SqlActionRequestStore : IActionRequestStore
     {
         ArgumentNullException.ThrowIfNull(request);
         var record = ActionRequestRecord.FromCreateRequest(request, DateTime.UtcNow);
-        return await CreateAsync(record, cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task<ActionRequestRecord> CreateAsync(ActionRequestRecord request, CancellationToken cancellationToken)
-    {
         await using var connection = new SqlConnection(_sqlOptions.ConnectionString);
         await connection.OpenAsync(cancellationToken);
 
@@ -33,19 +28,19 @@ public sealed class SqlActionRequestStore : IActionRequestStore
             CommandTimeout = _sqlOptions.CommandTimeoutSeconds
         };
 
-        command.Parameters.Add(new SqlParameter("@TenantId", SqlDbType.NVarChar, 50) { Value = request.TenantId });
-        command.Parameters.Add(new SqlParameter("@UserId", SqlDbType.NVarChar, 50) { Value = DbValue(request.UserId) });
-        command.Parameters.Add(new SqlParameter("@ConversationId", SqlDbType.NVarChar, 64) { Value = request.ConversationId });
-        command.Parameters.Add(new SqlParameter("@CapabilityKey", SqlDbType.NVarChar, 200) { Value = DbValue(request.CapabilityKey) });
-        command.Parameters.Add(new SqlParameter("@FunctionName", SqlDbType.NVarChar, 200) { Value = DbValue(request.FunctionName) });
-        command.Parameters.Add(new SqlParameter("@ProposedToolName", SqlDbType.NVarChar, 200) { Value = request.ProposedToolName });
-        command.Parameters.Add(new SqlParameter("@ProposedSpName", SqlDbType.NVarChar, 200) { Value = request.ProposedSpName });
-        command.Parameters.Add(new SqlParameter("@ArgsJson", SqlDbType.NVarChar, -1) { Value = request.ArgsJson });
-        command.Parameters.Add(new SqlParameter("@PreviewResultJson", SqlDbType.NVarChar, -1) { Value = DbValue(request.PreviewResultJson) });
-        command.Parameters.Add(new SqlParameter("@RequestedByUserId", SqlDbType.NVarChar, 50) { Value = request.RequestedByUserId });
-        command.Parameters.Add(new SqlParameter("@ExpiresAtUtc", SqlDbType.DateTime2) { Value = request.ExpiresAtUtc == default ? DateTime.UtcNow.AddHours(24) : request.ExpiresAtUtc });
-        command.Parameters.Add(new SqlParameter("@CorrelationId", SqlDbType.NVarChar, 100) { Value = DbValue(request.CorrelationId) });
-        command.Parameters.Add(new SqlParameter("@MetadataJson", SqlDbType.NVarChar, -1) { Value = DbValue(request.MetadataJson) });
+        command.Parameters.Add(new SqlParameter("@TenantId", SqlDbType.NVarChar, 50) { Value = record.TenantId });
+        command.Parameters.Add(new SqlParameter("@UserId", SqlDbType.NVarChar, 50) { Value = DbValue(record.UserId) });
+        command.Parameters.Add(new SqlParameter("@ConversationId", SqlDbType.NVarChar, 64) { Value = record.ConversationId });
+        command.Parameters.Add(new SqlParameter("@CapabilityKey", SqlDbType.NVarChar, 200) { Value = DbValue(record.CapabilityKey) });
+        command.Parameters.Add(new SqlParameter("@FunctionName", SqlDbType.NVarChar, 200) { Value = DbValue(record.FunctionName) });
+        command.Parameters.Add(new SqlParameter("@ProposedToolName", SqlDbType.NVarChar, 200) { Value = record.ProposedToolName });
+        command.Parameters.Add(new SqlParameter("@ProposedSpName", SqlDbType.NVarChar, 200) { Value = record.ProposedSpName });
+        command.Parameters.Add(new SqlParameter("@ArgsJson", SqlDbType.NVarChar, -1) { Value = record.ArgsJson });
+        command.Parameters.Add(new SqlParameter("@PreviewResultJson", SqlDbType.NVarChar, -1) { Value = DbValue(record.PreviewResultJson) });
+        command.Parameters.Add(new SqlParameter("@RequestedByUserId", SqlDbType.NVarChar, 50) { Value = record.RequestedByUserId });
+        command.Parameters.Add(new SqlParameter("@ExpiresAtUtc", SqlDbType.DateTime2) { Value = record.ExpiresAtUtc });
+        command.Parameters.Add(new SqlParameter("@CorrelationId", SqlDbType.NVarChar, 100) { Value = DbValue(record.CorrelationId) });
+        command.Parameters.Add(new SqlParameter("@MetadataJson", SqlDbType.NVarChar, -1) { Value = DbValue(record.MetadataJson) });
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await ReadSingleAsync(reader, cancellationToken)
@@ -106,11 +101,6 @@ public sealed class SqlActionRequestStore : IActionRequestStore
             reason: null,
             cancellationToken).ConfigureAwait(false);
 
-    public async Task<ActionRequestRecord> ApproveAsync(string tenantId, string actionId, string approvedByUserId, CancellationToken cancellationToken)
-    {
-        return await ExecuteStatusChangeAsync("dbo.app_actionrequest_approve", tenantId, actionId, approvedByUserId, cancellationToken);
-    }
-
     public async Task<ActionRequestRecord> RejectAsync(
         string tenantId,
         string userId,
@@ -125,32 +115,12 @@ public sealed class SqlActionRequestStore : IActionRequestStore
             reason,
             cancellationToken).ConfigureAwait(false);
 
-    public async Task<ActionRequestRecord> MarkExecutedAsync(string tenantId, string actionId, string resultCompactJson, bool success, CancellationToken cancellationToken)
-    {
-        await using var connection = new SqlConnection(_sqlOptions.ConnectionString);
-        await connection.OpenAsync(cancellationToken);
-
-        await using var command = new SqlCommand("dbo.app_actionrequest_mark_executed", connection)
-        {
-            CommandType = CommandType.StoredProcedure,
-            CommandTimeout = _sqlOptions.CommandTimeoutSeconds
-        };
-
-        command.Parameters.Add(new SqlParameter("@TenantId", SqlDbType.NVarChar, 50) { Value = tenantId });
-        command.Parameters.Add(new SqlParameter("@ActionId", SqlDbType.NVarChar, 64) { Value = actionId });
-        command.Parameters.Add(new SqlParameter("@ResultCompactJson", SqlDbType.NVarChar, -1) { Value = resultCompactJson });
-        command.Parameters.Add(new SqlParameter("@Success", SqlDbType.Bit) { Value = success });
-        command.Parameters.Add(new SqlParameter("@ExecutedByUserId", SqlDbType.NVarChar, 50) { Value = DBNull.Value });
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await ReadSingleAsync(reader, cancellationToken)
-            ?? throw new InvalidOperationException("Failed to mark action as executed.");
-    }
-
     public async Task<ActionRequestRecord> MarkExecutedAsync(
         string tenantId,
         string actionId,
         string executedByUserId,
+        string? resultCompactJson,
+        bool success,
         CancellationToken cancellationToken)
     {
         await using var connection = new SqlConnection(_sqlOptions.ConnectionString);
@@ -164,9 +134,9 @@ public sealed class SqlActionRequestStore : IActionRequestStore
 
         command.Parameters.Add(new SqlParameter("@TenantId", SqlDbType.NVarChar, 50) { Value = tenantId });
         command.Parameters.Add(new SqlParameter("@ActionId", SqlDbType.NVarChar, 64) { Value = actionId });
-        command.Parameters.Add(new SqlParameter("@ResultCompactJson", SqlDbType.NVarChar, -1) { Value = DBNull.Value });
-        command.Parameters.Add(new SqlParameter("@Success", SqlDbType.Bit) { Value = true });
-        command.Parameters.Add(new SqlParameter("@ExecutedByUserId", SqlDbType.NVarChar, 50) { Value = executedByUserId });
+        command.Parameters.Add(new SqlParameter("@ResultCompactJson", SqlDbType.NVarChar, -1) { Value = DbValue(resultCompactJson) });
+        command.Parameters.Add(new SqlParameter("@Success", SqlDbType.Bit) { Value = success });
+        command.Parameters.Add(new SqlParameter("@ExecutedByUserId", SqlDbType.NVarChar, 50) { Value = DbValue(executedByUserId) });
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await ReadSingleAsync(reader, cancellationToken)
@@ -187,31 +157,6 @@ public sealed class SqlActionRequestStore : IActionRequestStore
         command.Parameters.Add(new SqlParameter("@NowUtc", SqlDbType.DateTime2) { Value = nowUtc.UtcDateTime });
         var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         return result is int count ? count : Convert.ToInt32(result ?? 0);
-    }
-
-    private async Task<ActionRequestRecord> ExecuteStatusChangeAsync(
-        string storedProcedure,
-        string tenantId,
-        string actionId,
-        string approvedByUserId,
-        CancellationToken cancellationToken)
-    {
-        await using var connection = new SqlConnection(_sqlOptions.ConnectionString);
-        await connection.OpenAsync(cancellationToken);
-
-        await using var command = new SqlCommand(storedProcedure, connection)
-        {
-            CommandType = CommandType.StoredProcedure,
-            CommandTimeout = _sqlOptions.CommandTimeoutSeconds
-        };
-
-        command.Parameters.Add(new SqlParameter("@TenantId", SqlDbType.NVarChar, 50) { Value = tenantId });
-        command.Parameters.Add(new SqlParameter("@ActionId", SqlDbType.NVarChar, 64) { Value = actionId });
-        command.Parameters.Add(new SqlParameter("@ApprovedByUserId", SqlDbType.NVarChar, 50) { Value = approvedByUserId });
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await ReadSingleAsync(reader, cancellationToken)
-            ?? throw new InvalidOperationException("Action request was not updated.");
     }
 
     private async Task<ActionRequestRecord> ExecuteUserStatusChangeAsync(

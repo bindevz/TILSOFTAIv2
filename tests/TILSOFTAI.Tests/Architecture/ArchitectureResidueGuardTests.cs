@@ -523,8 +523,8 @@ public sealed class ArchitectureResidueGuardTests
         traceModel.Should().Contain("AdvertisedToolCount");
         traceStore.Should().Contain("@SelectedFunction");
         traceStore.Should().Contain("@AdvertisedToolCount");
-        metrics.Should().Contain("AgentRoutingFunctionSelectionAccuracy");
-        metrics.Should().Contain("AgentRoutingOverExposedToolsTotal");
+        metrics.Should().Contain("AgentRoutingAdvertisedToolCount");
+        metrics.Should().Contain("AgentRoutingValidationFailureTotal");
     }
 
     [Fact]

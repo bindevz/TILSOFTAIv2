@@ -14,7 +14,7 @@ using TILSOFTAI.Supervisor;
 namespace TILSOFTAI.Api.Controllers;
 
 /// <summary>
-/// Sprint 4: Auth hardening — no longer [AllowAnonymous] by default.
+/// Auth hardening — no longer [AllowAnonymous] by default.
 /// When Auth:Enabled=true (production), endpoints require authentication via JWT.
 /// When Auth:Enabled=false (dev/testing), NoAuthHandler auto-succeeds all requests.
 /// </summary>

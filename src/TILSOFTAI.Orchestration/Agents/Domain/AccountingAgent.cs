@@ -9,7 +9,7 @@ using TILSOFTAI.Tools.Abstractions;
 namespace TILSOFTAI.Agents.Domain;
 
 /// <summary>
-/// Sprint 5: Accounting domain agent with native capability execution.
+/// Accounting domain agent with native capability execution.
 /// Resolves accounting capabilities from ICapabilityRegistry using ICapabilityResolver
 /// and executes via ToolAdapterRegistry.
 /// </summary>
@@ -44,10 +44,10 @@ public sealed class AccountingAgent : DomainAgentBase
             "AgentExecution | AgentId: {AgentId} | IntentType: {IntentType} | DomainHint: {DomainHint}",
             AgentId, task.IntentType, task.DomainHint ?? "none");
 
-        // Sprint 3: enforce write governance before any execution
+        // enforce write governance before any execution
         AgentWritePolicy.EnforceWriteGovernance(task, AgentId, Logger);
 
-        // Sprint 5: attempt native capability resolution using structured resolver
+        // attempt native capability resolution using structured resolver
         var candidates = _capabilityRegistry.GetByDomain("accounting");
         var capability = ResolveCapability(task, candidates);
 
@@ -91,7 +91,7 @@ public sealed class AccountingAgent : DomainAgentBase
     }
 
     /// <summary>
-    /// Sprint 5: Resolve accounting capability using structured resolver.
+    /// Resolve accounting capability using structured resolver.
     /// Uses CapabilityHint from supervisor when available.
     /// </summary>
     internal CapabilityDescriptor? ResolveCapability(AgentTask task, IReadOnlyList<CapabilityDescriptor> candidates)
@@ -264,7 +264,7 @@ public sealed class AccountingAgent : DomainAgentBase
             args["@TenantId"] = tid;
         }
 
-        // Sprint 5: extract invoice number for invoice.by-number capability
+        // extract invoice number for invoice.by-number capability
         if (task.ContextPayload.TryGetValue("invoiceNumber", out var invoiceNum))
         {
             args["@InvoiceNumber"] = invoiceNum;

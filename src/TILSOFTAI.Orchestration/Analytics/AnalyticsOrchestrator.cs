@@ -13,8 +13,8 @@ namespace TILSOFTAI.Orchestration.Analytics;
 
 /// <summary>
 /// Deterministic orchestrator for deep analytics workflow.
-/// PATCH 29.02: Enforces fixed tool order: catalog_search → get_dataset → plan → validate → execute → assemble → render.
-/// PATCH 29.06: Adds persistence and caching.
+/// Enforces fixed tool order: catalog_search → get_dataset → plan → validate → execute → assemble → render.
+/// Adds persistence and caching.
 /// </summary>
 public sealed class AnalyticsOrchestrator
 {
@@ -81,8 +81,8 @@ public sealed class AnalyticsOrchestrator
 
         try
         {
-            // PATCH 29.06: Check cache first
-            // PATCH 30.03: Include roles for security-isolated cache
+            // Check cache first
+            // Include roles for security-isolated cache
             var cachedInsight = await _cache.TryGetAsync(context.TenantId, userQuery, context.Roles, ct);
             if (cachedInsight != null)
             {
@@ -102,7 +102,7 @@ public sealed class AnalyticsOrchestrator
                 };
             }
 
-            // PATCH 29.06: Persist TaskFrame
+            // Persist TaskFrame
             var requestId = Guid.NewGuid().ToString("N");
             _ = _persistence.SaveTaskFrameAsync(
                 context.TenantId,
@@ -174,7 +174,7 @@ public sealed class AnalyticsOrchestrator
 
                 if (!validation.Retryable || retry == _options.MaxPlanRetries)
                 {
-                    // PATCH 29.06: Persist validation error
+                    // Persist validation error
                     _ = _persistence.SaveValidationErrorAsync(
                         context.TenantId,
                         requestId,
@@ -208,7 +208,7 @@ public sealed class AnalyticsOrchestrator
             toolSequence.Add(ToolExecutePlan);
 
             // Step 6: Assemble Insight
-            // PATCH 30.05: Pass validatedPlan for notes fidelity
+            // Pass validatedPlan for notes fidelity
             var queryResults = ParseQueryResults(executeResult);
             var taskFrame = BuildTaskFrame(userQuery, intent);
             var insight = await _insightAssemblyService.AssembleAsync(taskFrame, queryResults, validatedPlan, context, ct);
@@ -216,7 +216,7 @@ public sealed class AnalyticsOrchestrator
             // Step 7: Render
             var renderedOutput = _renderer.Render(insight, language);
 
-            // PATCH 31.05: Safe background cache write via Channel queue
+            // Safe background cache write via Channel queue
             _cacheWriteQueue.TryEnqueue(new CacheWriteItem(
                 context.TenantId, userQuery, context.Roles, insight));
 
@@ -256,7 +256,7 @@ public sealed class AnalyticsOrchestrator
     }
 
     /// <summary>
-    /// PATCH 31.01: Execute tool through unified governance pipeline.
+    /// Execute tool through unified governance pipeline.
     /// All tool calls (LLM-driven or orchestrator-driven) go through same governance.
     /// </summary>
     private async Task<string> ExecuteToolAsync(
@@ -442,7 +442,7 @@ JSON:";
                 if (meta.TryGetProperty("truncated", out var t))
                     truncated = t.GetBoolean();
                 
-                // PATCH 30.01: Parse meta.freshness.asOfUtc (preferred) or legacy meta.generatedAtUtc
+                // Parse meta.freshness.asOfUtc (preferred) or legacy meta.generatedAtUtc
                 if (meta.TryGetProperty("freshness", out var freshness) && 
                     freshness.TryGetProperty("asOfUtc", out var asOf))
                 {
@@ -595,7 +595,7 @@ JSON:";
     }
 
     /// <summary>
-    /// PATCH 29.09: Compute SHA256 hash of plan for logging (truncated to 8 chars).
+    /// Compute SHA256 hash of plan for logging (truncated to 8 chars).
     /// </summary>
     private static string ComputePlanHash(string planJson)
     {
@@ -608,7 +608,7 @@ JSON:";
     }
 
     /// <summary>
-    /// PATCH 30.04: Quick catalog_search for borderline intent tie-breaking.
+    /// Quick catalog_search for borderline intent tie-breaking.
     /// Returns whether any datasets match the entity hint.
     /// </summary>
     public async Task<CatalogSearchResult> TryCatalogSearchAsync(
@@ -652,7 +652,7 @@ JSON:";
 }
 
 /// <summary>
-/// PATCH 30.04: Result of catalog search for intent tie-breaking.
+/// Result of catalog search for intent tie-breaking.
 /// </summary>
 public sealed class CatalogSearchResult
 {

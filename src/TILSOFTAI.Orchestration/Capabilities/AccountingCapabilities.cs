@@ -3,7 +3,7 @@ using TILSOFTAI.Tools.Abstractions;
 namespace TILSOFTAI.Orchestration.Capabilities;
 
 /// <summary>
-/// Sprint 5: Static factory for accounting domain capability definitions.
+/// Static factory for accounting domain capability definitions.
 /// Each capability maps a domain operation to a concrete adapter invocation.
 /// Stored procedure names follow the ai_ prefix governance convention.
 /// </summary>

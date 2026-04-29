@@ -51,7 +51,7 @@ public sealed class ToolGovernance
                 Array.Empty<string>(),
                 "ToolAllowlist"));
 
-            // PATCH 31.06: Governance audit event + metrics
+            // Governance audit event + metrics
             _auditLogger.LogGovernanceEvent(GovernanceAuditEvent.Denied(
                 context.TenantId, context.UserId, context.CorrelationId,
                 call.Name, "tool_governance",
@@ -85,7 +85,7 @@ public sealed class ToolGovernance
                     tool.RequiredRoles,
                     "ToolRoleRequirement"));
 
-                // PATCH 31.06: Governance audit event + metrics
+                // Governance audit event + metrics
                 _auditLogger.LogGovernanceEvent(GovernanceAuditEvent.Denied(
                     context.TenantId, context.UserId, context.CorrelationId,
                     call.Name, "tool_governance",
@@ -105,7 +105,7 @@ public sealed class ToolGovernance
             && !tool.SpName.StartsWith("ai_", StringComparison.OrdinalIgnoreCase))
         {
             sw.Stop();
-            // PATCH 31.06: Governance audit event + metrics
+            // Governance audit event + metrics
             _auditLogger.LogGovernanceEvent(GovernanceAuditEvent.Denied(
                 context.TenantId, context.UserId, context.CorrelationId,
                 call.Name, "tool_governance",
@@ -126,7 +126,7 @@ public sealed class ToolGovernance
         {
             sw.Stop();
             var firstError = inputValidation.Errors.FirstOrDefault();
-            // PATCH 31.06: Governance audit event + metrics
+            // Governance audit event + metrics
             _auditLogger.LogGovernanceEvent(GovernanceAuditEvent.Denied(
                 context.TenantId, context.UserId, context.CorrelationId,
                 call.Name, "tool_governance",
@@ -158,7 +158,7 @@ public sealed class ToolGovernance
                 ? "Schema validation failed."
                 : schemaValidation.Summary;
 
-            // PATCH 31.06: Governance audit event + metrics
+            // Governance audit event + metrics
             _auditLogger.LogGovernanceEvent(GovernanceAuditEvent.Denied(
                 context.TenantId, context.UserId, context.CorrelationId,
                 call.Name, "tool_governance",
@@ -175,7 +175,7 @@ public sealed class ToolGovernance
         }
 
         sw.Stop();
-        // PATCH 31.06: Governance audit event for success
+        // Governance audit event for success
         _auditLogger.LogGovernanceEvent(GovernanceAuditEvent.Allowed(
             context.TenantId, context.UserId, context.CorrelationId,
             call.Name, "tool_governance",
@@ -188,7 +188,7 @@ public sealed class ToolGovernance
     }
 
     /// <summary>
-    /// PATCH 31.01: Unified governance + execution.
+    /// Unified governance + execution.
     /// Validates RBAC, schema, input sanitization, then executes.
     /// Used by BOTH LLM tool-calling loop AND deterministic orchestrator.
     /// </summary>
@@ -238,7 +238,7 @@ public sealed class ToolGovernance
 }
 
 /// <summary>
-/// PATCH 31.01: Result of governed tool execution.
+/// Result of governed tool execution.
 /// </summary>
 public sealed record GovernedExecutionResult(
     bool IsAllowed,

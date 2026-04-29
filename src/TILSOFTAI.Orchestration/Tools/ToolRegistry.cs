@@ -18,7 +18,7 @@ public sealed class ToolRegistry : IToolRegistry
             throw new ArgumentException(Resources.Val_ToolDefinitionNameRequired, nameof(def));
         }
 
-        // PATCH 37.02: SQL-backed tools get Instruction/JsonSchema from DB
+        // SQL-backed tools get Instruction/JsonSchema from DB
         if (!def.IsSqlBacked)
         {
             if (string.IsNullOrWhiteSpace(def.Instruction))

@@ -15,12 +15,12 @@ public sealed class AgentTask
     public bool RequiresWritePreparation { get; set; }
     /// <summary>
     /// When set by a domain agent, restricts the tool/module scope for this task.
-    /// Sprint 2: not yet used by skeleton agents (Option 4), but available for future domain scoping.
+    /// not yet used by skeleton agents (Option 4), but available for future domain scoping.
     /// </summary>
     public IReadOnlyList<string>? AllowedModules { get; set; }
 
     /// <summary>
-    /// Sprint 5: Structured capability request hint populated by SupervisorRuntime.
+    /// Structured capability request hint populated by SupervisorRuntime.
     /// Domain agents use this for structured capability resolution instead of parsing raw input.
     /// </summary>
     public CapabilityRequestHint? CapabilityHint { get; set; }

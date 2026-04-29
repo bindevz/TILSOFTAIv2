@@ -7,7 +7,7 @@ using TILSOFTAI.Orchestration.Analytics;
 namespace TILSOFTAI.Infrastructure.Caching;
 
 /// <summary>
-/// PATCH 31.05: Background service that processes cache write queue.
+/// Background service that processes cache write queue.
 /// Replaces fire-and-forget pattern with reliable background processing.
 /// </summary>
 public sealed class CacheWriteBackgroundService : BackgroundService, ICacheWriteQueue

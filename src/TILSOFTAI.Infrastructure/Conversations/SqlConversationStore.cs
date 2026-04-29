@@ -239,7 +239,7 @@ public sealed class SqlConversationStore : IConversationStore
             throw new InvalidOperationException("Execution context ConversationId is required.");
         }
 
-        // PATCH 33: Tolerate missing UserId for anonymous/public access
+        // Tolerate missing UserId for anonymous/public access
         if (string.IsNullOrWhiteSpace(context.UserId))
         {
             context.UserId = "anonymous";

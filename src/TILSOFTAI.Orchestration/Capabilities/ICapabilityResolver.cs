@@ -1,7 +1,7 @@
 namespace TILSOFTAI.Orchestration.Capabilities;
 
 /// <summary>
-/// Sprint 5: Contract for structured capability resolution.
+/// Contract for structured capability resolution.
 /// Replaces per-agent string-matching with a reusable resolution mechanism.
 /// Used by domain agents to select the correct capability from candidates.
 /// </summary>

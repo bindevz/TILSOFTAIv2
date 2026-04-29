@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 namespace TILSOFTAI.Orchestration.Capabilities;
 
 /// <summary>
-/// Sprint 5: Loads capability definitions from IConfiguration (appsettings.json).
+/// Loads capability definitions from IConfiguration (appsettings.json).
 /// Reads from the "Capabilities" section and maps each entry to a CapabilityDescriptor.
 ///
 /// Expected configuration format:

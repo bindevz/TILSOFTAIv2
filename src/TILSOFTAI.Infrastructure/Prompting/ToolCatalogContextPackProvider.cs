@@ -8,7 +8,7 @@ using TILSOFTAI.Orchestration.Tools;
 namespace TILSOFTAI.Infrastructure.Prompting;
 
 /// <summary>
-/// PATCH 36.02: Implements IScopedContextPackProvider — builds tool catalog pack
+/// Implements IScopedContextPackProvider — builds tool catalog pack
 /// from scoped tools only (never global). Policy-driven via tool_catalog_context_pack.
 /// </summary>
 public sealed class ToolCatalogContextPackProvider : IScopedContextPackProvider
@@ -45,7 +45,7 @@ public sealed class ToolCatalogContextPackProvider : IScopedContextPackProvider
     }
 
     /// <summary>
-    /// PATCH 36.02: Scoped provider — uses buildContext.ScopedTools and reads RuntimePolicy.
+    /// Scoped provider — uses buildContext.ScopedTools and reads RuntimePolicy.
     /// </summary>
     public Task<IReadOnlyDictionary<string, string>> GetContextPacksAsync(
         TilsoftExecutionContext context,
@@ -169,7 +169,7 @@ public sealed class ToolCatalogContextPackProvider : IScopedContextPackProvider
     }
 
     /// <summary>
-    /// PATCH 35: core_then_scope_order — core tools first, then by (Module, Name).
+    /// core_then_scope_order — core tools first, then by (Module, Name).
     /// </summary>
     private static IReadOnlyList<ToolDefinition> OrderTools(IReadOnlyList<ToolDefinition> tools)
     {

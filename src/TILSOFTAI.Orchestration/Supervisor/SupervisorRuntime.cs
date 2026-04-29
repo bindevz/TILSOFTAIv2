@@ -140,7 +140,7 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
                     task.IntentType = classification.IntentType;
                 }
 
-                // Sprint 3: flag write intent for approval governance
+                // flag write intent for approval governance
                 if (string.Equals(classification.IntentType, "write", StringComparison.OrdinalIgnoreCase))
                 {
                     task.RequiresWritePreparation = true;
@@ -163,7 +163,7 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
             }
         }
 
-        // Sprint 5: Build structured capability hint for domain agents
+        // Build structured capability hint for domain agents
         task.CapabilityHint = BuildCapabilityHint(request, task, classificationResult);
 
         // Step 2: Resolve candidate agents
@@ -177,7 +177,7 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
             return SupervisorResult.Fail("No domain agent could handle the request.", "SUPERVISOR_AGENT_NOT_FOUND");
         }
 
-        // Step 3: Select best agent (first candidate — registry returns them scored/ordered)
+        // Step 3: Select best agent from the registry's scored ordering.
         var selectedAgent = candidates[0];
 
         _logger.LogInformation(
@@ -436,7 +436,7 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
             selectedAgentId: "microsoft-agent-router");
 
     /// <summary>
-    /// Sprint 5: Build a structured CapabilityRequestHint from request metadata and classification.
+    /// Build a structured CapabilityRequestHint from request metadata and classification.
     /// Priority: explicit capabilityKey from metadata > domain + extracted keywords.
     /// </summary>
     private static CapabilityRequestHint BuildCapabilityHint(
@@ -464,7 +464,7 @@ public sealed class SupervisorRuntime : ISupervisorRuntime
     }
 
     /// <summary>
-    /// Sprint 5: Extract meaningful subject keywords from user input.
+    /// Extract meaningful subject keywords from user input.
     /// Filters out common stop words and short tokens.
     /// </summary>
     internal static IReadOnlyList<string> ExtractSubjectKeywords(string input)

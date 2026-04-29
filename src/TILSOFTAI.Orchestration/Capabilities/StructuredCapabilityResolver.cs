@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 namespace TILSOFTAI.Orchestration.Capabilities;
 
 /// <summary>
-/// Sprint 5: Default structured capability resolver.
+/// Default structured capability resolver.
 /// Resolution priority:
 ///   1. Exact CapabilityKey match from hint
 ///   2. Subject keyword matching against capability key segments

@@ -1,7 +1,7 @@
 namespace TILSOFTAI.Orchestration.Capabilities;
 
 /// <summary>
-/// Sprint 5: Wraps a static IReadOnlyList&lt;CapabilityDescriptor&gt; as an ICapabilitySource.
+/// Wraps a static IReadOnlyList&lt;CapabilityDescriptor&gt; as an ICapabilitySource.
 /// Used to register WarehouseCapabilities.All and AccountingCapabilities.All as sources
 /// for the CompositeCapabilityRegistry, keeping static definitions as fallbacks.
 /// </summary>

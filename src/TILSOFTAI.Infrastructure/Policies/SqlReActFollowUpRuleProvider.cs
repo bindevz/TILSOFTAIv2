@@ -37,7 +37,7 @@ public sealed class SqlReActFollowUpRuleProvider : IReActFollowUpRuleProvider
         string? appKey = null,
         CancellationToken ct = default)
     {
-        // PATCH 36.05: Canonical cache key - sort capability scopes for determinism
+        // Canonical cache key - sort capability scopes for determinism
         var sortedCapabilityScopes = capabilityScopes.OrderBy(scope => scope, StringComparer.OrdinalIgnoreCase).ToList();
         var cacheKey = $"followup_rules:{tenantId}:{string.Join(",", sortedCapabilityScopes)}:{appKey}";
 

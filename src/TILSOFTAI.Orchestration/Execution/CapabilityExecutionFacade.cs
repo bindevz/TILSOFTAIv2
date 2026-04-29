@@ -232,7 +232,7 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
             });
         _logger.LogInformation(
             "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | capabilityKey: {CapabilityKey} | procedureName: {ProcedureName} | rowCount: {RowCount} | durationMs: {DurationMs} | errorCode: {ErrorCode}",
-            Sprint35TraceEvents.CapabilityExecutionCompleted,
+            AgentRoutingTraceEvents.AgentToolInvoked,
             context.CorrelationId,
             context.TenantId,
             context.UserId,
@@ -251,7 +251,7 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
     {
         _logger.LogInformation(
             "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | capabilityKey: {CapabilityKey} | procedureName: {ProcedureName} | argumentsMasked: {ArgumentsMasked}",
-            Sprint35TraceEvents.CapabilityFacadeStarted,
+            AgentRoutingTraceEvents.AgentToolInvoked,
             context.CorrelationId,
             context.TenantId,
             context.UserId,
@@ -273,7 +273,7 @@ public sealed class CapabilityExecutionFacade : ICapabilityExecutionFacade
             });
         _logger.LogWarning(
             "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | capabilityKey: {CapabilityKey} | errorCode: {ErrorCode}",
-            Sprint35TraceEvents.CapabilityValidationFailed,
+            AgentRoutingTraceEvents.RouteFailedClosed,
             context.CorrelationId,
             context.TenantId,
             context.UserId,

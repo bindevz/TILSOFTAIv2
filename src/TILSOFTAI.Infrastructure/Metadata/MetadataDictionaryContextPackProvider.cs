@@ -8,7 +8,7 @@ using TILSOFTAI.Orchestration.Sql;
 namespace TILSOFTAI.Infrastructure.Metadata;
 
 /// <summary>
-/// PATCH 36.03: Implements IScopedContextPackProvider — no mutable singleton state.
+/// Implements IScopedContextPackProvider — no mutable singleton state.
 /// Capability scope is received via PromptBuildContext.ResolvedCapabilityScopes.
 /// </summary>
 public sealed class MetadataDictionaryContextPackProvider : IScopedContextPackProvider
@@ -36,7 +36,7 @@ public sealed class MetadataDictionaryContextPackProvider : IScopedContextPackPr
     }
 
     /// <summary>
-    /// PATCH 36.03: Scoped provider uses buildContext.ResolvedCapabilityScopes.
+    /// Scoped provider uses buildContext.ResolvedCapabilityScopes.
     /// </summary>
     public async Task<IReadOnlyDictionary<string, string>> GetContextPacksAsync(
         TilsoftExecutionContext context,
@@ -76,7 +76,7 @@ public sealed class MetadataDictionaryContextPackProvider : IScopedContextPackPr
             };
             rows = await _sqlExecutor.ExecuteQueryAsync("dbo.app_metadatadictionary_list_by_capability_scope", scopedParams, cancellationToken);
 
-            // PATCH 36.03: Language fallback — if no rows for requested language, try default
+            // Language fallback — if no rows for requested language, try default
             if (rows.Count == 0
                 && !string.Equals(resolvedLanguage, _localizationOptions.DefaultLanguage, StringComparison.OrdinalIgnoreCase))
             {

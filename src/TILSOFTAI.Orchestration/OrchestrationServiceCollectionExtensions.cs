@@ -23,8 +23,30 @@ public static class OrchestrationServiceCollectionExtensions
 {
     public static IServiceCollection AddSupervisorRuntime(this IServiceCollection services)
     {
-        // Supervisor runtime with intent classification
-        services.AddSingleton<IIntentClassifier, KeywordIntentClassifier>();
+        services.AddModelOnlyCapabilitySource();
+        services.AddOfficialAgentRouting();
+        services.AddAnswerComposer();
+        services.AddPendingActions();
+        services.AddLegacyFallbackOnlyServices();
+
+        return services;
+    }
+
+    private static IServiceCollection AddModelOnlyCapabilitySource(this IServiceCollection services)
+    {
+        services.AddSingleton<ICapabilitySource>(
+            new StaticCapabilitySource("static-model", ModelCapabilities.All));
+        services.AddSingleton<ICapabilityRegistry, CompositeCapabilityRegistry>();
+        services.AddSingleton<CapabilityArgumentMapper>();
+        services.AddSingleton<CapabilityExecutionPolicy>();
+        services.AddSingleton<ICapabilityExecutionFacade, CapabilityExecutionFacade>();
+        services.AddSingleton<ICompositeCapabilityExecutor, CompositeCapabilityExecutor>();
+        services.AddSingleton<IToolAdapterRegistry, ToolAdapterRegistry>();
+        return services;
+    }
+
+    private static IServiceCollection AddOfficialAgentRouting(this IServiceCollection services)
+    {
         services.AddSingleton<RuntimeExecutionInstrumentation>();
         services.AddSingleton<IHardSignalExtractor, HardSignalExtractor>();
         services.AddSingleton<IDomainGate, DomainGate>();
@@ -32,55 +54,45 @@ public static class OrchestrationServiceCollectionExtensions
         services.AddSingleton<CapabilityToolDescriptionBuilder>();
         services.AddSingleton<CapabilityParameterSchemaBuilder>();
         services.AddSingleton<ICapabilityToolDescriptorFactory, CapabilityToolDescriptorFactory>();
-        services.AddSingleton<CapabilityArgumentMapper>();
-        services.AddSingleton<CapabilityExecutionPolicy>();
-        services.AddSingleton<ICapabilityExecutionFacade, CapabilityExecutionFacade>();
-        services.AddSingleton<ICompositeCapabilityExecutor, CompositeCapabilityExecutor>();
         services.AddSingleton<IOfficialAgentFunctionProvider, DynamicFunctionToolFactory>();
         services.AddSingleton<IOfficialAgentProviderFactory, OfficialAgentProviderFactory>();
         services.AddSingleton<IOfficialMicrosoftAgentRuntime, OfficialMicrosoftAgentRuntime>();
+        services.AddSingleton<ISemanticCapabilityRetriever, SemanticCapabilityRetriever>();
+        services.AddSingleton<ICapabilityCandidateSelector, SemanticCapabilityCandidateSelector>();
+        services.AddSingleton<IOfficialAgentToolRouter, OfficialAgentToolRouter>();
+        services.AddSingleton<IAgentToolRouter>(sp => sp.GetRequiredService<IOfficialAgentToolRouter>());
+        return services;
+    }
+
+    private static IServiceCollection AddAnswerComposer(this IServiceCollection services)
+    {
         services.AddSingleton<RawJsonAnswerComposer>();
         services.AddSingleton<AiSummaryService>();
         services.AddSingleton<IAnswerComposer, StructuredAnswerComposer>();
+        return services;
+    }
+
+    private static IServiceCollection AddPendingActions(this IServiceCollection services)
+    {
         services.AddSingleton<IPendingActionConfirmationResolver, PendingActionConfirmationResolver>();
-        services.AddSingleton<ISemanticCapabilityRetriever, SemanticCapabilityRetriever>();
-        services.AddSingleton<ICapabilityCandidateSelector, SemanticCapabilityCandidateSelector>();
-        services.AddSingleton<IAgentToolRouter, NoOpAgentToolRouter>();
+        services.AddSingleton<IApprovalEngine, ApprovalEngine>();
+        return services;
+    }
+
+    private static IServiceCollection AddLegacyFallbackOnlyServices(this IServiceCollection services)
+    {
+        services.AddSingleton<IIntentClassifier, KeywordIntentClassifier>();
+        services.AddSingleton<ICapabilityResolver, StructuredCapabilityResolver>();
+        services.AddSingleton<IDomainAgent, GeneralChatAgent>();
+        services.AddSingleton<IAgentRegistry, DomainAgentRegistry>();
         services.AddSingleton<ISupervisorRuntime, SupervisorRuntime>();
 
-        // Legacy bridge is fallback-only; native capability execution is owned by domain agents.
-
-        // Sprint 5: Capability resolver — structured resolution replacing string matching
-        services.AddSingleton<ICapabilityResolver, StructuredCapabilityResolver>();
-
-        // Sprint 34: the active runtime is model-only. Non-model domains remain
-        // as historical source files, but are not registered as runtime sources.
-        services.AddSingleton<ICapabilitySource>(
-            new StaticCapabilitySource("static-model", ModelCapabilities.All));
-
-        // Sprint 5: Composite capability registry — loads from all ICapabilitySource instances
-        services.AddSingleton<ICapabilityRegistry, CompositeCapabilityRegistry>();
-
-        // Domain agents
-        services.AddSingleton<IDomainAgent, GeneralChatAgent>();  // Supervisor-native general fallback.
-
-        // Agent registry
-        services.AddSingleton<IAgentRegistry, DomainAgentRegistry>();
-
-        // Tool adapter infrastructure
-        services.AddSingleton<IToolAdapterRegistry, ToolAdapterRegistry>();
-
-        // Approval engine
-        services.AddSingleton<IApprovalEngine, ApprovalEngine>();
-
-        // Analytics components
         services.AddSingleton<AnalyticsIntentDetector>();
         services.AddSingleton<AnalyticsCache>();
         services.AddSingleton<AnalyticsPersistence>();
         services.AddSingleton<InsightRenderer>();
         services.AddSingleton<IInsightAssemblyService, InsightAssemblyService>();
         services.AddSingleton<AnalyticsOrchestrator>();
-        
         return services;
     }
 }

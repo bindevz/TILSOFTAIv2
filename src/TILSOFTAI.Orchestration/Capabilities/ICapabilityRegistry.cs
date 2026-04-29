@@ -1,7 +1,7 @@
 namespace TILSOFTAI.Orchestration.Capabilities;
 
 /// <summary>
-/// Sprint 4: Minimal capability registry for runtime capability resolution.
+/// Minimal capability registry for runtime capability resolution.
 /// Agents use this to find capabilities by domain or key, then execute via ToolAdapterRegistry.
 /// </summary>
 public interface ICapabilityRegistry

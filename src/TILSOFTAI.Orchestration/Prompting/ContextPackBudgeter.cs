@@ -3,7 +3,7 @@ using TILSOFTAI.Orchestration.Prompting;
 namespace TILSOFTAI.Orchestration.Prompting;
 
 /// <summary>
-/// PATCH 36.06: ContextPackBudgeter — updated priority map with canonical keys.
+/// ContextPackBudgeter — updated priority map with canonical keys.
 /// Budgets context packs by priority: critical packs are trimmed rather than dropped.
 /// </summary>
 public sealed class ContextPackBudgeter
@@ -38,7 +38,7 @@ public sealed class ContextPackBudgeter
 
     // Priority map: lower number = higher priority = removed LAST
     // Critical packs are trimmed (content shortened) rather than dropped entirely
-    // PATCH 36.06: Uses canonical keys; added react_followup_rules
+    // Uses canonical keys; added react_followup_rules
     private static readonly Dictionary<string, int> PackPriority = new(StringComparer.OrdinalIgnoreCase)
     {
         [ContextPackKeys.ToolCatalog] = 0,           // Highest: LLM needs tool instructions

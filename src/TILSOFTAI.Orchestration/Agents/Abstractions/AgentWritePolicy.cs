@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 namespace TILSOFTAI.Agents.Abstractions;
 
 /// <summary>
-/// Sprint 3: Static utility that enforces the write-path governance rule:
+/// Static utility that enforces the write-path governance rule:
 /// domain agents must NOT execute writes directly — all write intents must
 /// route through IApprovalEngine before execution.
 /// </summary>
@@ -20,7 +20,7 @@ public static class AgentWritePolicy
             return;
         }
 
-        // Sprint 3: write preparation detected — log governance trace.
+        // write preparation detected — log governance trace.
         // The actual enforcement happens at the SqlToolAdapter layer (IWriteActionGuard);
         // this log ensures visibility that a write intent reached the agent layer.
         logger.LogInformation(

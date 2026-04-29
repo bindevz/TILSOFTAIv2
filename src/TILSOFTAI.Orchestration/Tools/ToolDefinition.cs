@@ -12,7 +12,7 @@ public sealed class ToolDefinition
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>
-    /// PATCH 37.02: When true, Instruction/JsonSchema come from SQL ToolCatalog
+    /// When true, Instruction/JsonSchema come from SQL ToolCatalog
     /// and are NOT required at Register() time.
     /// </summary>
     public bool IsSqlBacked { get; set; }

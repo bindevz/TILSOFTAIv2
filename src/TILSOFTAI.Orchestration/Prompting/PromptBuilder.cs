@@ -27,7 +27,7 @@ public sealed class PromptBuilder
     }
 
     /// <summary>
-    /// PATCH 36.02: BuildAsync now accepts optional PromptBuildContext for scoped packs.
+    /// BuildAsync now accepts optional PromptBuildContext for scoped packs.
     /// </summary>
     public async Task<LlmRequest> BuildAsync(
         IReadOnlyList<LlmMessage> messages,
@@ -71,8 +71,8 @@ public sealed class PromptBuilder
         };
     }
 
-    // PATCH 29.04: Compact system prompt - no guessing, user language, tool outputs only
-    // PATCH 34.09: Hallucination guard rules
+    // Compact system prompt - no guessing, user language, tool outputs only
+    // Hallucination guard rules
     private static string BuildBaseSystemPrompt(TilsoftExecutionContext context)
     {
         var sb = new StringBuilder();

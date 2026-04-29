@@ -1,7 +1,7 @@
 namespace TILSOFTAI.Orchestration.Prompting;
 
 /// <summary>
-/// PATCH 36.06: Canonical context pack key constants.
+/// Canonical context pack key constants.
 /// All providers and the budgeter reference these instead of local strings.
 /// </summary>
 public static class ContextPackKeys

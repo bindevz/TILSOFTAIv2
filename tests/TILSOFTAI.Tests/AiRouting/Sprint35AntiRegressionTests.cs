@@ -17,7 +17,7 @@ using Xunit;
 
 namespace TILSOFTAI.Tests.AiRouting;
 
-public sealed class Sprint35AntiRegressionTests
+public sealed class AgentFrameworkAntiRegressionTests
 {
     [Fact]
     public async Task Router_ShouldLetOfficialRuntimeSelectMaterials_WhenWrongCandidateIsFirst()
@@ -25,7 +25,7 @@ public sealed class Sprint35AntiRegressionTests
         var facade = new CountingCapabilityExecutionFacade();
         var runtime = new SelectingAgentRuntime(
             "model_get_materials",
-            new Dictionary<string, object?> { ["model_code"] = "ABC" });
+            new Dictionary<string, object?> { ["modelCode"] = "ABC" });
         var router = CreateRouter(
             [
                 ModelCandidate("model.overview.by-code"),
@@ -79,7 +79,7 @@ public sealed class Sprint35AntiRegressionTests
         var facade = new CountingCapabilityExecutionFacade();
         var runtime = new SelectingAgentRuntime(
             "model_get_overview",
-            new Dictionary<string, object?> { ["model_code"] = "ABC" });
+            new Dictionary<string, object?> { ["modelCode"] = "ABC" });
         var router = CreateRouter(
             [ModelCandidate("model.overview.by-code")],
             facade,
@@ -102,7 +102,7 @@ public sealed class Sprint35AntiRegressionTests
         var facade = new CountingCapabilityExecutionFacade();
         var runtime = new SelectingAgentRuntime(
             "model_get_overview",
-            new Dictionary<string, object?> { ["model_code"] = "ABC" });
+            new Dictionary<string, object?> { ["modelCode"] = "ABC" });
         var router = CreateRouter(
             [ModelCandidate("model.overview.by-code")],
             facade,
@@ -121,12 +121,12 @@ public sealed class Sprint35AntiRegressionTests
     }
 
     [Fact]
-    public async Task Router_ShouldNotAdvertiseNonModelTools_WithSprint35Configuration()
+    public async Task Router_ShouldNotAdvertiseNonModelTools_WithModelOnlyConfiguration()
     {
         var facade = new CountingCapabilityExecutionFacade();
         var runtime = new SelectingAgentRuntime(
             "model_get_overview",
-            new Dictionary<string, object?> { ["model_code"] = "ABC" });
+            new Dictionary<string, object?> { ["modelCode"] = "ABC" });
         var router = CreateRouter(
             [
                 ModelCandidate("model.overview.by-code"),
@@ -145,6 +145,40 @@ public sealed class Sprint35AntiRegressionTests
         runtime.LastRequest!.Functions.Select(function => function.Name)
             .Should()
             .Equal("model_get_overview");
+    }
+
+    [Fact]
+    public async Task Router_ShouldAdvertiseAtMostSixModelTools_WithMixedCandidates()
+    {
+        var facade = new CountingCapabilityExecutionFacade();
+        var runtime = new SelectingAgentRuntime(
+            "model_get_overview",
+            new Dictionary<string, object?> { ["modelCode"] = "ABC" });
+        var router = CreateRouter(
+            [
+                ModelCandidate("model.overview.by-code"),
+                ModelCandidate("warehouse.stock.available", domain: "warehouse"),
+                ModelCandidate("model.pieces.by-code"),
+                ModelCandidate("sales.order.status", domain: "sales"),
+                ModelCandidate("model.materials.by-code"),
+                ModelCandidate("model.packaging.by-code"),
+                ModelCandidate("model.count"),
+                ModelCandidate("model.compare"),
+                ModelCandidate("model.extra.one"),
+                ModelCandidate("accounting.receivables", domain: "accounting")
+            ],
+            facade,
+            runtime);
+
+        var result = await router.TryRouteAsync(
+            Request("Show model ABC", AnswerMode.Structured),
+            CancellationToken.None);
+
+        result.Handled.Should().BeTrue();
+        runtime.LastRequest!.Functions.Should().HaveCount(6);
+        runtime.LastRequest.Functions.Select(function => function.Name)
+            .Should()
+            .OnlyContain(name => name.StartsWith("model_", StringComparison.OrdinalIgnoreCase));
     }
 
     private static OfficialAgentToolRouter CreateRouter(

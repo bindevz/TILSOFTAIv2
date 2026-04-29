@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace TILSOFTAI.Orchestration.Normalization;
 
 /// <summary>
-/// PATCH 29.05: Canonicalizes whitespace in prompt text for deterministic processing.
+/// Canonicalizes whitespace in prompt text for deterministic processing.
 /// - Normalizes CRLF/CR to LF
 /// - Collapses multiple spaces/tabs/NBSP to single space
 /// - Trims each line

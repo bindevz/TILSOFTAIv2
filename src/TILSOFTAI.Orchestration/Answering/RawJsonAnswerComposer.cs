@@ -26,6 +26,7 @@ public sealed class RawJsonAnswerComposer
             result,
             resultSchema = request.ResultSchema,
             executionMetadata = request.ExecutionMetadata,
+            sensitivityPolicy = request.SensitivityPolicy,
             provenance = CreateProvenance(request)
         };
 

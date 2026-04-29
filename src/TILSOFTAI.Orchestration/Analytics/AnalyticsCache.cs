@@ -10,7 +10,7 @@ using TILSOFTAI.Domain.Configuration;
 namespace TILSOFTAI.Orchestration.Analytics;
 
 /// <summary>
-/// PATCH 31.05: Item in the cache write background queue.
+/// Item in the cache write background queue.
 /// </summary>
 public sealed record CacheWriteItem(
     string TenantId,
@@ -19,7 +19,7 @@ public sealed record CacheWriteItem(
     InsightOutput Insight);
 
 /// <summary>
-/// PATCH 31.05: Queue for background cache writes.
+/// Queue for background cache writes.
 /// </summary>
 public interface ICacheWriteQueue
 {
@@ -30,8 +30,8 @@ public interface ICacheWriteQueue
 }
 
 /// <summary>
-/// PATCH 29.06: Caches InsightOutput for repeated queries.
-/// PATCH 30.03: Include roles hash in cache key to prevent privilege leakage.
+/// Caches InsightOutput for repeated queries.
+/// Include roles hash in cache key to prevent privilege leakage.
 /// </summary>
 public sealed class AnalyticsCache
 {
@@ -51,7 +51,7 @@ public sealed class AnalyticsCache
 
     /// <summary>
     /// Tries to get a cached insight.
-    /// PATCH 30.03: Requires roles to ensure cache isolation by security context.
+    /// Requires roles to ensure cache isolation by security context.
     /// </summary>
     public async Task<InsightOutput?> TryGetAsync(
         string tenantId, 
@@ -101,7 +101,7 @@ public sealed class AnalyticsCache
 
     /// <summary>
     /// Sets a cached insight.
-    /// PATCH 30.03: Requires roles to ensure cache isolation by security context.
+    /// Requires roles to ensure cache isolation by security context.
     /// </summary>
     public async Task SetAsync(
         string tenantId, 
@@ -115,7 +115,7 @@ public sealed class AnalyticsCache
             return;
         }
 
-        // PATCH 30.03: Optional bypass for restricted-tag results
+        // Optional bypass for restricted-tag results
         if (!_analyticsOptions.AllowCachingRestricted && ContainsSecurityWarning(insight))
         {
             _logger.LogDebug("CacheBypass | Security-sensitive result not cached | TenantId: {TenantId}", tenantId);
@@ -150,7 +150,7 @@ public sealed class AnalyticsCache
     }
 
     /// <summary>
-    /// PATCH 30.03: Check if insight contains security-related warnings.
+    /// Check if insight contains security-related warnings.
     /// </summary>
     private static bool ContainsSecurityWarning(InsightOutput insight)
     {
@@ -163,7 +163,7 @@ public sealed class AnalyticsCache
     }
 
     /// <summary>
-    /// PATCH 30.03: Computes a deterministic hash including roles for security.
+    /// Computes a deterministic hash including roles for security.
     /// Key = sha256(tenantId|normalizedQuery|rolesCsv)
     /// </summary>
     public static string ComputeHash(string tenantId, string normalizedQuery, IEnumerable<string>? roles)

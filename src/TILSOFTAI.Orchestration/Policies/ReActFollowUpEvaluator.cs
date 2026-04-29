@@ -8,7 +8,7 @@ namespace TILSOFTAI.Orchestration.Policies;
 /// Stateless evaluator for ReAct follow-up rules.
 /// Evaluates rules against tool result JSON and returns matched rules.
 /// Supports operators: exists, ==, !=, &gt;, &gt;=, &lt;, &lt;=, contains.
-/// PATCH 36.01: Supports tool output envelopes ({meta, columns, rows:[{...}]}).
+/// Supports tool output envelopes ({meta, columns, rows:[{...}]}).
 /// </summary>
 public sealed class ReActFollowUpEvaluator
 {
@@ -95,7 +95,7 @@ public sealed class ReActFollowUpEvaluator
     }
 
     /// <summary>
-    /// PATCH 36.01: Extract effective root from tool output envelope.
+    /// Extract effective root from tool output envelope.
     /// If payload is object with "rows" array where rows[0] is object, use rows[0].
     /// This handles the standard {meta, columns, rows:[{...}]} envelope shape.
     /// </summary>

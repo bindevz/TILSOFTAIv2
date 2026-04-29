@@ -4,7 +4,7 @@ using TILSOFTAI.Orchestration.Tools;
 namespace TILSOFTAI.Orchestration.Prompting;
 
 /// <summary>
-/// PATCH 36.02: Immutable per-request context carrier for prompt building.
+/// Immutable per-request context carrier for prompt building.
 /// Provides scoped tools, resolved capability scopes, and runtime policy snapshot
 /// without storing mutable state on singleton providers.
 /// </summary>

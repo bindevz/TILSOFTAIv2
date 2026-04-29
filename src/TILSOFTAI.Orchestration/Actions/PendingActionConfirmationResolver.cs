@@ -49,7 +49,7 @@ public sealed class PendingActionConfirmationResolver : IPendingActionConfirmati
         {
             _logger?.LogInformation(
                 "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | expiredCount: {ExpiredCount}",
-                Sprint35TraceEvents.PendingActionExpired,
+                AgentRoutingTraceEvents.PendingActionExpired,
                 context.CorrelationId,
                 context.TenantId,
                 context.UserId,
@@ -86,7 +86,7 @@ public sealed class PendingActionConfirmationResolver : IPendingActionConfirmati
             .ConfigureAwait(false);
         _logger?.LogInformation(
             "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | actionId: {ActionId} | capabilityKey: {CapabilityKey}",
-            Sprint35TraceEvents.PendingActionConfirmed,
+            AgentRoutingTraceEvents.PendingActionConfirmed,
             context.CorrelationId,
             context.TenantId,
             context.UserId,

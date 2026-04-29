@@ -1,7 +1,7 @@
 namespace TILSOFTAI.Domain.Audit;
 
 /// <summary>
-/// PATCH 31.06: Audit event for tool governance decisions.
+/// Audit event for tool governance decisions.
 /// Covers both allow and deny outcomes across all execution paths.
 /// </summary>
 public sealed record GovernanceAuditEvent

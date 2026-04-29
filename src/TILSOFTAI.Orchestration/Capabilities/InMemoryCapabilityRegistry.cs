@@ -1,8 +1,8 @@
 namespace TILSOFTAI.Orchestration.Capabilities;
 
 /// <summary>
-/// Sprint 4: In-memory capability registry seeded at startup.
-/// Future sprints may replace with a data-driven (SQL/config) registry.
+/// In-memory capability registry seeded at startup.
+/// Future versions may replace with a data-driven (SQL/config) registry.
 /// </summary>
 public sealed class InMemoryCapabilityRegistry : ICapabilityRegistry
 {

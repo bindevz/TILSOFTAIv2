@@ -14,10 +14,6 @@ using Xunit;
 
 namespace TILSOFTAI.Tests.Approvals;
 
-/// <summary>
-/// Sprint 4: End-to-end approval lifecycle tests covering create → approve → execute,
-/// and failure paths: pending-should-not-execute, rejected-should-not-execute, re-execute-should-fail.
-/// </summary>
 public sealed class ApprovalEngineE2ETests
 {
     private const string TenantId = "tenant-e2e";
@@ -126,7 +122,7 @@ public sealed class ApprovalEngineE2ETests
     }
 
     [Fact]
-    public async Task Approve_ShouldReturnApprovedRecord()
+    public async Task Approve_ShouldReturnConfirmedRecord()
     {
         var created = await _engine.CreateAsync(CreateAction(), CreateContext(), CancellationToken.None);
 
@@ -134,12 +130,12 @@ public sealed class ApprovalEngineE2ETests
             created.ActionId, CreateContext(ApproverUserId), CancellationToken.None);
 
         approved.Should().NotBeNull();
-        approved.Status.Should().Be("Approved");
+        approved.Status.Should().Be(ActionRequestStatus.Confirmed);
         approved.ActionId.Should().Be(created.ActionId);
     }
 
     [Fact]
-    public async Task Execute_ShouldSucceed_WhenApproved()
+    public async Task Execute_ShouldSucceed_WhenConfirmed()
     {
         var created = await _engine.CreateAsync(CreateAction(), CreateContext(), CancellationToken.None);
         await _engine.ApproveAsync(created.ActionId, CreateContext(ApproverUserId), CancellationToken.None);
@@ -184,7 +180,7 @@ public sealed class ApprovalEngineE2ETests
         await _engine.ApproveAsync(created.ActionId, CreateContext(ApproverUserId), CancellationToken.None);
         await _engine.ExecuteAsync(created.ActionId, CreateContext(), CancellationToken.None);
 
-        // Attempting to execute again — status is now "Executed", not "Approved"
+        // Attempting to execute again: status is now "Executed", not "Confirmed".
         var act = () => _engine.ExecuteAsync(
             created.ActionId, CreateContext(), CancellationToken.None);
 
@@ -216,7 +212,7 @@ public sealed class ApprovalEngineE2ETests
         // Step 2: Approve
         var approveContext = CreateContext(ApproverUserId);
         var approved = await _engine.ApproveAsync(created.ActionId, approveContext, CancellationToken.None);
-        approved.Status.Should().Be("Approved");
+        approved.Status.Should().Be(ActionRequestStatus.Confirmed);
 
         // Step 3: Execute
         var result = await _engine.ExecuteAsync(created.ActionId, context, CancellationToken.None);
@@ -266,22 +262,17 @@ public sealed class ApprovalEngineE2ETests
         private readonly Dictionary<string, ActionRequestRecord> _records = new(StringComparer.OrdinalIgnoreCase);
         private int _sequence;
 
-        public Task<ActionRequestRecord> CreateAsync(ActionRequestRecord request, CancellationToken cancellationToken)
+        public Task<ActionRequestRecord> CreateAsync(ActionRequestCreateRequest request, CancellationToken cancellationToken)
         {
+            var record = ActionRequestRecord.FromCreateRequest(request, DateTime.UtcNow);
             var id = $"action-{Interlocked.Increment(ref _sequence)}";
-            request.ActionId = id;
-            request.RequestedAtUtc = DateTime.UtcNow;
-            request.CreatedAtUtc = request.RequestedAtUtc;
-            request.ExpiresAtUtc = request.ExpiresAtUtc == default ? request.RequestedAtUtc.AddHours(24) : request.ExpiresAtUtc;
-            request.UserId = string.IsNullOrWhiteSpace(request.UserId) ? request.RequestedByUserId : request.UserId;
-            request.CapabilityKey = string.IsNullOrWhiteSpace(request.CapabilityKey) ? request.ProposedToolName : request.CapabilityKey;
-            request.FunctionName = string.IsNullOrWhiteSpace(request.FunctionName) ? request.ProposedToolName : request.FunctionName;
-            _records[id] = request;
-            return Task.FromResult(request);
+            record.ActionId = id;
+            record.UserId = string.IsNullOrWhiteSpace(record.UserId) ? record.RequestedByUserId : record.UserId;
+            record.CapabilityKey = string.IsNullOrWhiteSpace(record.CapabilityKey) ? record.ProposedToolName : record.CapabilityKey;
+            record.FunctionName = string.IsNullOrWhiteSpace(record.FunctionName) ? record.ProposedToolName : record.FunctionName;
+            _records[id] = record;
+            return Task.FromResult(record);
         }
-
-        public Task<ActionRequestRecord> CreateAsync(ActionRequestCreateRequest request, CancellationToken cancellationToken) =>
-            CreateAsync(ActionRequestRecord.FromCreateRequest(request, DateTime.UtcNow), cancellationToken);
 
         public Task<ActionRequestRecord?> GetAsync(string tenantId, string actionId, CancellationToken cancellationToken)
         {
@@ -326,15 +317,6 @@ public sealed class ApprovalEngineE2ETests
             return Task.FromResult(record);
         }
 
-        public Task<ActionRequestRecord> ApproveAsync(string tenantId, string actionId, string approvedByUserId, CancellationToken cancellationToken)
-        {
-            var record = _records[actionId];
-            record.Status = ActionRequestStatus.Approved;
-            record.ApprovedByUserId = approvedByUserId;
-            record.ApprovedAtUtc = DateTime.UtcNow;
-            return Task.FromResult(record);
-        }
-
         public Task<ActionRequestRecord> RejectAsync(
             string tenantId,
             string userId,
@@ -350,32 +332,27 @@ public sealed class ApprovalEngineE2ETests
             return Task.FromResult(record);
         }
 
-        public Task<ActionRequestRecord> MarkExecutedAsync(string tenantId, string actionId, string resultCompactJson, bool success, CancellationToken cancellationToken)
-        {
-            var record = _records[actionId];
-            record.Status = success ? ActionRequestStatus.Executed : ActionRequestStatus.Failed;
-            record.ExecutedAtUtc = DateTime.UtcNow;
-            record.ExecutionResultCompactJson = resultCompactJson;
-            return Task.FromResult(record);
-        }
-
         public Task<ActionRequestRecord> MarkExecutedAsync(
             string tenantId,
             string actionId,
             string executedByUserId,
+            string? resultCompactJson,
+            bool success,
             CancellationToken cancellationToken)
         {
             var record = _records[actionId];
-            if (!string.Equals(record.Status, ActionRequestStatus.Approved, StringComparison.OrdinalIgnoreCase)
+            if (!string.Equals(record.Status, ActionRequestStatus.Confirmed, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(record.Status, ActionRequestStatus.Approved, StringComparison.OrdinalIgnoreCase)
                 || record.ExecutedAtUtc.HasValue
                 || record.IsExpired(DateTime.UtcNow))
             {
                 return Task.FromResult(record);
             }
 
-            record.Status = ActionRequestStatus.Executed;
+            record.Status = success ? ActionRequestStatus.Executed : ActionRequestStatus.Failed;
             record.ExecutedAtUtc = DateTime.UtcNow;
             record.ExecutedByUserId = executedByUserId;
+            record.ExecutionResultCompactJson = resultCompactJson;
             return Task.FromResult(record);
         }
 

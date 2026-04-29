@@ -1,7 +1,7 @@
 namespace TILSOFTAI.Orchestration.Capabilities;
 
 /// <summary>
-/// Sprint 5: Abstraction for data-driven capability sources.
+/// Abstraction for data-driven capability sources.
 /// Implementations can load capabilities from configuration, SQL, or other sources.
 /// </summary>
 public interface ICapabilitySource

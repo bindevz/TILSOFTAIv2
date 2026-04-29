@@ -109,7 +109,7 @@ public sealed class ApprovalEngine : IApprovalEngine
 
             _logger.LogInformation(
                 "{EventName} | correlationId: {CorrelationId} | tenantId: {TenantId} | userId: {UserId} | conversationId: {ConversationId} | actionId: {ActionId} | capabilityKey: {CapabilityKey} | procedureName: {ProcedureName} | requestedByUserId: {RequestedByUserId}",
-                Sprint35TraceEvents.PendingActionCreated,
+                AgentRoutingTraceEvents.PendingActionCreated,
                 context.CorrelationId,
                 context.TenantId,
                 context.UserId,
@@ -134,7 +134,16 @@ public sealed class ApprovalEngine : IApprovalEngine
         var sw = Stopwatch.StartNew();
         try
         {
-            var record = await _requestStore.ApproveAsync(context.TenantId, actionId, context.UserId, ct);
+            var pending = await _requestStore.GetAsync(context.TenantId, actionId, ct);
+            if (pending is null)
+            {
+                throw new InvalidOperationException(Resources.Ex_ActionRequestNotFound);
+            }
+
+            var confirmationUserId = string.IsNullOrWhiteSpace(pending.UserId)
+                ? pending.RequestedByUserId
+                : pending.UserId;
+            var record = await _requestStore.ConfirmAsync(context.TenantId, confirmationUserId, actionId, ct);
 
             _logger.LogInformation(
                 "ApprovalApprove | ActionId: {ActionId} | Tenant: {TenantId} | ApprovedBy: {UserId}",
@@ -194,7 +203,8 @@ public sealed class ApprovalEngine : IApprovalEngine
                 throw new InvalidOperationException(Resources.Ex_ActionRequestNotFound);
             }
 
-            if (!string.Equals(request.Status, ActionRequestStatus.Approved, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(request.Status, ActionRequestStatus.Confirmed, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(request.Status, ActionRequestStatus.Approved, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(Resources.Ex_ActionRequestMustBeApproved);
             }
@@ -255,7 +265,13 @@ public sealed class ApprovalEngine : IApprovalEngine
             var compacted = _toolResultCompactor.CompactJson(rawResult, maxBytes, _chatOptions.CompactionRules);
 
             sw.Stop();
-            var updated = await _requestStore.MarkExecutedAsync(context.TenantId, actionId, compacted, success: true, ct);
+            var updated = await _requestStore.MarkExecutedAsync(
+                context.TenantId,
+                actionId,
+                context.UserId,
+                compacted,
+                success: true,
+                ct);
 
             _logger.LogInformation(
                 "ApprovalExecute | ActionId: {ActionId} | Tenant: {TenantId} | SP: {StoredProcedure} | DurationMs: {DurationMs} | Success: true",

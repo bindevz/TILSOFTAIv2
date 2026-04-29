@@ -46,6 +46,8 @@ public sealed class PendingActionConfirmationResolverTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
     }
@@ -178,16 +180,11 @@ public sealed class PendingActionConfirmationResolverTests
         public Task<ActionRequestRecord> CreateAsync(ActionRequestCreateRequest request, CancellationToken cancellationToken)
         {
             var record = ActionRequestRecord.FromCreateRequest(request, DateTime.UtcNow);
-            return CreateAsync(record, cancellationToken);
-        }
-
-        public Task<ActionRequestRecord> CreateAsync(ActionRequestRecord request, CancellationToken cancellationToken)
-        {
-            request.ActionId = string.IsNullOrWhiteSpace(request.ActionId)
+            record.ActionId = string.IsNullOrWhiteSpace(record.ActionId)
                 ? $"action-{Interlocked.Increment(ref _sequence)}"
-                : request.ActionId;
-            _records[request.ActionId] = request;
-            return Task.FromResult(request);
+                : record.ActionId;
+            _records[record.ActionId] = record;
+            return Task.FromResult(record);
         }
 
         public Task<ActionRequestRecord?> GetAsync(string tenantId, string actionId, CancellationToken cancellationToken)
@@ -249,15 +246,18 @@ public sealed class PendingActionConfirmationResolverTests
             string tenantId,
             string actionId,
             string executedByUserId,
+            string? resultCompactJson,
+            bool success,
             CancellationToken cancellationToken)
         {
             var record = _records[actionId];
-            if (string.Equals(record.Status, ActionRequestStatus.Approved, StringComparison.OrdinalIgnoreCase)
+            if (string.Equals(record.Status, ActionRequestStatus.Confirmed, StringComparison.OrdinalIgnoreCase)
                 && !record.IsExpired(DateTime.UtcNow))
             {
-                record.Status = ActionRequestStatus.Executed;
+                record.Status = success ? ActionRequestStatus.Executed : ActionRequestStatus.Failed;
                 record.ExecutedAtUtc = DateTime.UtcNow;
                 record.ExecutedByUserId = executedByUserId;
+                record.ExecutionResultCompactJson = resultCompactJson;
             }
 
             return Task.FromResult(record);
@@ -279,30 +279,5 @@ public sealed class PendingActionConfirmationResolverTests
             return Task.FromResult(count);
         }
 
-        public Task<ActionRequestRecord> ApproveAsync(
-            string tenantId,
-            string actionId,
-            string approvedByUserId,
-            CancellationToken cancellationToken)
-        {
-            var record = _records[actionId];
-            record.Status = ActionRequestStatus.Approved;
-            record.ApprovedByUserId = approvedByUserId;
-            record.ApprovedAtUtc = DateTime.UtcNow;
-            return Task.FromResult(record);
-        }
-
-        public Task<ActionRequestRecord> MarkExecutedAsync(
-            string tenantId,
-            string actionId,
-            string resultCompactJson,
-            bool success,
-            CancellationToken cancellationToken)
-        {
-            var record = _records[actionId];
-            record.Status = success ? ActionRequestStatus.Executed : ActionRequestStatus.Failed;
-            record.ExecutedAtUtc = DateTime.UtcNow;
-            return Task.FromResult(record);
-        }
     }
 }

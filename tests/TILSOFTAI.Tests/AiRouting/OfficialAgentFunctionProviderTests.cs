@@ -249,22 +249,22 @@ public sealed class OfficialAgentFunctionProviderTests
         var schema = function.JsonSchema;
 
         function.Name.Should().Be("model_overview_by_code");
-        schema.GetProperty("properties").TryGetProperty("model_code", out var modelCodeSchema).Should().BeTrue();
+        schema.GetProperty("properties").TryGetProperty("modelCode", out var modelCodeSchema).Should().BeTrue();
         modelCodeSchema.GetProperty("type").GetString().Should().Be("string");
         schema.GetProperty("properties").TryGetProperty("model_id", out _).Should().BeFalse();
         schema.GetProperty("required").EnumerateArray().Select(item => item.GetString())
             .Should()
-            .ContainSingle("model_code");
+            .ContainSingle("modelCode");
 
         await function.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?>
             {
-                ["model_code"] = "ABC"
+                ["modelCode"] = "ABC"
             }),
             CancellationToken.None);
 
         function.Should().BeAssignableTo<ICapabilityBackedAIFunction>()
-            .Subject.Descriptor.ModelToCapabilityArgumentMap["model_code"].Should().Be("modelCode");
+            .Subject.Descriptor.ModelToCapabilityArgumentMap["modelCode"].Should().Be("modelCode");
         executionFacade.LastCapabilityKey.Should().Be("model.overview.by-code");
         executionFacade.LastArguments.Should().ContainKey("modelCode").WhoseValue.Should().Be("ABC");
         executionFacade.LastArguments.Should().NotContainKey("modelId");
@@ -284,11 +284,11 @@ public sealed class OfficialAgentFunctionProviderTests
         var function = functions.Should().ContainSingle().Subject;
         var schema = function.JsonSchema;
 
-        schema.GetProperty("properties").TryGetProperty("model_codes", out var modelCodesSchema).Should().BeTrue();
+        schema.GetProperty("properties").TryGetProperty("modelCodes", out var modelCodesSchema).Should().BeTrue();
         modelCodesSchema.GetProperty("type").GetString().Should().Be("array");
         schema.GetProperty("properties").TryGetProperty("model_ids", out _).Should().BeFalse();
         function.Should().BeAssignableTo<ICapabilityBackedAIFunction>()
-            .Subject.Descriptor.ModelToCapabilityArgumentMap["model_codes"].Should().Be("modelCodes");
+            .Subject.Descriptor.ModelToCapabilityArgumentMap["modelCodes"].Should().Be("modelCodes");
     }
 
     private static DynamicFunctionToolFactory CreateFactory() => new(

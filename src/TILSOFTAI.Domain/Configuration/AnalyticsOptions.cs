@@ -59,37 +59,32 @@ public sealed class AnalyticsOptions
     /// <summary>
     /// Enable deterministic analytics orchestration.
     /// When enabled, analytics queries bypass free-form LLM flow.
-    /// PATCH 29.02
-    /// </summary>
+    /// /// </summary>
     public bool Enabled { get; set; } = true;
 
     /// <summary>
     /// Maximum tool calls per analytics turn.
-    /// PATCH 29.02
-    /// </summary>
+    /// /// </summary>
     public int MaxToolCallsPerTurn { get; set; } = 10;
 
     /// <summary>
     /// Default TopN limit for breakdowns.
-    /// PATCH 29.02
-    /// </summary>
+    /// /// </summary>
     public int DefaultTopN { get; set; } = 10;
 
     /// <summary>
     /// Maximum breakdown tables to include in output.
-    /// PATCH 29.02
-    /// </summary>
+    /// /// </summary>
     public int MaxBreakdownTables { get; set; } = 2;
 
     /// <summary>
     /// Allow caching of results that contain security-sensitive data (restricted tags).
     /// When false (default), results with security warnings are not cached.
-    /// PATCH 30.03
-    /// </summary>
+    /// /// </summary>
     public bool AllowCachingRestricted { get; set; } = false;
 
     /// <summary>
-    /// PATCH 31.07: Role required to access analytics features.
+    /// Role required to access analytics features.
     /// Default: "analytics.read". Set in appsettings: Analytics:RequiredRole
     /// </summary>
     public string RequiredRole { get; set; } = "analytics.read";

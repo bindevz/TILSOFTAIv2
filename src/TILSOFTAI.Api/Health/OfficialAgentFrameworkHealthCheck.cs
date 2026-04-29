@@ -87,7 +87,7 @@ public sealed class OfficialAgentFrameworkHealthCheck : IHealthCheck
         if (!isModelOnlyRuntime)
         {
             return Task.FromResult(HealthCheckResult.Unhealthy(
-                "Official Microsoft Agent Framework routing is enabled, but AiRouting:AllowedDomains must contain only the model domain for Sprint 35.",
+                "Official Microsoft Agent Framework routing is enabled, but AiRouting:AllowedDomains must contain only the model domain.",
                 data: data));
         }
 

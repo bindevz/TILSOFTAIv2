@@ -6,7 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Optional local override (gitignored) - loaded after defaults to allow secret overrides
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
-// PATCH 31.02: Validate no placeholder secrets at startup
+// Validate no placeholder secrets at startup
 var sqlConn = builder.Configuration["Sql:ConnectionString"];
 if (string.IsNullOrEmpty(sqlConn) || sqlConn.Contains("__") || sqlConn.Contains("YOUR_"))
 {

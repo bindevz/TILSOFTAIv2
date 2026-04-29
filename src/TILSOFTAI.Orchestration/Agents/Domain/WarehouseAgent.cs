@@ -9,7 +9,7 @@ using TILSOFTAI.Tools.Abstractions;
 namespace TILSOFTAI.Agents.Domain;
 
 /// <summary>
-/// Sprint 5: Warehouse domain agent with native capability execution.
+/// Warehouse domain agent with native capability execution.
 /// Resolves warehouse capabilities from ICapabilityRegistry using ICapabilityResolver
 /// and executes via ToolAdapterRegistry.
 /// </summary>
@@ -44,10 +44,10 @@ public sealed class WarehouseAgent : DomainAgentBase
             "AgentExecution | AgentId: {AgentId} | IntentType: {IntentType} | DomainHint: {DomainHint}",
             AgentId, task.IntentType, task.DomainHint ?? "none");
 
-        // Sprint 3: enforce write governance before any execution
+        // enforce write governance before any execution
         AgentWritePolicy.EnforceWriteGovernance(task, AgentId, Logger);
 
-        // Sprint 5: attempt native capability resolution using structured resolver
+        // attempt native capability resolution using structured resolver
         var candidates = _capabilityRegistry.GetByDomain("warehouse");
         var capability = ResolveCapability(task, candidates);
 
@@ -91,7 +91,7 @@ public sealed class WarehouseAgent : DomainAgentBase
     }
 
     /// <summary>
-    /// Sprint 5: Resolve warehouse capability using structured resolver.
+    /// Resolve warehouse capability using structured resolver.
     /// Uses CapabilityHint from supervisor when available.
     /// </summary>
     internal CapabilityDescriptor? ResolveCapability(AgentTask task, IReadOnlyList<CapabilityDescriptor> candidates)
@@ -122,9 +122,9 @@ public sealed class WarehouseAgent : DomainAgentBase
     }
 
     /// <summary>
-    /// Sprint 4 backward-compat: Resolve a warehouse capability from the input text.
+    /// backward-compat: Resolve a warehouse capability from the input text.
     /// </summary>
-    [Obsolete("Sprint 5: use ResolveCapability(AgentTask, IReadOnlyList<CapabilityDescriptor>) with structured resolver instead")]
+    [Obsolete("Use ResolveCapability(AgentTask, IReadOnlyList<CapabilityDescriptor>) with structured resolver instead")]
     internal CapabilityDescriptor? ResolveCapability(string input)
     {
         if (string.IsNullOrWhiteSpace(input))
