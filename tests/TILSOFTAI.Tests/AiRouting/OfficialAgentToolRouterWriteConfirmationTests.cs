@@ -10,6 +10,7 @@ using TILSOFTAI.Orchestration.AiRouting;
 using TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
 using TILSOFTAI.Orchestration.AiRouting.Tools;
 using TILSOFTAI.Orchestration.Answering;
+using TILSOFTAI.Orchestration.Answering.Narration;
 using TILSOFTAI.Orchestration.Execution;
 using TILSOFTAI.Orchestration.Semantic;
 using Xunit;
@@ -30,7 +31,7 @@ public sealed class OfficialAgentToolRouterWriteConfirmationTests
             new ThrowingToolFactory(),
             new AgentRunOptionsFactory(Options.Create(new AiRoutingOptions())),
             agentRuntime,
-            new StructuredAnswerComposer(new RawJsonAnswerComposer(), new AiSummaryService()),
+            new StructuredAnswerComposer(new RawJsonAnswerComposer(), new FallbackAnswerNarrationService()),
             new RecordingTraceStore(),
             [facade],
             [approval],
@@ -211,5 +212,15 @@ public sealed class OfficialAgentToolRouterWriteConfirmationTests
     {
         public Task SaveAsync(ToolRoutingTrace trace, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class FallbackAnswerNarrationService : IAnswerNarrationService
+    {
+        private readonly GenericSchemaSummaryFallback _fallback = new();
+
+        public Task<AnswerNarrationResult> GenerateAsync(
+            AnswerNarrationRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(_fallback.Generate(request));
     }
 }

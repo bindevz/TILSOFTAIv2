@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using TILSOFTAI.Approvals;
 using TILSOFTAI.Orchestration.Actions;
 using TILSOFTAI.Orchestration.Answering;
+using TILSOFTAI.Orchestration.Answering.Narration;
 using TILSOFTAI.Orchestration.AiRouting;
 using TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
 using TILSOFTAI.Orchestration.AiRouting.Tools;
@@ -65,7 +66,10 @@ public static class OrchestrationServiceCollectionExtensions
     private static IServiceCollection AddAnswerComposer(this IServiceCollection services)
     {
         services.AddSingleton<RawJsonAnswerComposer>();
-        services.AddSingleton<AiSummaryService>();
+        services.AddSingleton<AnswerNarrationPromptBuilder>();
+        services.AddSingleton<AnswerNarrationResponseParser>();
+        services.AddSingleton<GenericSchemaSummaryFallback>();
+        services.AddSingleton<IAnswerNarrationService, AgentAnswerNarrationService>();
         services.AddSingleton<IAnswerComposer, StructuredAnswerComposer>();
         return services;
     }

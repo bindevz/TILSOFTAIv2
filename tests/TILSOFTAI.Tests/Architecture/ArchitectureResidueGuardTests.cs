@@ -423,6 +423,87 @@ public sealed class ArchitectureResidueGuardTests
     }
 
     [Fact]
+    public void Architecture_NoLegacyNarrativeSummaryHelpers()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var composerPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "TILSOFTAI.Orchestration",
+            "Answering",
+            "StructuredAnswerComposer.cs");
+        var contents = File.ReadAllText(composerPath, Encoding.UTF8);
+
+        contents.Should().NotContain(string.Concat("BuildDeterministic", "ModelSummary"));
+        contents.Should().NotContain(string.Concat("Resolve", "ModelCount"));
+        contents.Should().NotContain(string.Concat("ExtractCompared", "ModelCodes"));
+        contents.Should().NotContain(string.Concat("TryGet", "ModelCode"));
+        contents.Should().NotContain(string.Concat("Is", "ModelCapability"));
+    }
+
+    [Fact]
+    public void Architecture_NoModelCapabilitySwitchInStructuredAnswerComposer()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var composerPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "TILSOFTAI.Orchestration",
+            "Answering",
+            "StructuredAnswerComposer.cs");
+        var contents = File.ReadAllText(composerPath, Encoding.UTF8);
+        var forbiddenCapabilityKeys = new[]
+        {
+            "model.count",
+            "model.overview",
+            "model.pieces",
+            "model.materials",
+            "model.packaging",
+            "model.compare"
+        };
+
+        contents.Should().NotContainAny(forbiddenCapabilityKeys);
+    }
+
+    [Fact]
+    public void Architecture_RawJsonDoesNotUseNarration()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var rawJsonComposerPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "TILSOFTAI.Orchestration",
+            "Answering",
+            "RawJsonAnswerComposer.cs");
+        var contents = File.ReadAllText(rawJsonComposerPath, Encoding.UTF8);
+
+        contents.Should().NotContain("IAnswerNarrationService");
+        contents.Should().NotContain("AnswerNarrationRequest");
+        contents.Should().NotContain("GenerateAsync");
+    }
+
+    [Fact]
+    public void Architecture_AnswerNarrationIsDomainNeutral()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var narrationRoot = Path.Combine(
+            repositoryRoot,
+            "src",
+            "TILSOFTAI.Orchestration",
+            "Answering",
+            "Narration");
+        var offenders = Directory
+            .EnumerateFiles(narrationRoot, "*.cs", SearchOption.AllDirectories)
+            .SelectMany(path => new[] { "ModelSummary", "model.count", "model.overview", "model.materials", "model.compare" }
+                .Where(token => File.ReadAllText(path, Encoding.UTF8).Contains(token, StringComparison.OrdinalIgnoreCase))
+                .Select(token => $"{Path.GetRelativePath(repositoryRoot, path)} contains {token}"))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        offenders.Should().BeEmpty("answer narration contracts and services must stay reusable across domains");
+    }
+
+    [Fact]
     public void SemanticRetrieval_ShouldUseDomainGateAndCandidateCaps()
     {
         var repositoryRoot = FindRepositoryRoot();

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using TILSOFTAI.Orchestration.Answering;
 using Xunit;
 
 namespace TILSOFTAI.Tests.Capabilities;
@@ -54,7 +55,60 @@ public sealed class SqlBackedCapabilityCatalogContractTests
         seed.Should().Contain("MERGE ai.CapabilitySensitivityPolicy");
         seed.Should().Contain("\"columns\"");
         seed.Should().Contain("\"maxRowsForChat\"");
+        seed.Should().Contain("\"maxRowsForNarration\"");
+        seed.Should().Contain("\"instructionsByLocale\"");
         seed.Should().Contain("\"hiddenColumns\"");
+    }
+
+    [Fact]
+    public void SqlBackedCatalog_MapsSummaryPolicy()
+    {
+        var policy = ReadSeededAnswerPolicy("model.overview.by-code");
+
+        policy.Summary.Mode.Should().Be(SummaryPolicy.ModeAi);
+        policy.Summary.Style.Should().Be("business_concise");
+        policy.Summary.MaxSentences.Should().Be(3);
+        policy.Summary.IncludeFilters.Should().BeTrue();
+        policy.Summary.IncludeRowCount.Should().BeTrue();
+        policy.Summary.IncludeCaveats.Should().BeTrue();
+        policy.Summary.InstructionsByLocale.Should().ContainKey("vi-VN");
+        policy.Summary.InstructionsByLocale.Should().ContainKey("en-US");
+        policy.Summary.ForbiddenClaims.Should().Contain("Do not expose hidden or masked fields.");
+    }
+
+    [Fact]
+    public void SqlBackedCatalog_MapsTablePolicy()
+    {
+        var policy = ReadSeededAnswerPolicy("model.materials.by-code");
+
+        policy.MaxRowsForChat.Should().Be(20);
+        policy.MaxRowsForNarration.Should().Be(20);
+        policy.Table.Enabled.Should().BeTrue();
+        policy.Table.MaxDisplayedRows.Should().Be(20);
+        policy.Table.IncludeRowCount.Should().BeTrue();
+        policy.Table.IncludeTruncationNotice.Should().BeTrue();
+        policy.NoData.IncludeUsedFilters.Should().BeTrue();
+        policy.FollowUp.IncludeMissingFields.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SqlBackedCatalog_RejectsInvalidAnswerPolicy()
+    {
+        var act = () => AnswerPolicy.FromJson(
+            """{"maxRowsForChat":20,"maxRowsForNarration":20,"summary":{"mode":"invent"},"table":{"enabled":true,"maxDisplayedRows":20},"noData":{},"followUp":{}}""");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*summary.mode*");
+    }
+
+    [Fact]
+    public void SqlBackedCatalog_RejectsMissingAnswerPolicySection()
+    {
+        var act = () => AnswerPolicy.FromJson(
+            """{"maxRowsForChat":20,"maxRowsForNarration":20,"summary":{"mode":"ai"},"table":{"enabled":true,"maxDisplayedRows":20},"noData":{}}""");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*followUp*");
     }
 
     [Fact]
@@ -68,6 +122,20 @@ public sealed class SqlBackedCapabilityCatalogContractTests
         validation.Should().Contain("model_id");
         validation.Should().Contain("reference missing stored procedures");
         validation.Should().Contain("valid result schema");
+        validation.Should().Contain("summary, table, noData, and followUp");
+    }
+
+    [Fact]
+    public void CatalogValidation_InvalidPolicy_Fails()
+    {
+        var validation = ReadSql("997_validate_capability_catalog.sql");
+
+        validation.Should().Contain("summary.mode must be one of ai, fallback, or disabled");
+        validation.Should().Contain("maxRowsForChat must be greater than zero");
+        validation.Should().Contain("maxRowsForNarration must be greater than zero");
+        validation.Should().Contain("table.maxDisplayedRows must be greater than zero");
+        validation.Should().Contain("summary.forbiddenClaims must be a JSON array");
+        validation.Should().Contain("summary.instructionsByLocale must be a JSON object");
     }
 
     [Fact]
@@ -91,6 +159,20 @@ public sealed class SqlBackedCapabilityCatalogContractTests
     {
         var repositoryRoot = FindRepositoryRoot();
         return File.ReadAllText(Path.Combine(repositoryRoot, "sql", "current", fileName));
+    }
+
+    private static AnswerPolicy ReadSeededAnswerPolicy(string capabilityKey)
+    {
+        var seed = ReadSql("008_seed_model_capability_catalog.sql");
+        var policyMergeStart = seed.IndexOf("MERGE ai.CapabilityAnswerPolicy", StringComparison.Ordinal);
+        policyMergeStart.Should().BeGreaterThanOrEqualTo(0);
+        var prefix = $"(N'{capabilityKey}', N'";
+        var start = seed.IndexOf(prefix, policyMergeStart, StringComparison.Ordinal);
+        start.Should().BeGreaterThanOrEqualTo(0);
+        start += prefix.Length;
+        var end = seed.IndexOf("')", start, StringComparison.Ordinal);
+        end.Should().BeGreaterThan(start);
+        return AnswerPolicy.FromJson(seed[start..end]);
     }
 
     private static string FindRepositoryRoot()

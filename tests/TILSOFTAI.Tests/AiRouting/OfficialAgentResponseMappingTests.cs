@@ -4,6 +4,7 @@ using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Orchestration.AiRouting;
 using TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
 using TILSOFTAI.Orchestration.Answering;
+using TILSOFTAI.Orchestration.Answering.Narration;
 using TILSOFTAI.Orchestration.Execution;
 using TILSOFTAI.Orchestration.Semantic;
 using Xunit;
@@ -76,7 +77,7 @@ public sealed class OfficialAgentResponseMappingTests
         var answer = await CreateComposer().ComposeAsync(mapped, CancellationToken.None);
 
         answer.AnswerType.Should().Be("structured");
-        answer.Text.Should().Contain("Found 1 rows for warehouse.inventory.by-item");
+        answer.Text.Should().Contain("Found 1 rows for \"warehouse.inventory.by-item\"");
         answer.Text.Should().NotContain("agent final text");
         answer.Blocks.OfType<TableBlock>().Should().ContainSingle();
     }
@@ -153,5 +154,15 @@ public sealed class OfficialAgentResponseMappingTests
     };
 
     private static StructuredAnswerComposer CreateComposer() =>
-        new(new RawJsonAnswerComposer(), new AiSummaryService());
+        new(new RawJsonAnswerComposer(), new FallbackAnswerNarrationService());
+
+    private sealed class FallbackAnswerNarrationService : IAnswerNarrationService
+    {
+        private readonly GenericSchemaSummaryFallback _fallback = new();
+
+        public Task<AnswerNarrationResult> GenerateAsync(
+            AnswerNarrationRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(_fallback.Generate(request));
+    }
 }

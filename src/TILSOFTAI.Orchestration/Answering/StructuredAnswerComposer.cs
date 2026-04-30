@@ -1,4 +1,5 @@
 using System.Globalization;
+using TILSOFTAI.Orchestration.Answering.Narration;
 using TILSOFTAI.Orchestration.Execution;
 
 namespace TILSOFTAI.Orchestration.Answering;
@@ -6,14 +7,15 @@ namespace TILSOFTAI.Orchestration.Answering;
 public sealed class StructuredAnswerComposer : IAnswerComposer
 {
     private readonly RawJsonAnswerComposer _rawJsonComposer;
-    private readonly AiSummaryService? _summaryService;
+    private readonly IAnswerNarrationService _narrationService;
+    private readonly GenericSchemaSummaryFallback _summaryFallback = new();
 
     public StructuredAnswerComposer(
         RawJsonAnswerComposer rawJsonComposer,
-        AiSummaryService? summaryService = null)
+        IAnswerNarrationService narrationService)
     {
         _rawJsonComposer = rawJsonComposer ?? throw new ArgumentNullException(nameof(rawJsonComposer));
-        _summaryService = summaryService;
+        _narrationService = narrationService ?? throw new ArgumentNullException(nameof(narrationService));
     }
 
     public Task<AssistantAnswer> ComposeAsync(
@@ -72,25 +74,33 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
                 FormatNoDataText(request));
         }
 
-        var maxRows = Math.Max(1, request.AnswerPolicy.MaxRowsForChat);
-        var visibleRows = safeRows.Take(maxRows).ToArray();
-        var truncated = request.RowCount > visibleRows.Length;
-        var summary = await BuildSummaryAsync(request, visibleRows, cancellationToken)
+        var maxTableRows = ResolveMaxTableRows(request.AnswerPolicy);
+        var visibleRows = request.AnswerPolicy.Table.Enabled
+            ? safeRows.Take(maxTableRows).ToArray()
+            : Array.Empty<IReadOnlyDictionary<string, object?>>();
+        var summaryRows = safeRows.Take(Math.Max(1, request.AnswerPolicy.MaxRowsForNarration)).ToArray();
+        var truncated = request.AnswerPolicy.Table.Enabled && request.RowCount > visibleRows.Length;
+        var showTruncationNotice = truncated && request.AnswerPolicy.Table.IncludeTruncationNotice;
+        var summary = await BuildSummaryAsync(request, summaryRows, cancellationToken)
             .ConfigureAwait(false);
 
         var blocks = new List<AnswerBlock>
         {
-            new SummaryBlock(summary),
-            BuildTableBlock(request, visibleRows, truncated)
+            new SummaryBlock(summary)
         };
 
-        var chart = TryBuildChartBlock(request, visibleRows);
+        if (request.AnswerPolicy.Table.Enabled)
+        {
+            blocks.Add(BuildTableBlock(request, visibleRows, showTruncationNotice));
+        }
+
+        var chart = TryBuildChartBlock(request, request.AnswerPolicy.Table.Enabled ? visibleRows : summaryRows);
         if (chart is not null)
         {
             blocks.Add(chart);
         }
 
-        var followUps = truncated
+        var followUps = showTruncationNotice
             ? new[] { IsVietnamese(request.Locale) ? "Thu hẹp bộ lọc hoặc xuất kết quả đầy đủ." : "Narrow the filters or export the full result set." }
             : Array.Empty<string>();
 
@@ -111,18 +121,25 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
     private static AssistantAnswer FollowUp(
         AnswerComposerRequest request,
         string question,
-        IReadOnlyList<string> options) => new()
+        IReadOnlyList<string> options)
+    {
+        var displayedOptions = request.AnswerPolicy.FollowUp.IncludeMissingFields
+            ? options
+            : Array.Empty<string>();
+
+        return new AssistantAnswer
         {
             AnswerType = "follow_up",
             Text = question,
-            Blocks = [new FollowUpBlock(question, options)],
+            Blocks = [new FollowUpBlock(question, displayedOptions)],
             FollowUpQuestions = [question],
             Provenance = CreateProvenance(request),
             CorrelationId = request.ExecutionMetadata.CorrelationId,
             Locale = request.Locale,
             SelectedAgentId = "microsoft-agent-router",
-            Detail = CreateStructuredDetail(request, "follow_up", [new FollowUpBlock(question, options)], [question], text: question)
+            Detail = CreateStructuredDetail(request, "follow_up", [new FollowUpBlock(question, displayedOptions)], [question], text: question)
         };
+    }
 
     private static AssistantAnswer TextOnly(
         AnswerComposerRequest request,
@@ -189,18 +206,21 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
 
             if (section.Rows.Count > 0)
             {
-                var maxRows = Math.Max(1, request.AnswerPolicy.MaxRowsForChat);
-                var safeRows = AnswerDataSanitizer.ApplySensitivity(section.Rows, request.SensitivityPolicy);
-                var sectionRequest = request with
+                    var maxRows = ResolveMaxTableRows(request.AnswerPolicy);
+                    var safeRows = AnswerDataSanitizer.ApplySensitivity(section.Rows, request.SensitivityPolicy);
+                    var sectionRequest = request with
+                    {
+                        Rows = safeRows,
+                        RowCount = section.RowCount,
+                        ResultSchema = null
+                    };
+                if (request.AnswerPolicy.Table.Enabled)
                 {
-                    Rows = safeRows,
-                    RowCount = section.RowCount,
-                    ResultSchema = null
-                };
-                blocks.Add(BuildTableBlock(
-                    sectionRequest,
-                    safeRows.Take(maxRows).ToArray(),
-                    section.RowCount > maxRows));
+                    blocks.Add(BuildTableBlock(
+                        sectionRequest,
+                        safeRows.Take(maxRows).ToArray(),
+                        request.AnswerPolicy.Table.IncludeTruncationNotice && section.RowCount > maxRows));
+                }
             }
         }
 
@@ -238,7 +258,7 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
             ResolveTableTitle(request),
             columns.Select(column => column.Label).ToArray(),
             tableRows,
-            request.RowCount,
+            request.AnswerPolicy.Table.IncludeRowCount ? request.RowCount : tableRows.Length,
             tableRows.Length,
             truncated);
     }
@@ -295,13 +315,6 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
     private static string BuildValidationQuestion(AnswerComposerRequest request)
     {
         var missing = request.MissingArguments.Select(FormatArgumentName).ToArray();
-        if (missing.Any(argument => string.Equals(argument, "modelCode", StringComparison.OrdinalIgnoreCase)))
-        {
-            return IsVietnamese(request.Locale)
-                ? "Bạn muốn xem thông tin cho model nào? Vui lòng cung cấp mã model."
-                : "Which model do you want to view? Please provide the model code.";
-        }
-
         if (missing.Length > 0)
         {
             return IsVietnamese(request.Locale)
@@ -317,8 +330,7 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
     private static string FormatNoDataText(AnswerComposerRequest request)
     {
         var safeArguments = AnswerDataSanitizer.ApplySensitivity(request.Arguments, request.SensitivityPolicy);
-        var modelCode = TryGetModelCode(safeArguments);
-        var filters = safeArguments.Count == 0
+        var filters = !request.AnswerPolicy.NoData.IncludeUsedFilters || safeArguments.Count == 0
             ? string.Empty
             : Environment.NewLine
                 + (IsVietnamese(request.Locale) ? "Điều kiện đã dùng:" : "Filters used:")
@@ -327,12 +339,8 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
                     $"- {FormatArgumentLabel(pair.Key, request.Locale)}: {FormatValue(pair.Value, request.Locale)}"));
 
         return IsVietnamese(request.Locale)
-            ? modelCode is null
-                ? $"Không tìm thấy dữ liệu cho {request.CapabilityKey}.{filters}"
-                : $"Không tìm thấy dữ liệu cho model {modelCode}.{filters}"
-            : modelCode is null
-                ? $"No data was found for {request.CapabilityKey}.{filters}"
-                : $"No data was found for model {modelCode}.{filters}";
+            ? $"Không tìm thấy dữ liệu cho {request.CapabilityKey}.{filters}"
+            : $"No data was found for {request.CapabilityKey}.{filters}";
     }
 
     private async Task<string> BuildSummaryAsync(
@@ -340,73 +348,43 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
         IReadOnlyList<IReadOnlyDictionary<string, object?>> safeRows,
         CancellationToken cancellationToken)
     {
-        if (IsModelCapability(request.CapabilityKey)
-            && (!request.AnswerPolicy.AllowAiSummary || _summaryService is null))
+        var safeArguments = AnswerDataSanitizer.ApplySensitivity(request.Arguments, request.SensitivityPolicy);
+        var narrationRequest = new AnswerNarrationRequest
         {
-            return BuildDeterministicModelSummary(request, safeRows);
-        }
-
-        if (request.AnswerPolicy.AllowAiSummary && _summaryService is not null)
-        {
-            return await _summaryService.SummarizeAsync(request, safeRows, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        return BuildGenericDeterministicSummary(request, safeRows);
-    }
-
-    private static string BuildDeterministicModelSummary(
-        AnswerComposerRequest request,
-        IReadOnlyList<IReadOnlyDictionary<string, object?>> safeRows)
-    {
-        var vi = IsVietnamese(request.Locale);
-        var modelCode = TryGetModelCode(AnswerDataSanitizer.ApplySensitivity(request.Arguments, request.SensitivityPolicy))
-            ?? TryGetModelCode(safeRows.FirstOrDefault());
-        var comparedCodes = ExtractComparedModelCodes(request, safeRows);
-
-        return request.CapabilityKey switch
-        {
-            "model.count" => vi
-                ? $"Có {ResolveModelCount(request, safeRows)} model trong dữ liệu hiện tại."
-                : $"There are {ResolveModelCount(request, safeRows)} models in the current data.",
-            "model.overview.by-code" => modelCode is null
-                ? InsufficientData(vi)
-                : vi
-                    ? $"Tìm thấy model {modelCode}. Dữ liệu tổng quan gồm {request.RowCount} dòng."
-                    : $"Found model {modelCode}. Overview data contains {request.RowCount} row{Plural(request.RowCount)}.",
-            "model.pieces.by-code" => modelCode is null
-                ? InsufficientData(vi)
-                : vi
-                    ? $"Model {modelCode} có {request.RowCount} piece."
-                    : $"Model {modelCode} has {request.RowCount} piece{Plural(request.RowCount)}.",
-            "model.materials.by-code" => modelCode is null
-                ? InsufficientData(vi)
-                : vi
-                    ? $"Model {modelCode} có {request.RowCount} material."
-                    : $"Model {modelCode} has {request.RowCount} material{Plural(request.RowCount)}.",
-            "model.packaging.by-code" => modelCode is null
-                ? InsufficientData(vi)
-                : vi
-                    ? $"Model {modelCode} có {request.RowCount} dòng packaging."
-                    : $"Model {modelCode} has {request.RowCount} packaging row{Plural(request.RowCount)}.",
-            "model.compare" => comparedCodes.Count < 2
-                ? InsufficientData(vi)
-                : vi
-                    ? $"Đã so sánh {comparedCodes.Count} model: {string.Join(" và ", comparedCodes)}."
-                    : $"Compared {comparedCodes.Count} models: {string.Join(" and ", comparedCodes)}.",
-            _ => BuildGenericDeterministicSummary(request, safeRows)
+            Locale = request.Locale,
+            CapabilityKey = request.CapabilityKey,
+            Arguments = safeArguments,
+            ResultSchema = request.ResultSchema,
+            Rows = safeRows,
+            RowCount = request.RowCount,
+            AnswerPolicy = request.AnswerPolicy,
+            SensitivityPolicy = request.SensitivityPolicy,
+            ExecutionMetadata = request.ExecutionMetadata
         };
+
+        if (string.Equals(request.AnswerPolicy.Summary.Mode, SummaryPolicy.ModeDisabled, StringComparison.OrdinalIgnoreCase))
+        {
+            return BuildDisabledSummary(request);
+        }
+
+        if (string.Equals(request.AnswerPolicy.Summary.Mode, SummaryPolicy.ModeFallback, StringComparison.OrdinalIgnoreCase))
+        {
+            return _summaryFallback.Generate(narrationRequest).Text;
+        }
+
+        var result = await _narrationService.GenerateAsync(narrationRequest, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Text;
     }
 
-    private static string BuildGenericDeterministicSummary(
-        AnswerComposerRequest request,
-        IReadOnlyList<IReadOnlyDictionary<string, object?>> safeRows)
-    {
-        var displayed = Math.Min(safeRows.Count, request.RowCount);
-        return IsVietnamese(request.Locale)
-            ? $"Tìm thấy {request.RowCount} dòng cho {request.CapabilityKey}; hiển thị {displayed} dòng đầu tiên."
-            : $"Found {request.RowCount} rows for {request.CapabilityKey}; showing the first {displayed}.";
-    }
+    private static int ResolveMaxTableRows(AnswerPolicy policy) =>
+        Math.Max(1, Math.Min(policy.MaxRowsForChat, policy.Table.MaxDisplayedRows));
+
+    private static string BuildDisabledSummary(AnswerComposerRequest request) =>
+        IsVietnamese(request.Locale)
+            ? $"Da tim thay {request.RowCount} dong."
+            : $"Found {request.RowCount} rows.";
 
     private static object? FormatValue(object? value, string locale)
     {
@@ -460,9 +438,6 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
     private static bool IsVietnamese(string locale) =>
         locale.StartsWith("vi", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsModelCapability(string capabilityKey) =>
-        capabilityKey.StartsWith("model.", StringComparison.OrdinalIgnoreCase);
-
     private static string ResolveColumnLabel(ResultColumn column, string locale)
     {
         if (IsVietnamese(locale) && !string.IsNullOrWhiteSpace(column.LabelVi))
@@ -489,103 +464,12 @@ public sealed class StructuredAnswerComposer : IAnswerComposer
     private static string FormatArgumentName(string argumentName)
     {
         var trimmed = argumentName.TrimStart('@');
-        return string.Equals(trimmed, "model_code", StringComparison.OrdinalIgnoreCase)
-            ? "modelCode"
-            : trimmed;
+        return trimmed;
     }
 
     private static string FormatArgumentLabel(string argumentName, string locale)
     {
-        var formatted = FormatArgumentName(argumentName);
-        if (string.Equals(formatted, "modelCode", StringComparison.OrdinalIgnoreCase))
-        {
-            return IsVietnamese(locale) ? "Mã model" : "Model code";
-        }
-
-        return formatted;
-    }
-
-    private static string? TryGetModelCode(IReadOnlyDictionary<string, object?>? values)
-    {
-        if (values is null)
-        {
-            return null;
-        }
-
-        foreach (var key in new[] { "modelCode", "model_code", "@model_code", "ModelCode", "Code" })
-        {
-            if (values.TryGetValue(key, out var value) && value is not null)
-            {
-                var text = Convert.ToString(value, CultureInfo.InvariantCulture);
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    return text;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static IReadOnlyList<string> ExtractComparedModelCodes(
-        AnswerComposerRequest request,
-        IReadOnlyList<IReadOnlyDictionary<string, object?>> safeRows)
-    {
-        var codes = new List<string>();
-        AddCode(TryGetModelCode(AnswerDataSanitizer.ApplySensitivity(request.Arguments, request.SensitivityPolicy)));
-
-        foreach (var key in new[] { "modelCodeA", "modelCodeB", "model_code_a", "model_code_b", "@model_code_a", "@model_code_b", "otherModelCode", "compareModelCode", "modelCode2", "model_code_2", "@model_code_2" })
-        {
-            if (request.Arguments.TryGetValue(key, out var value))
-            {
-                AddCode(Convert.ToString(value, CultureInfo.InvariantCulture));
-            }
-        }
-
-        foreach (var row in safeRows)
-        {
-            AddCode(TryGetModelCode(row));
-        }
-
-        return codes;
-
-        void AddCode(string? code)
-        {
-            if (!string.IsNullOrWhiteSpace(code)
-                && !codes.Contains(code, StringComparer.OrdinalIgnoreCase))
-            {
-                codes.Add(code);
-            }
-        }
-    }
-
-    private static string InsufficientData(bool vietnamese) =>
-        vietnamese
-            ? "Dữ liệu chưa đủ để tạo tóm tắt chắc chắn."
-            : "The data is insufficient for a reliable summary.";
-
-    private static string Plural(int count) => count == 1 ? string.Empty : "s";
-
-    private static int ResolveModelCount(
-        AnswerComposerRequest request,
-        IReadOnlyList<IReadOnlyDictionary<string, object?>> safeRows)
-    {
-        var row = safeRows.FirstOrDefault();
-        if (row is null)
-        {
-            return request.RowCount;
-        }
-
-        foreach (var key in new[] { "ModelCount", "modelCount", "Count", "count", "TotalCount", "totalCount", "Total", "total" })
-        {
-            if (row.TryGetValue(key, out var value)
-                && int.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out var count))
-            {
-                return count;
-            }
-        }
-
-        return request.RowCount;
+        return FormatArgumentName(argumentName);
     }
 
     private static AnswerProvenance CreateProvenance(AnswerComposerRequest request) => new()

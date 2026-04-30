@@ -5,6 +5,7 @@ using TILSOFTAI.Domain.Resilience;
 using TILSOFTAI.Domain.Sensitivity;
 using TILSOFTAI.Infrastructure.Catalog;
 using TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
+using TILSOFTAI.Orchestration.Answering.Narration;
 using TILSOFTAI.Orchestration.Caching;
 using TILSOFTAI.Orchestration.Capabilities;
 using TILSOFTAI.Orchestration.Policies;
@@ -137,6 +138,12 @@ public static class AddTilsoftAiOptionsExtensions
 
         services.AddOptions<LlmOptions>()
             .Bind(configuration.GetSection(ConfigurationSectionNames.Llm))
+            .ValidateOnStart();
+
+        services.AddOptions<AnswerNarrationPolicy>()
+            .Bind(configuration.GetSection("Answering:Narration"))
+            .Validate(options => options.MaxRowsForNarration > 0, "Answering:Narration:MaxRowsForNarration must be > 0.")
+            .Validate(options => options.MaxOutputCharacters > 0, "Answering:Narration:MaxOutputCharacters must be > 0.")
             .ValidateOnStart();
 
         services.AddOptions<RateLimitOptions>()

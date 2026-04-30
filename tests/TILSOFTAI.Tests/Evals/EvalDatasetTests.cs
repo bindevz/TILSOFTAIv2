@@ -15,6 +15,7 @@ public sealed class EvalDatasetTests
     [InlineData("argument-extraction.vi.jsonl")]
     [InlineData("argument-extraction.en.jsonl")]
     [InlineData("answer-composer.jsonl")]
+    [InlineData("answer-summary/model-summary-eval.jsonl")]
     [InlineData("write-preview.jsonl")]
     [InlineData("sprint32-agent-framework-regressions.jsonl")]
     public void EvalDataset_ShouldExistAndContainValidJsonLines(string fileName)

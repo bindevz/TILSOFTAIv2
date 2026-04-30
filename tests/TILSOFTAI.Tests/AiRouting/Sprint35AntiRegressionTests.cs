@@ -8,6 +8,7 @@ using TILSOFTAI.Domain.Configuration;
 using TILSOFTAI.Domain.ExecutionContext;
 using TILSOFTAI.Domain.Metrics;
 using TILSOFTAI.Orchestration.Answering;
+using TILSOFTAI.Orchestration.Answering.Narration;
 using TILSOFTAI.Orchestration.AiRouting;
 using TILSOFTAI.Orchestration.AiRouting.MicrosoftAgentFramework;
 using TILSOFTAI.Orchestration.AiRouting.Tools;
@@ -209,7 +210,7 @@ public sealed class AgentFrameworkAntiRegressionTests
             functionProvider,
             new AgentRunOptionsFactory(options),
             runtime,
-            new StructuredAnswerComposer(new RawJsonAnswerComposer(), new AiSummaryService()),
+            new StructuredAnswerComposer(new RawJsonAnswerComposer(), new FallbackAnswerNarrationService()),
             new StubToolRoutingTraceStore(),
             [facade],
             [],
@@ -428,5 +429,15 @@ public sealed class AgentFrameworkAntiRegressionTests
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken) =>
             Task.FromResult(CapabilityExecutionEnvelope.Blocked(compositeCapabilityKey, "composite disabled"));
+    }
+
+    private sealed class FallbackAnswerNarrationService : IAnswerNarrationService
+    {
+        private readonly GenericSchemaSummaryFallback _fallback = new();
+
+        public Task<AnswerNarrationResult> GenerateAsync(
+            AnswerNarrationRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(_fallback.Generate(request));
     }
 }

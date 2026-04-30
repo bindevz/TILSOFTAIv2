@@ -92,6 +92,21 @@ Required model procedures:
 - `dbo.ai_model_compare`
 - `dbo.ai_model_get_packaging`
 
+## Configuring Answer Behavior Through SQL Catalog
+
+Answer behavior is configured in `ai.CapabilityAnswerPolicy.PolicyJson`, seeded by `sql/current/008_seed_model_capability_catalog.sql`. C# supplies only generic defaults when a policy is missing; enabled catalog capabilities must have valid policy JSON.
+
+Common policy edits:
+
+- Enable AI summary: set `summary.mode` to `ai`.
+- Disable AI summary: set `summary.mode` to `disabled`.
+- Use fallback-only summary: set `summary.mode` to `fallback`.
+- Hide the table block: set `table.enabled` to `false`.
+- Change max table rows: set `table.maxDisplayedRows`.
+- Change locale instructions: edit `summary.instructionsByLocale`, for example `vi-VN` or `en-US`.
+
+Keep `maxRowsForChat`, `maxRowsForNarration`, `summary`, `table`, `noData`, and `followUp` present. `997_validate_capability_catalog.sql` rejects invalid modes, non-positive row limits, and malformed locale/forbidden-claim sections.
+
 ## Build And Test
 
 ```bash

@@ -1,5 +1,7 @@
 using FluentAssertions;
+using System.Text.Json;
 using TILSOFTAI.Orchestration.Answering;
+using TILSOFTAI.Orchestration.Answering.Narration;
 using TILSOFTAI.Orchestration.Execution;
 using Xunit;
 
@@ -58,7 +60,7 @@ public sealed class AnswerComposerTests
     [Fact]
     public async Task RawJsonMode_WhenNoRows_ShouldReturnEnvelopeWithMetadata()
     {
-        var composer = CreateComposer();
+        var composer = CreateComposer("Tìm thấy 1 dòng; hiển thị kết quả.");
         var request = Request() with
         {
             Mode = AnswerMode.RawJson,
@@ -105,7 +107,7 @@ public sealed class AnswerComposerTests
         var answer = await composer.ComposeAsync(request, CancellationToken.None);
 
         answer.AnswerType.Should().Be("structured");
-        answer.Text.Should().Be("Found model ABC. Overview data contains 1 row.");
+        answer.Text.Should().Be("AI-generated summary from fake narrator.");
         answer.Blocks.OfType<SummaryBlock>().Should().ContainSingle();
         var table = answer.Blocks.OfType<TableBlock>().Should().ContainSingle().Subject;
         table.Columns.Should().Equal("Model Code", "Model Name");
@@ -230,8 +232,7 @@ public sealed class AnswerComposerTests
         var answer = await composer.ComposeAsync(request, CancellationToken.None);
 
         answer.AnswerType.Should().Be("follow_up");
-        answer.Text.Should().Be("Which model do you want to view? Please provide the model code.");
-        answer.Text.Should().NotContain("model_code");
+        answer.Text.Should().Be("Please provide: model_code.");
     }
 
     [Fact]
@@ -250,7 +251,7 @@ public sealed class AnswerComposerTests
         answer.AnswerType.Should().Be("follow_up");
         answer.FollowUpQuestions.Should().ContainSingle();
         answer.Blocks.Should().ContainSingle().Which.Should().BeOfType<FollowUpBlock>();
-        answer.Text.Should().Be("Which model do you want to view? Please provide the model code.");
+        answer.Text.Should().Be("Please provide: model_code.");
     }
 
     [Fact]
@@ -355,7 +356,7 @@ public sealed class AnswerComposerTests
     [Fact]
     public async Task StructuredMode_WhenVietnamese_ShouldUseAccentedText()
     {
-        var composer = CreateComposer();
+        var composer = CreateComposer("Tìm thấy 1 dòng; hiển thị kết quả.");
         var request = Request() with
         {
             Locale = "vi-VN",
@@ -603,22 +604,23 @@ public sealed class AnswerComposerTests
     }
 
     [Theory]
-    [InlineData("model.count", "There are 6 models in the current data.")]
-    [InlineData("model.overview.by-code", "Found model ABC. Overview data contains 1 row.")]
-    [InlineData("model.pieces.by-code", "Model ABC has 4 pieces.")]
-    [InlineData("model.materials.by-code", "Model ABC has 8 materials.")]
-    [InlineData("model.packaging.by-code", "Model ABC has 2 packaging rows.")]
-    [InlineData("model.compare", "Compared 2 models: ABC and XYZ.")]
-    public async Task AnswerComposer_Structured_AllModelCapabilities(string capabilityKey, string expectedText)
+    [InlineData("model.count")]
+    [InlineData("model.overview.by-code")]
+    [InlineData("model.pieces.by-code")]
+    [InlineData("model.materials.by-code")]
+    [InlineData("model.packaging.by-code")]
+    [InlineData("model.compare")]
+    public async Task AnswerComposer_Structured_AllCapabilitiesUseNarrationService(string capabilityKey)
     {
-        var composer = CreateComposer();
+        var composer = CreateComposer(out var narrator);
         var request = ModelCapabilityRequest(capabilityKey);
 
         var answer = await composer.ComposeAsync(request, CancellationToken.None);
 
         answer.AnswerType.Should().Be("structured");
-        answer.Text.Should().Be(expectedText);
+        answer.Text.Should().Be("AI-generated summary from fake narrator.");
         answer.Blocks.OfType<TableBlock>().Should().ContainSingle();
+        narrator.Requests.Should().ContainSingle().Which.CapabilityKey.Should().Be(capabilityKey);
     }
 
     [Theory]
@@ -648,7 +650,7 @@ public sealed class AnswerComposerTests
     [Fact]
     public async Task AnswerComposer_Localization_ViAndEn()
     {
-        var composer = CreateComposer();
+        var composer = CreateComposer(out var narrator);
         var vi = await composer.ComposeAsync(
             ModelCapabilityRequest("model.materials.by-code") with { Locale = "vi-VN" },
             CancellationToken.None);
@@ -656,8 +658,9 @@ public sealed class AnswerComposerTests
             ModelCapabilityRequest("model.materials.by-code") with { Locale = "en-US" },
             CancellationToken.None);
 
-        vi.Text.Should().Be("Model ABC có 8 material.");
-        en.Text.Should().Be("Model ABC has 8 materials.");
+        vi.Text.Should().Be("AI-generated summary from fake narrator.");
+        en.Text.Should().Be("AI-generated summary from fake narrator.");
+        narrator.Requests.Select(request => request.Locale).Should().Equal("vi-VN", "en-US");
     }
 
     [Fact]
@@ -675,7 +678,7 @@ public sealed class AnswerComposerTests
         var answer = await composer.ComposeAsync(request, CancellationToken.None);
 
         answer.AnswerType.Should().Be("follow_up");
-        answer.Text.Should().Be("Bạn muốn xem thông tin cho model nào? Vui lòng cung cấp mã model.");
+        answer.Text.Should().Be("Vui lòng cung cấp: model_code.");
     }
 
     [Fact]
@@ -694,9 +697,9 @@ public sealed class AnswerComposerTests
         var answer = await composer.ComposeAsync(request, CancellationToken.None);
 
         answer.AnswerType.Should().Be("no_data");
-        answer.Text.Should().Contain("Không tìm thấy dữ liệu cho model ABC.");
+        answer.Text.Should().Contain("Không tìm thấy dữ liệu cho model.overview.by-code.");
         answer.Text.Should().Contain("Điều kiện đã dùng:");
-        answer.Text.Should().Contain("- Mã model: ABC");
+        answer.Text.Should().Contain("- modelCode: ABC");
     }
 
     [Fact]
@@ -733,9 +736,9 @@ public sealed class AnswerComposerTests
         var answer = await composer.ComposeAsync(request, CancellationToken.None);
 
         answer.AnswerType.Should().Be("no_data");
-        answer.Text.Should().Contain("No data was found for model ABC.");
+        answer.Text.Should().Contain("No data was found for model.overview.by-code.");
         answer.Text.Should().Contain("Filters used:");
-        answer.Text.Should().Contain("- Model code: ABC");
+        answer.Text.Should().Contain("- modelCode: ABC");
         answer.FollowUpQuestions.Should().BeEmpty();
     }
 
@@ -753,7 +756,7 @@ public sealed class AnswerComposerTests
         var answer = await composer.ComposeAsync(request, CancellationToken.None);
 
         answer.AnswerType.Should().Be("follow_up");
-        answer.Text.Should().Be("Which model do you want to view? Please provide the model code.");
+        answer.Text.Should().Be("Please provide: model_code.");
         answer.Blocks.Should().ContainSingle().Which.Should().BeOfType<FollowUpBlock>();
     }
 
@@ -826,18 +829,380 @@ public sealed class AnswerComposerTests
     }
 
     [Fact]
-    public async Task AnswerComposer_CanRunWithoutAiSummaryService()
+    public async Task AnswerComposer_CanRunWithFallbackNarrationService()
     {
-        var composer = new StructuredAnswerComposer(new RawJsonAnswerComposer());
+        var composer = new StructuredAnswerComposer(
+            new RawJsonAnswerComposer(),
+            new FallbackAnswerNarrationService());
 
         var answer = await composer.ComposeAsync(ModelCapabilityRequest("model.overview.by-code"), CancellationToken.None);
 
         answer.AnswerType.Should().Be("structured");
-        answer.Text.Should().Be("Found model ABC. Overview data contains 1 row.");
+        answer.Text.Should().Contain("Found 1 rows");
+    }
+
+    [Fact]
+    public async Task StructuredAnswerComposer_UsesNarrationServiceText()
+    {
+        var composer = CreateComposer(out var narrator);
+
+        var answer = await composer.ComposeAsync(ModelCapabilityRequest("model.overview.by-code"), CancellationToken.None);
+
+        answer.Text.Should().Be("AI-generated summary from fake narrator.");
+        answer.Blocks.OfType<SummaryBlock>().Single().Content.Should().Be("AI-generated summary from fake narrator.");
+        narrator.Requests.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task StructuredAnswerComposer_SendsSanitizedRowsToNarrator()
+    {
+        var composer = CreateComposer(out var narrator);
+        var request = Request() with
+        {
+            Rows =
+            [
+                new Dictionary<string, object?>
+                {
+                    ["ItemNo"] = "A-1",
+                    ["Cost"] = 10m,
+                    ["InternalNote"] = "hide"
+                }
+            ],
+            RowCount = 1,
+            Arguments = new Dictionary<string, object?>
+            {
+                ["ItemNo"] = "A-1",
+                ["Cost"] = 10m,
+                ["InternalNote"] = "hide"
+            },
+            SensitivityPolicy = new SensitivityPolicy
+            {
+                MaskColumns = ["Cost"],
+                HiddenColumns = ["InternalNote"]
+            }
+        };
+
+        await composer.ComposeAsync(request, CancellationToken.None);
+
+        var narrationRequest = narrator.Requests.Should().ContainSingle().Subject;
+        narrationRequest.Rows[0].Should().ContainKey("Cost").WhoseValue.Should().Be("***");
+        narrationRequest.Rows[0].Should().NotContainKey("InternalNote");
+        narrationRequest.Arguments["Cost"].Should().Be("***");
+        narrationRequest.Arguments.Should().NotContainKey("InternalNote");
+    }
+
+    [Fact]
+    public async Task StructuredAnswerComposer_DoesNotCallNarratorForRawJson()
+    {
+        var composer = CreateComposer(out var narrator);
+
+        await composer.ComposeAsync(ModelCapabilityRequest("model.overview.by-code") with { Mode = AnswerMode.RawJson }, CancellationToken.None);
+
+        narrator.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task StructuredAnswerComposer_DoesNotCallNarratorForNoData()
+    {
+        var composer = CreateComposer(out var narrator);
+
+        await composer.ComposeAsync(Request() with { Rows = [], RowCount = 0 }, CancellationToken.None);
+
+        narrator.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task StructuredAnswerComposer_DoesNotCallNarratorForFollowUp()
+    {
+        var composer = CreateComposer(out var narrator);
+
+        await composer.ComposeAsync(Request() with { ClarificationQuestion = "Which item?", MissingArguments = ["itemNo"] }, CancellationToken.None);
+
+        narrator.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AnswerPolicy_SummaryModeAi_CallsNarrator()
+    {
+        var composer = CreateComposer(out var narrator);
+
+        var answer = await composer.ComposeAsync(
+            ModelCapabilityRequest("model.overview.by-code") with
+            {
+                AnswerPolicy = AnswerPolicy.Default with
+                {
+                    Summary = new SummaryPolicy { Mode = SummaryPolicy.ModeAi }
+                }
+            },
+            CancellationToken.None);
+
+        answer.Text.Should().Be("AI-generated summary from fake narrator.");
+        narrator.Requests.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task AnswerPolicy_SummaryModeFallback_UsesFallback()
+    {
+        var composer = CreateComposer(out var narrator);
+
+        var answer = await composer.ComposeAsync(
+            ModelCapabilityRequest("model.overview.by-code") with
+            {
+                AnswerPolicy = AnswerPolicy.Default with
+                {
+                    Summary = new SummaryPolicy { Mode = SummaryPolicy.ModeFallback }
+                }
+            },
+            CancellationToken.None);
+
+        answer.Text.Should().Contain("Found 1 rows");
+        narrator.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AnswerPolicy_SummaryModeDisabled_DoesNotCallNarrator()
+    {
+        var composer = CreateComposer(out var narrator);
+
+        var answer = await composer.ComposeAsync(
+            ModelCapabilityRequest("model.overview.by-code") with
+            {
+                AnswerPolicy = AnswerPolicy.Default with
+                {
+                    Summary = new SummaryPolicy { Mode = SummaryPolicy.ModeDisabled }
+                }
+            },
+            CancellationToken.None);
+
+        answer.Text.Should().Be("Found 1 rows.");
+        narrator.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AnswerPolicy_MaxRowsForNarration_LimitsNarratorRows()
+    {
+        var composer = CreateComposer(out var narrator);
+        var rows = Enumerable.Range(1, 5)
+            .Select(i => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?> { ["ModelCode"] = $"M{i}" })
+            .ToArray();
+
+        await composer.ComposeAsync(
+            Request() with
+            {
+                Rows = rows,
+                RowCount = rows.Length,
+                AnswerPolicy = AnswerPolicy.Default with { MaxRowsForNarration = 2 }
+            },
+            CancellationToken.None);
+
+        narrator.Requests.Should().ContainSingle().Which.Rows.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task AnswerPolicy_TableDisabled_NoTableBlock()
+    {
+        var composer = CreateComposer();
+
+        var answer = await composer.ComposeAsync(
+            ModelCapabilityRequest("model.overview.by-code") with
+            {
+                AnswerPolicy = AnswerPolicy.Default with
+                {
+                    Table = new TablePolicy { Enabled = false }
+                }
+            },
+            CancellationToken.None);
+
+        answer.Blocks.OfType<SummaryBlock>().Should().ContainSingle();
+        answer.Blocks.OfType<TableBlock>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AnswerPolicy_TableMaxRows_Truncates()
+    {
+        var composer = CreateComposer();
+        var rows = Enumerable.Range(1, 4)
+            .Select(i => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?> { ["ModelCode"] = $"M{i}" })
+            .ToArray();
+
+        var answer = await composer.ComposeAsync(
+            Request() with
+            {
+                Rows = rows,
+                RowCount = rows.Length,
+                AnswerPolicy = AnswerPolicy.Default with
+                {
+                    MaxRowsForChat = 20,
+                    Table = new TablePolicy { MaxDisplayedRows = 2 }
+                }
+            },
+            CancellationToken.None);
+
+        var table = answer.Blocks.OfType<TableBlock>().Single();
+        table.Rows.Should().HaveCount(2);
+        table.DisplayedRows.Should().Be(2);
+        table.Truncated.Should().BeTrue();
+        answer.FollowUpQuestions.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task AnswerPolicy_NoData_IncludeFilters()
+    {
+        var composer = CreateComposer();
+
+        var answer = await composer.ComposeAsync(
+            Request() with
+            {
+                Rows = [],
+                RowCount = 0,
+                Arguments = new Dictionary<string, object?> { ["modelCode"] = "ABC" },
+                AnswerPolicy = AnswerPolicy.Default with
+                {
+                    NoData = new NoDataPolicy { IncludeUsedFilters = false }
+                }
+            },
+            CancellationToken.None);
+
+        answer.Text.Should().Contain("No data was found");
+        answer.Text.Should().NotContain("Filters used:");
+        answer.Text.Should().NotContain("modelCode");
+    }
+
+    [Fact]
+    public async Task AnswerPolicy_FollowUp_IncludeMissingFields()
+    {
+        var composer = CreateComposer();
+
+        var answer = await composer.ComposeAsync(
+            Request() with
+            {
+                ErrorCode = CapabilityExecutionFacade.ArgumentValidationFailedCode,
+                MissingArguments = ["modelCode"],
+                AnswerPolicy = AnswerPolicy.Default with
+                {
+                    FollowUp = new FollowUpPolicy { IncludeMissingFields = false }
+                }
+            },
+            CancellationToken.None);
+
+        var block = answer.Blocks.OfType<FollowUpBlock>().Single();
+        block.Options.Should().BeEmpty();
+        answer.Text.Should().Contain("modelCode");
+    }
+
+    [Fact]
+    public void AgentAnswerNarrationService_InvalidJson_UsesFallback()
+    {
+        var parser = new AnswerNarrationResponseParser();
+        var request = CreateNarrationRequest(ModelCapabilityRequest("model.materials.by-code"));
+
+        var parsed = parser.TryParse("not json", request, 1200, out _);
+        var fallback = new GenericSchemaSummaryFallback().Generate(request);
+
+        parsed.Should().BeFalse();
+        fallback.UsedFallback.Should().BeTrue();
+        fallback.Text.Should().Contain("Found 8 rows");
+    }
+
+    [Fact]
+    public void GenericSchemaSummaryFallback_IsCapabilityAgnostic()
+    {
+        var fallback = new GenericSchemaSummaryFallback();
+        var request = CreateNarrationRequest(Request() with
+        {
+            CapabilityKey = "finance.example",
+            RowCount = 2,
+            Rows =
+            [
+                new Dictionary<string, object?> { ["Code"] = "A" },
+                new Dictionary<string, object?> { ["Code"] = "B" }
+            ],
+            ResultSchema = new ResultSchema
+            {
+                Columns = [new ResultColumn { Name = "Code", Label = "Code", Type = "string" }]
+            }
+        }) with
+        {
+            CapabilityName = "Example result"
+        };
+
+        var result = fallback.Generate(request);
+
+        result.Text.Should().Contain("Example result");
+        result.Text.Should().Contain("Found 2 rows");
+        result.Text.Should().NotContain("finance.example");
+    }
+
+    [Fact]
+    public void AnswerNarrationPromptBuilder_UsesVietnameseInstructionsFromPolicy()
+    {
+        var request = CreateNarrationRequest(ModelCapabilityRequest("model.overview.by-code") with
+        {
+            Locale = "vi-VN",
+            AnswerPolicy = AnswerPolicy.Default with
+            {
+                Summary = new SummaryPolicy
+                {
+                    InstructionsByLocale = new Dictionary<string, string>
+                    {
+                        ["vi-VN"] = "Chi dung chi dan tieng Viet tu catalog.",
+                        ["en-US"] = "Use the English catalog instruction."
+                    }
+                }
+            }
+        });
+
+        using var document = JsonDocument.Parse(new AnswerNarrationPromptBuilder().BuildUserMessage(request));
+
+        document.RootElement
+            .GetProperty("summaryPolicy")
+            .GetProperty("catalogInstruction")
+            .GetString()
+            .Should().Be("Chi dung chi dan tieng Viet tu catalog.");
+    }
+
+    [Fact]
+    public void AnswerNarrationPromptBuilder_UsesEnglishInstructionsFromPolicy()
+    {
+        var request = CreateNarrationRequest(ModelCapabilityRequest("model.overview.by-code") with
+        {
+            Locale = "en-US",
+            AnswerPolicy = AnswerPolicy.Default with
+            {
+                Summary = new SummaryPolicy
+                {
+                    InstructionsByLocale = new Dictionary<string, string>
+                    {
+                        ["vi-VN"] = "Chi dung chi dan tieng Viet tu catalog.",
+                        ["en-US"] = "Use the English catalog instruction."
+                    }
+                }
+            }
+        });
+
+        using var document = JsonDocument.Parse(new AnswerNarrationPromptBuilder().BuildUserMessage(request));
+
+        document.RootElement
+            .GetProperty("summaryPolicy")
+            .GetProperty("catalogInstruction")
+            .GetString()
+            .Should().Be("Use the English catalog instruction.");
     }
 
     private static StructuredAnswerComposer CreateComposer() =>
-        new(new RawJsonAnswerComposer(), new AiSummaryService());
+        CreateComposer(out _);
+
+    private static StructuredAnswerComposer CreateComposer(out FakeAnswerNarrationService narrator)
+    {
+        narrator = new FakeAnswerNarrationService();
+        return new StructuredAnswerComposer(new RawJsonAnswerComposer(), narrator);
+    }
+
+    private static StructuredAnswerComposer CreateComposer(string narratorText)
+    {
+        var narrator = new FakeAnswerNarrationService(narratorText);
+        return new StructuredAnswerComposer(new RawJsonAnswerComposer(), narrator);
+    }
 
     private static AnswerComposerRequest ModelCapabilityRequest(string capabilityKey)
     {
@@ -912,4 +1277,51 @@ public sealed class AnswerComposerTests
         Locale = "en-US",
         AnswerPolicy = AnswerPolicy.Default
     };
+
+    private static AnswerNarrationRequest CreateNarrationRequest(AnswerComposerRequest request) => new()
+    {
+        Locale = request.Locale,
+        CapabilityKey = request.CapabilityKey,
+        Arguments = request.Arguments,
+        ResultSchema = request.ResultSchema,
+        Rows = request.Rows,
+        RowCount = request.RowCount,
+        AnswerPolicy = request.AnswerPolicy,
+        SensitivityPolicy = request.SensitivityPolicy,
+        ExecutionMetadata = request.ExecutionMetadata
+    };
+
+    private sealed class FakeAnswerNarrationService : IAnswerNarrationService
+    {
+        private readonly string _text;
+
+        public FakeAnswerNarrationService(string text = "AI-generated summary from fake narrator.")
+        {
+            _text = text;
+        }
+
+        public List<AnswerNarrationRequest> Requests { get; } = [];
+
+        public Task<AnswerNarrationResult> GenerateAsync(
+            AnswerNarrationRequest request,
+            CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return Task.FromResult(new AnswerNarrationResult
+            {
+                Text = _text,
+                Confidence = 0.9
+            });
+        }
+    }
+
+    private sealed class FallbackAnswerNarrationService : IAnswerNarrationService
+    {
+        private readonly GenericSchemaSummaryFallback _fallback = new();
+
+        public Task<AnswerNarrationResult> GenerateAsync(
+            AnswerNarrationRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(_fallback.Generate(request));
+    }
 }

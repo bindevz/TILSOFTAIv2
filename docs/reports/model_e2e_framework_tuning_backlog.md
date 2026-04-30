@@ -4,6 +4,11 @@ Generated: 2026-04-29
 
 ## P0
 
+Sprint 46 summary quality evaluation:
+
+- No open P0 summary safety or factuality blockers from deterministic evals.
+- Maintain the gate that blocks the next domain if any masked field leak, stored procedure leak, fabricated numeric total, locale failure, no-data regression, or missing-argument follow-up regression appears.
+
 1. Normalize SQL result envelope contracts across adapters.
    - Current state: model stored procedures return a scalar JSON envelope with `{ meta, columns, rows }`.
    - Runtime fix: `CapabilityExecutionFacade` now reads `rows` from that envelope.
@@ -20,6 +25,11 @@ Generated: 2026-04-29
    - Next tuning: document tenant selection explicitly and add validation that local seed tenants match the local execution context.
 
 ## P1
+
+Sprint 46 summary quality evaluation:
+
+- Run `TILSOFTAI_RUN_AI_SUMMARY_EVALS=true dotnet test` against the selected local model before enabling the Purchasing read-only pilot outside deterministic readiness.
+- Keep summary policy tuning catalog-driven; do not add domain-specific summary branches to `StructuredAnswerComposer`.
 
 1. Align RawJson HTTP response contracts.
    - Current state: AnswerComposer now produces a complete RawJson enterprise envelope with mode, capability key, function name, procedure name, sanitized arguments, row count, rows, result schema, execution metadata, applied sensitivity policy, and provenance.
@@ -41,10 +51,18 @@ Generated: 2026-04-29
 
 ## P2
 
-1. Extend deterministic summaries beyond model capabilities.
-   - Current state: Sprint 42 added deterministic conservative summaries for the six model capabilities and guarded AI summary usage.
-   - Target: when new read-only domains are introduced, add domain-specific deterministic summary rules at the AnswerComposer boundary.
-   - Acceptance: summaries use only row count, arguments, result schema, and known returned columns; no LLM output controls tables, follow-ups, provenance, or safety.
+Sprint 46 summary quality evaluation:
+
+- Improve Vietnamese style instructions in `summary.instructionsByLocale` after human review of AI-mode output.
+- Add result schema `businessMeaning` or equivalent metadata before asking AI summaries to explain business context.
+- Add a stronger numeric aggregation guard that distinguishes copied supplied numbers from inferred totals.
+- Add table labels for any Purchasing pilot columns before turning on AI summaries.
+- Expand redaction tests to cover masked values in arguments as well as rows.
+
+1. Extend catalog-driven answer policy beyond model capabilities when new domains are approved.
+   - Current state: SQL catalog policy controls summary mode, narration row limits, table display, no-data filters, follow-up missing fields, truncation notices, and locale instructions for the six model capabilities.
+   - Target: when new read-only domains are introduced, seed `CapabilityAnswerPolicy` JSON before enabling capabilities.
+   - Acceptance: answer behavior is changed through SQL policy, not capability-specific C# branches.
 
 2. Make route evidence easier to query.
    - Current state: route evidence exists in JSON logs and `ai.ToolRoutingTrace`.
@@ -57,6 +75,14 @@ Generated: 2026-04-29
 4. Address dependency vulnerability warnings.
    - Current state: build and test complete, but `OpenTelemetry.Api` and `OpenTelemetry.Exporter.OpenTelemetryProtocol` produce NU1902 warnings.
    - Target: upgrade packages or centrally suppress with an accepted risk note.
+
+## P3
+
+Sprint 46 summary quality evaluation:
+
+- Publish answer summary eval report artifacts from CI once an AI-capable evaluation lane exists.
+- Add a lightweight human-review score rubric for usefulness and executive-readiness beyond objective safety checks.
+- Track summary fallback rate and guard failures as release evidence for each new read-only domain.
 
 ## Completed in Sprint 42
 
@@ -96,6 +122,24 @@ Generated: 2026-04-29
 4. Add guarded reload path.
    - Completed: catalog reload is exposed only when explicitly enabled in local/development configuration.
    - Completed: repository reload fails closed on initial load and preserves the last-known-good catalog on reload failure.
+
+## Completed in Sprint 45
+
+1. Configure answer behavior through SQL catalog.
+   - Completed: `CapabilityAnswerPolicy` JSON includes `summary`, `table`, `noData`, `followUp`, `maxRowsForChat`, and `maxRowsForNarration`.
+   - Completed: summary modes support `ai`, `fallback`, and `disabled`.
+   - Completed: table visibility and max displayed rows are policy-driven.
+   - Completed: no-data filter display, follow-up missing fields, truncation notices, and locale instructions are policy-driven.
+   - Completed: catalog validation rejects missing sections, invalid summary modes, non-positive row limits, and malformed locale/forbidden-claim sections.
+
+Configuration examples:
+
+- Enable AI summary with `summary.mode = "ai"`.
+- Disable AI summary with `summary.mode = "disabled"`.
+- Use fallback-only summary with `summary.mode = "fallback"`.
+- Hide the table block with `table.enabled = false`.
+- Change max table rows with `table.maxDisplayedRows`.
+- Change locale instructions with `summary.instructionsByLocale.vi-VN` and `summary.instructionsByLocale.en-US`.
 
 ## Evidence Links
 

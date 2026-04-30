@@ -61,6 +61,58 @@ The tool-description builder renders SQL metadata into official Agent Framework 
 - Hidden and masked columns from sensitivity policy.
 - Follow-up and no-data behavior.
 
+## How To Configure Answer Behavior Through SQL Catalog
+
+Use `ai.CapabilityAnswerPolicy.PolicyJson` for capability answer behavior. The active seed is `sql/current/008_seed_model_capability_catalog.sql`, and validation is in `sql/current/997_validate_capability_catalog.sql`.
+
+Required policy shape:
+
+```json
+{
+  "maxRowsForChat": 20,
+  "maxRowsForNarration": 20,
+  "summary": {
+    "mode": "ai",
+    "style": "business_concise",
+    "maxSentences": 4,
+    "includeFilters": true,
+    "includeRowCount": true,
+    "includeCaveats": true,
+    "instructionsByLocale": {
+      "vi-VN": "Tom tat du lieu ERP ngan gon. Chi dung du lieu duoc cung cap.",
+      "en-US": "Summarize ERP data concisely. Use only supplied data."
+    },
+    "forbiddenClaims": [
+      "Do not infer causes.",
+      "Do not expose hidden or masked fields."
+    ]
+  },
+  "table": {
+    "enabled": true,
+    "maxDisplayedRows": 20,
+    "includeRowCount": true,
+    "includeTruncationNotice": true
+  },
+  "noData": {
+    "includeUsedFilters": true
+  },
+  "followUp": {
+    "includeMissingFields": true
+  }
+}
+```
+
+Examples:
+
+- Enabling AI summary: `"summary": { "mode": "ai", ... }`.
+- Disabling AI summary: `"summary": { "mode": "disabled", ... }`.
+- Fallback-only summary: `"summary": { "mode": "fallback", ... }`.
+- Hiding the table block: `"table": { "enabled": false, ... }`.
+- Changing max table rows: set `table.maxDisplayedRows` to the desired positive integer.
+- Changing locale instructions: edit `summary.instructionsByLocale.vi-VN` or `summary.instructionsByLocale.en-US`.
+
+Runtime fallback order for locale instructions is request locale, `vi-VN`, `en-US`, first available instruction, then a generic safety instruction. C# must not contain capability-specific answer behavior.
+
 ## Reload And Failure Behavior
 
 Catalog data is cached in memory. Initial load failure fails closed by returning no active catalog. Reload failure preserves the last-known-good catalog.

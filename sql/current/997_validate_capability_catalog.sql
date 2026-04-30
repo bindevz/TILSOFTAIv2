@@ -115,6 +115,76 @@ BEGIN
         INSERT INTO @Failures VALUES (N'Every enabled capability must have a valid answer policy.');
 
     IF EXISTS (
+        SELECT 1
+        FROM ai.Capability c
+        JOIN ai.CapabilityAnswerPolicy ap ON ap.CapabilityKey = c.CapabilityKey
+        WHERE c.IsEnabled = 1
+          AND c.IsActive = 1
+          AND (
+              JSON_QUERY(ap.PolicyJson, N'$.summary') IS NULL
+              OR JSON_QUERY(ap.PolicyJson, N'$.table') IS NULL
+              OR JSON_QUERY(ap.PolicyJson, N'$.noData') IS NULL
+              OR JSON_QUERY(ap.PolicyJson, N'$.followUp') IS NULL))
+        INSERT INTO @Failures VALUES (N'Every enabled capability answer policy must include summary, table, noData, and followUp sections.');
+
+    IF EXISTS (
+        SELECT 1
+        FROM ai.Capability c
+        JOIN ai.CapabilityAnswerPolicy ap ON ap.CapabilityKey = c.CapabilityKey
+        WHERE c.IsEnabled = 1
+          AND c.IsActive = 1
+          AND ISNULL(JSON_VALUE(ap.PolicyJson, N'$.summary.mode'), N'') NOT IN (N'ai', N'fallback', N'disabled'))
+        INSERT INTO @Failures VALUES (N'Capability answer policy summary.mode must be one of ai, fallback, or disabled.');
+
+    IF EXISTS (
+        SELECT 1
+        FROM ai.Capability c
+        JOIN ai.CapabilityAnswerPolicy ap ON ap.CapabilityKey = c.CapabilityKey
+        WHERE c.IsEnabled = 1
+          AND c.IsActive = 1
+          AND ISNULL(TRY_CONVERT(int, JSON_VALUE(ap.PolicyJson, N'$.maxRowsForChat')), 0) <= 0)
+        INSERT INTO @Failures VALUES (N'Capability answer policy maxRowsForChat must be greater than zero.');
+
+    IF EXISTS (
+        SELECT 1
+        FROM ai.Capability c
+        JOIN ai.CapabilityAnswerPolicy ap ON ap.CapabilityKey = c.CapabilityKey
+        WHERE c.IsEnabled = 1
+          AND c.IsActive = 1
+          AND ISNULL(TRY_CONVERT(int, JSON_VALUE(ap.PolicyJson, N'$.maxRowsForNarration')), 0) <= 0)
+        INSERT INTO @Failures VALUES (N'Capability answer policy maxRowsForNarration must be greater than zero.');
+
+    IF EXISTS (
+        SELECT 1
+        FROM ai.Capability c
+        JOIN ai.CapabilityAnswerPolicy ap ON ap.CapabilityKey = c.CapabilityKey
+        WHERE c.IsEnabled = 1
+          AND c.IsActive = 1
+          AND ISNULL(JSON_VALUE(ap.PolicyJson, N'$.table.enabled'), N'true') = N'true'
+          AND ISNULL(TRY_CONVERT(int, JSON_VALUE(ap.PolicyJson, N'$.table.maxDisplayedRows')), 0) <= 0)
+        INSERT INTO @Failures VALUES (N'Capability answer policy table.maxDisplayedRows must be greater than zero when table.enabled is true.');
+
+    IF EXISTS (
+        SELECT 1
+        FROM ai.Capability c
+        JOIN ai.CapabilityAnswerPolicy ap ON ap.CapabilityKey = c.CapabilityKey
+        WHERE c.IsEnabled = 1
+          AND c.IsActive = 1
+          AND JSON_QUERY(ap.PolicyJson, N'$.summary.forbiddenClaims') IS NOT NULL
+          AND LEFT(LTRIM(JSON_QUERY(ap.PolicyJson, N'$.summary.forbiddenClaims')), 1) <> N'[')
+        INSERT INTO @Failures VALUES (N'Capability answer policy summary.forbiddenClaims must be a JSON array when present.');
+
+    IF EXISTS (
+        SELECT 1
+        FROM ai.Capability c
+        JOIN ai.CapabilityAnswerPolicy ap ON ap.CapabilityKey = c.CapabilityKey
+        WHERE c.IsEnabled = 1
+          AND c.IsActive = 1
+          AND JSON_QUERY(ap.PolicyJson, N'$.summary.instructionsByLocale') IS NOT NULL
+          AND LEFT(LTRIM(JSON_QUERY(ap.PolicyJson, N'$.summary.instructionsByLocale')), 1) <> N'{')
+        INSERT INTO @Failures VALUES (N'Capability answer policy summary.instructionsByLocale must be a JSON object when present.');
+
+    IF EXISTS (
         SELECT 1 FROM ai.Capability WHERE ArgumentContract IS NOT NULL AND ISJSON(ArgumentContract) <> 1
         UNION ALL
         SELECT 1 FROM ai.Capability WHERE ResultSchema IS NOT NULL AND ISJSON(ResultSchema) <> 1
